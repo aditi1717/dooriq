@@ -955,15 +955,25 @@ export default function HubFinance() {
                           className="border border-gray-200 rounded-lg p-3"
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-gray-900">
-                                ₹{Number(request?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <div className="flex-1">
+                              <p className="text-sm font-bold text-gray-950">
+                                Gross: ₹{Number(request?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </p>
-                              <p className="text-xs text-gray-500 mt-1">
+                              {request?.tdsAmount > 0 && (
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  TDS Cut ({request.tdsPercentage}%): -₹{Number(request.tdsAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                              )}
+                              {request?.tdsAmount > 0 && (
+                                <p className="text-xs font-semibold text-blue-600 mt-0.5">
+                                  Net Pay: ₹{Number(request.netAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                              )}
+                              <p className="text-[11px] text-gray-400 mt-1.5">
                                 Requested: {formatDateTime(request?.createdAt || request?.requestedAt)}
                               </p>
                               {request?.processedAt ? (
-                                <p className="text-xs text-gray-500 mt-0.5">
+                                <p className="text-[11px] text-gray-400 mt-0.5">
                                   Processed: {formatDateTime(request?.processedAt)}
                                 </p>
                               ) : null}
@@ -1442,6 +1452,32 @@ export default function HubFinance() {
                     {withdrawalAmount && parseFloat(withdrawalAmount) > (financeData?.currentCycle?.netAvailable ?? (financeData?.currentCycle?.estimatedPayout || 0)) && (
                       <p className="text-sm text-red-600 mt-1">Amount exceeds your withdrawable limit</p>
                     )}
+
+                  {withdrawalAmount && parseFloat(withdrawalAmount) > 0 && parseFloat(withdrawalAmount) <= (financeData?.currentCycle?.netAvailable ?? (financeData?.currentCycle?.estimatedPayout || 0)) && (
+                    (() => {
+                      const gross = parseFloat(withdrawalAmount) || 0
+                      const tdsPct = financeData?.restaurant?.restaurantTdsPercentage || 0
+                      const tdsAmt = Number((gross * (tdsPct / 100)).toFixed(2))
+                      const net = Number((gross - tdsAmt).toFixed(2))
+                      return (
+                        <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2 animate-fadeIn">
+                          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Estimated Payout Details</p>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-600">Gross Requested:</span>
+                            <span className="font-semibold text-gray-900">₹{gross.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-600">TDS Deduction ({tdsPct}%):</span>
+                            <span className="font-semibold text-red-600">-₹{tdsAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="border-t border-gray-200 pt-2 flex justify-between text-xs font-bold">
+                            <span className="text-gray-900">Net Bank Transfer:</span>
+                            <span className="text-blue-600">₹{net.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+                      )
+                    })()
+                  )}
                 </div>
 
                 <div className="flex gap-3">

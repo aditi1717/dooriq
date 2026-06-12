@@ -9,6 +9,7 @@ import { DeliveryBonusTransaction } from '../../admin/models/deliveryBonusTransa
 import { getDeliveryCashLimitSettings } from '../../admin/services/admin.service.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured, verifyPaymentSignature } from '../../orders/helpers/razorpay.helper.js';
+import { FoodBusinessSettings } from '../../admin/models/businessSettings.model.js';
 
 /**
  * Enhanced wallet fetch for delivery partners.
@@ -137,9 +138,14 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
             id: w._id,
             type: 'withdrawal',
             amount: w.amount,
+            tdsPercentage: w.tdsPercentage || 0,
+            tdsAmount: w.tdsAmount || 0,
+            netAmount: w.netAmount !== undefined ? w.netAmount : w.amount,
             status: w.status === 'pending' ? 'Pending' : (w.status === 'approved' ? 'Completed' : 'Rejected'),
             date: w.createdAt,
-            description: `Withdrawal Request - ${w.paymentMethod}`,
+            description: w.tdsAmount > 0 
+                ? `Withdrawal - ${w.paymentMethod} (TDS cut: ₹${w.tdsAmount})` 
+                : `Withdrawal Request - ${w.paymentMethod}`,
             payoutMethod: w.paymentMethod
         })),
         ...(depositList || []).map(d => ({
@@ -155,6 +161,9 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
         }))
     ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
+    const settingsDoc = await FoodBusinessSettings.findOne().lean();
+    const deliveryBoyTdsPercentage = Number(settingsDoc?.deliveryBoyTdsPercentage || 0);
+
     return {
         totalBalance: totalEarned + totalBonus, // Gross lifetime earnings
         pocketBalance, // Available to withdraw
@@ -167,6 +176,7 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
         totalCashLimit,
         availableCashLimit: Math.max(0, totalCashLimit - cashInHand),
         deliveryWithdrawalLimit,
+        deliveryBoyTdsPercentage,
         transactions: transactions.slice(0, 50)
     };
 };
@@ -222,9 +232,18 @@ export const requestDeliveryWithdrawal = async (deliveryPartnerId, payload) => {
         throw new ValidationError('Insufficient balance for this withdrawal');
     }
 
+    // Fetch TDS settings
+    const settings = await FoodBusinessSettings.findOne().lean();
+    const tdsPercentage = Number(settings?.deliveryBoyTdsPercentage || 0);
+    const tdsAmount = Number((amount * (tdsPercentage / 100)).toFixed(2));
+    const netAmount = Number((amount - tdsAmount).toFixed(2));
+
     const withdrawal = await FoodDeliveryWithdrawal.create({
         deliveryPartnerId: partnerId,
         amount,
+        tdsPercentage,
+        tdsAmount,
+        netAmount,
         paymentMethod,
         bankDetails: bankDetails || {
             accountNumber: partner.bankAccountNumber,

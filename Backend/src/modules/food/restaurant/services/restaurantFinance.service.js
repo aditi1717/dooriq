@@ -5,6 +5,7 @@ import { FoodRestaurantWithdrawal } from '../models/foodRestaurantWithdrawal.mod
 import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FEATURE_KEYS, isFeatureEnabled } from '../../admin/services/featureSettings.service.js';
 import { attemptAutoSettleSubscriptionDue } from './subscriptionPlan.service.js';
+import { FoodBusinessSettings } from '../../admin/models/businessSettings.model.js';
 
 function toTwoDigitYearString(dateObj) {
     const y = String(dateObj.getFullYear());
@@ -290,13 +291,17 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
         };
     }
 
+    const settingsDoc = await FoodBusinessSettings.findOne().lean();
+    const restaurantTdsPercentage = Number(settingsDoc?.restaurantTdsPercentage || 0);
+
     return {
         restaurant: {
             name: restaurant?.restaurantName || '',
             restaurantId: restaurant?._id ? `REST${restaurant._id.toString().slice(-6).padStart(6, '0')}` : 'N/A',
             address,
             subscriptionDueAmount: Number(restaurant?.subscriptionDueAmount || 0),
-            subscriptionStatus: restaurant?.subscriptionStatus || 'paid'
+            subscriptionStatus: restaurant?.subscriptionStatus || 'paid',
+            restaurantTdsPercentage
         },
         features: {
             restaurantSubscriptionEnabled: isRestaurantSubscriptionEnabled

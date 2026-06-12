@@ -185,7 +185,10 @@ export default function RestaurantWithdraws() {
     }
     const headers = [
       { key: "sl", label: "SI" },
-      { key: "amount", label: "Amount" },
+      { key: "amount", label: "Gross Amount" },
+      { key: "tdsPercentage", label: "TDS %" },
+      { key: "tdsAmount", label: "TDS Amount" },
+      { key: "netAmount", label: "Net Amount" },
       { key: "restaurantName", label: "Restaurant Name" },
       { key: "restaurantIdString", label: "Restaurant ID" },
       { key: "requestTime", label: "Request Time" },
@@ -197,6 +200,9 @@ export default function RestaurantWithdraws() {
     const exportData = filteredWithdraws.map((w, index) => ({
       sl: index + 1,
       amount: formatCurrency(w.amount),
+      tdsPercentage: `${w.tdsPercentage || 0}%`,
+      tdsAmount: formatCurrency(w.tdsAmount || 0),
+      netAmount: formatCurrency(w.netAmount !== undefined ? w.netAmount : w.amount),
       restaurantName: w.restaurantName || 'N/A',
       restaurantIdString: w.restaurantIdString || 'N/A',
       requestTime: formatDate(w.requestedAt || w.createdAt),
@@ -355,9 +361,21 @@ export default function RestaurantWithdraws() {
                           <span className="text-sm font-medium text-slate-700">{index + 1}</span>
                         </td>}
                         {visibleColumns.amount && <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-slate-700">
-                            {formatCurrency(withdraw.amount)}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-semibold text-slate-900">
+                              {formatCurrency(withdraw.amount)}
+                            </span>
+                            {withdraw.tdsAmount > 0 && (
+                              <span className="text-[10px] text-slate-500 mt-0.5">
+                                TDS: -{formatCurrency(withdraw.tdsAmount)} ({withdraw.tdsPercentage}%)
+                              </span>
+                            )}
+                            {withdraw.tdsAmount > 0 && (
+                              <span className="text-xs font-medium text-blue-600 mt-0.5">
+                                Net: {formatCurrency(withdraw.netAmount)}
+                              </span>
+                            )}
+                          </div>
                         </td>}
                         {visibleColumns.restaurant && <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm font-medium text-slate-700">{withdraw.restaurantName || 'N/A'}</span>
@@ -428,11 +446,25 @@ export default function RestaurantWithdraws() {
             </DialogHeader>
             {selectedWithdraw && (
               <div className="px-6 pb-6 space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase">Amount</label>
-                  <p className="text-sm font-medium text-slate-900 mt-1">
-                    {formatCurrency(selectedWithdraw.amount)}
-                  </p>
+                <div className="grid grid-cols-3 gap-4 bg-slate-50 p-3 rounded-lg">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Gross Amt</label>
+                    <p className="text-sm font-bold text-slate-900 mt-1">
+                      {formatCurrency(selectedWithdraw.amount)}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">TDS ({selectedWithdraw.tdsPercentage || 0}%)</label>
+                    <p className="text-sm font-bold text-red-600 mt-1">
+                      -{formatCurrency(selectedWithdraw.tdsAmount || 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Net Payout</label>
+                    <p className="text-sm font-bold text-blue-600 mt-1">
+                      {formatCurrency(selectedWithdraw.netAmount !== undefined ? selectedWithdraw.netAmount : selectedWithdraw.amount)}
+                    </p>
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-500 uppercase">Restaurant Name</label>

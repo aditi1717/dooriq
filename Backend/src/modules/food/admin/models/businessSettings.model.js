@@ -58,7 +58,9 @@ const businessSettingsSchema = new mongoose.Schema(
             coinExpiryDays: { type: Number, default: 30 },
             coinToWalletValue: { type: Number, default: 10, min: 0 },
             reviewUrl: { type: String, default: '' },
-        }
+        },
+        restaurantTdsPercentage: { type: Number, default: 0, min: 0, max: 100 },
+        deliveryBoyTdsPercentage: { type: Number, default: 0, min: 0, max: 100 }
     },
     { timestamps: true }
 );
