@@ -64,6 +64,9 @@ export const PayoutV2 = () => {
             return {
               id: t._id || t.id,
               amount: Number(t.amount) || 0,
+              tdsPercentage: t.tdsPercentage || 0,
+              tdsAmount: t.tdsAmount || 0,
+              netAmount: t.netAmount !== undefined ? t.netAmount : (Number(t.amount) || 0),
               status,
               date: formatDateTime(t.date || t.createdAt),
               processedAt: formatDateTime(t.processedAt || t.updatedAt),
@@ -155,9 +158,19 @@ export const PayoutV2 = () => {
                            </span>
                          </div>
                       </div>
-                      <p className="text-gray-900 text-3xl font-black mb-1.5 tracking-tight">
-                        ₹{withdrawal.amount}
+                      <p className="text-gray-900 text-2xl font-black mb-1 tracking-tight">
+                        Gross: ₹{withdrawal.amount}
                       </p>
+                      {withdrawal.tdsAmount > 0 && (
+                        <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-1">
+                          TDS Cut ({withdrawal.tdsPercentage}%): -₹{withdrawal.tdsAmount}
+                        </p>
+                      )}
+                      {withdrawal.tdsAmount > 0 && (
+                        <p className="text-emerald-600 text-sm font-black mb-2 tracking-tight">
+                          Net Pay: ₹{withdrawal.netAmount}
+                        </p>
+                      )}
                       <p className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mb-1">
                         Requested: {withdrawal.date}
                       </p>

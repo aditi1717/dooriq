@@ -53,7 +53,8 @@ export const PocketBalanceV2 = () => {
      deductions: 0,
      withdrawalLimit: 100,
      withdrawableAmount: 0,
-     canWithdraw: false
+     canWithdraw: false,
+     deliveryBoyTdsPercentage: 0
   });
   const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -104,7 +105,8 @@ export const PocketBalanceV2 = () => {
            deductions: 0, // Mocked
            withdrawalLimit,
            withdrawableAmount,
-           canWithdraw: withdrawableAmount >= withdrawalLimit
+           canWithdraw: withdrawableAmount >= withdrawalLimit,
+           deliveryBoyTdsPercentage: wallet.deliveryBoyTdsPercentage ?? 0
         });
       } catch (err) {
         toast.error('Failed to load pocket details');
@@ -314,6 +316,32 @@ export const PocketBalanceV2 = () => {
                  <span>Min: {formatCurrency(walletState.withdrawalLimit)}</span>
                  <span>Available: {formatCurrency(walletState.withdrawableAmount)}</span>
                </div>
+
+               {withdrawAmount && parseFloat(withdrawAmount) > 0 && parseFloat(withdrawAmount) <= walletState.withdrawableAmount && (
+                 (() => {
+                   const gross = parseFloat(withdrawAmount) || 0;
+                   const tdsPct = walletState.deliveryBoyTdsPercentage || 0;
+                   const tdsAmt = Number((gross * (tdsPct / 100)).toFixed(2));
+                   const net = Number((gross - tdsAmt).toFixed(2));
+                   return (
+                     <div className="mt-4 p-4 bg-gray-50 border border-gray-100 rounded-[20px] space-y-2.5 animate-fadeIn">
+                       <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Payout Summary</p>
+                       <div className="flex justify-between text-[11px] font-bold text-gray-600">
+                         <span>Requested Amount:</span>
+                         <span className="text-gray-900">₹{gross.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                       </div>
+                       <div className="flex justify-between text-[11px] font-bold text-gray-600">
+                         <span>TDS Deduction ({tdsPct}%):</span>
+                         <span className="text-red-500">-₹{tdsAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                       </div>
+                       <div className="border-t border-gray-200/60 pt-2 flex justify-between text-[11px] font-black text-gray-900">
+                         <span>Net Payout:</span>
+                         <span className="text-emerald-600">₹{net.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                       </div>
+                     </div>
+                   );
+                 })()
+               )}
              </div>
 
              <div className="grid grid-cols-2 gap-3">

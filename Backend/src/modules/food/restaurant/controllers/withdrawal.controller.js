@@ -4,6 +4,7 @@ import { FoodRestaurant } from '../models/restaurant.model.js';
 import { getRestaurantFinance } from '../services/restaurantFinance.service.js';
 import { FEATURE_KEYS, isFeatureEnabled } from '../../admin/services/featureSettings.service.js';
 import { attemptAutoSettleSubscriptionDue } from '../services/subscriptionPlan.service.js';
+import { FoodBusinessSettings } from '../../admin/models/businessSettings.model.js';
 
 export const createWithdrawalRequestController = async (req, res, next) => {
     try {
@@ -30,10 +31,19 @@ export const createWithdrawalRequestController = async (req, res, next) => {
             return sendError(res, 400, `Insufficient balance. Available to withdraw: ₹${netAvailable.toLocaleString('en-IN')}`);
         }
 
+        // Fetch TDS settings
+        const settings = await FoodBusinessSettings.findOne().lean();
+        const tdsPercentage = Number(settings?.restaurantTdsPercentage || 0);
+        const tdsAmount = Number((Number(amount) * (tdsPercentage / 100)).toFixed(2));
+        const netAmount = Number((Number(amount) - tdsAmount).toFixed(2));
+
         // Create the withdrawal request
         const withdrawal = new FoodRestaurantWithdrawal({
             restaurantId,
             amount: Number(amount),
+            tdsPercentage,
+            tdsAmount,
+            netAmount,
             bankDetails,
             status: 'pending'
         });

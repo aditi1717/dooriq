@@ -245,7 +245,23 @@ export default function DeliveryWithdrawal() {
                     filteredRequests.map((req, index) => (
                       <tr key={req.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-700">{index + 1}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-700">{formatCurrency(req.amount)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-semibold text-slate-900">
+                              {formatCurrency(req.amount)}
+                            </span>
+                            {req.tdsAmount > 0 && (
+                              <span className="text-[10px] text-slate-500 mt-0.5">
+                                TDS: -{formatCurrency(req.tdsAmount)} ({req.tdsPercentage}%)
+                              </span>
+                            )}
+                            {req.tdsAmount > 0 && (
+                              <span className="text-xs font-medium text-emerald-600 mt-0.5">
+                                Net: {formatCurrency(req.netAmount)}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-700">{req.deliveryName || "N/A"}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-700">{req.deliveryIdString || "N/A"}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-700">{formatDate(req.requestedAt || req.createdAt)}</td>
@@ -309,9 +325,25 @@ export default function DeliveryWithdrawal() {
             </DialogHeader>
             {selectedRequest && (
               <div className="px-6 pb-6 space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase">Amount</label>
-                  <p className="text-sm font-medium text-slate-900 mt-1">{formatCurrency(selectedRequest.amount)}</p>
+                <div className="grid grid-cols-3 gap-4 bg-slate-50 p-3 rounded-lg">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Gross Amt</label>
+                    <p className="text-sm font-bold text-slate-900 mt-1">
+                      {formatCurrency(selectedRequest.amount)}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">TDS ({selectedRequest.tdsPercentage || 0}%)</label>
+                    <p className="text-sm font-bold text-red-600 mt-1">
+                      -{formatCurrency(selectedRequest.tdsAmount || 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Net Payout</label>
+                    <p className="text-sm font-bold text-emerald-600 mt-1">
+                      {formatCurrency(selectedRequest.netAmount !== undefined ? selectedRequest.netAmount : selectedRequest.amount)}
+                    </p>
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-500 uppercase">Delivery boy</label>

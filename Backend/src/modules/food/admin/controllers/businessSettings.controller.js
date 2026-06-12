@@ -189,7 +189,7 @@ export async function updateOrderAcceptanceSettings(req, res, next) {
 export async function updateBusinessSettings(req, res, next) {
     try {
         const data = req.body.data ? JSON.parse(req.body.data) : {};
-        const { companyName, email, phoneCountryCode, phoneNumber, address, state, pincode, region } = data;
+        const { companyName, email, phoneCountryCode, phoneNumber, address, state, pincode, region, restaurantTdsPercentage, deliveryBoyTdsPercentage } = data;
 
         // Validation
         if (!companyName || companyName.trim().length < 2 || companyName.trim().length > 50) {
@@ -211,6 +211,19 @@ export async function updateBusinessSettings(req, res, next) {
             return res.status(400).json({ success: false, message: 'Invalid pincode (4-10 digits required)' });
         }
 
+        if (restaurantTdsPercentage !== undefined) {
+            const restTds = Number(restaurantTdsPercentage);
+            if (isNaN(restTds) || restTds < 0 || restTds > 100) {
+                return res.status(400).json({ success: false, message: 'Restaurant TDS must be a percentage between 0 and 100' });
+            }
+        }
+        if (deliveryBoyTdsPercentage !== undefined) {
+            const delTds = Number(deliveryBoyTdsPercentage);
+            if (isNaN(delTds) || delTds < 0 || delTds > 100) {
+                return res.status(400).json({ success: false, message: 'Delivery partner TDS must be a percentage between 0 and 100' });
+            }
+        }
+
         let settings = await FoodBusinessSettings.findOne();
         if (!settings) {
             settings = new FoodBusinessSettings();
@@ -228,6 +241,8 @@ export async function updateBusinessSettings(req, res, next) {
         if (state !== undefined) settings.state = state;
         if (pincode !== undefined) settings.pincode = pincode;
         if (region) settings.region = region;
+        if (restaurantTdsPercentage !== undefined) settings.restaurantTdsPercentage = Number(restaurantTdsPercentage);
+        if (deliveryBoyTdsPercentage !== undefined) settings.deliveryBoyTdsPercentage = Number(deliveryBoyTdsPercentage);
 
         // Handle file uploads
         if (req.files) {

@@ -12,6 +12,18 @@ const foodRestaurantWithdrawalSchema = new mongoose.Schema({
         required: true,
         min: [1, 'Minimum withdrawal amount is ₹1']
     },
+    tdsPercentage: {
+        type: Number,
+        default: 0
+    },
+    tdsAmount: {
+        type: Number,
+        default: 0
+    },
+    netAmount: {
+        type: Number,
+        default: 0
+    },
     status: {
         type: String,
         enum: ['pending', 'approved', 'rejected'],
