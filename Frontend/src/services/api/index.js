@@ -300,6 +300,23 @@ export const adminAPI = {
     apiClient.patch(`/food/admin/feature-settings/${String(key)}`, body ?? {}, {
       contextModule: "admin",
     }),
+  getCoinSettings: () =>
+    apiClient.get("/food/admin/coin-settings", {
+      contextModule: "admin",
+    }),
+  updateCoinSettings: (body) =>
+    apiClient.patch("/food/admin/coin-settings", body ?? {}, {
+      contextModule: "admin",
+    }),
+  getCoinRequests: (params = {}) =>
+    apiClient.get("/food/admin/coin-requests", {
+      params,
+      contextModule: "admin",
+    }),
+  verifyCoinRequest: (id, body) =>
+    apiClient.patch(`/food/admin/coin-requests/${String(id)}/verify`, body ?? {}, {
+      contextModule: "admin",
+    }),
   getSubAdmins: (params = {}) =>
     apiClient.get("/food/admin/sub-admins", { params, contextModule: "admin" }),
   createSubAdmin: (body = {}) =>
@@ -2268,6 +2285,16 @@ export const userAPI = {
       contextModule: "user",
     });
   },
+  /** Upload generic image (multipart). Field name: file */
+  uploadGenericImage: async (file) => {
+    if (!file) return Promise.reject(new Error("File is required"));
+    const uploadFile = await toUploadReadyImage(file);
+    const formData = new FormData();
+    formData.append("file", uploadFile);
+    return apiClient.post("/food/user/upload-image", formData, {
+      contextModule: "user",
+    });
+  },
   /** GET /food/user/wallet (Bearer USER). Deduped + short-cached. */
   getWallet: (() => {
     let inFlight = null;
@@ -2308,6 +2335,14 @@ export const userAPI = {
   /** POST /food/user/wallet/topup/verify (Bearer USER) */
   verifyWalletTopupPayment: (body) =>
     apiClient.post("/food/user/wallet/topup/verify", body ?? {}, {
+      contextModule: "user",
+    }),
+  /** GET /food/user/coins (Bearer USER) */
+  getCoinsInfo: () =>
+    apiClient.get("/food/user/coins", { contextModule: "user" }),
+  /** POST /food/user/coins/redeem (Bearer USER) */
+  submitCoinRedemption: (body) =>
+    apiClient.post("/food/user/coins/redeem", body ?? {}, {
       contextModule: "user",
     }),
   /** GET /food/user/addresses (Bearer USER). Deduped + short-cached. */

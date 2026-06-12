@@ -13,6 +13,7 @@ import {
   MapPin,
   RotateCcw,
   FileText,
+  Coins
 } from "lucide-react"
 import { orderAPI, restaurantAPI } from "@food/api"
 import { useCart } from "@food/context/CartContext"
@@ -393,6 +394,19 @@ export default function UserOrderDetails() {
                 ? "Order was delivered"
                 : "Order status: " + (order.status || "Processing")}
             </h2>
+            {order.status === "delivered" && order.coinsEarned > 0 ? (
+              <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                <Coins className="w-3.5 h-3.5" />
+                <span>Earned {order.coinsEarned} Coins</span>
+              </div>
+            ) : (
+              order.status !== "delivered" && order.coinSettings?.minCoinsPerOrder != null && order.coinSettings?.maxCoinsPerOrder != null && (
+                <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                  <Coins className="w-3.5 h-3.5" />
+                  <span>Earn {order.coinSettings.minCoinsPerOrder}-{order.coinSettings.maxCoinsPerOrder} Coins</span>
+                </div>
+              )
+            )}
           </div>
         </div>
 

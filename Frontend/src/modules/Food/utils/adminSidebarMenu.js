@@ -117,6 +117,14 @@ export const adminSidebarMenu = [
   },
   {
     type: "section",
+    label: "REWARD COIN SYSTEM",
+    items: [
+      { type: "link", label: "Coin Settings", path: "/admin/food/coin-settings", icon: "Coins" },
+      { type: "link", label: "Redemption Requests", path: "/admin/food/coin-requests", icon: "List" },
+    ],
+  },
+  {
+    type: "section",
     label: "CUSTOMER MANAGEMENT",
     items: [
       {

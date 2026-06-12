@@ -493,6 +493,21 @@ export async function createOrder(userId, dto) {
     const initialStatus = (paymentMethod === "razorpay" || paymentMethod === "card") ? "pending_payment" : "created";
     const acceptanceWindowSeconds = await getOrderAcceptanceWindowSeconds();
 
+    // Pre-calculate coinsEarned when order is created based on active business settings
+    let coinsEarned = 0;
+    try {
+      const { FoodBusinessSettings } = await import('../../admin/models/businessSettings.model.js');
+      const settings = await FoodBusinessSettings.findOne().lean();
+      if (settings?.coinSettings?.isActive) {
+        const { minCoinsPerOrder, maxCoinsPerOrder } = settings.coinSettings;
+        const min = Number(minCoinsPerOrder) || 0;
+        const max = Number(maxCoinsPerOrder) || 0;
+        coinsEarned = Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+    } catch (err) {
+      logger.error(`Failed to pre-calculate coinsEarned: ${err.message}`);
+    }
+
     const order = new FoodOrder({
       userId: toObjectId(userId, 'User ID'),
       restaurantId: restaurantId,
@@ -526,6 +541,7 @@ export async function createOrder(userId, dto) {
       scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
       riderEarning: Number(riderEarning) || 0,
       platformProfit: Number(platformProfit) || 0,
+      coinsEarned: Number(coinsEarned) || 0
     });
 
     let razorpayPayload = null;
@@ -790,6 +806,28 @@ export async function getOrderById(
     .lean();
   if (!order) throw new NotFoundError("Order not found");
 
+  // If order document has 0 coinsEarned, dynamically resolve it from the user's wallet transactions
+  if (!order.coinsEarned || order.coinsEarned === 0) {
+    try {
+      const { FoodUserWallet } = await import('../../user/models/userWallet.model.js');
+      const orderUserOid = order.userId?._id || order.userId;
+      if (orderUserOid) {
+        const wallet = await FoodUserWallet.findOne({ userId: orderUserOid });
+        if (wallet && wallet.coinTransactions) {
+          const match = wallet.coinTransactions.find(tx => 
+            tx.type === 'earned' && 
+            (tx.description?.includes(String(order._id)) || (order.order_id && tx.description?.includes(order.order_id)))
+          );
+          if (match) {
+            order.coinsEarned = match.amount;
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to resolve coinsEarned for order details:', err);
+    }
+  }
+
   if (admin) return normalizeOrderForClient(order);
 
   const orderUserId = order.userId?._id?.toString() || order.userId?.toString();
@@ -822,6 +860,21 @@ export async function getOrderById(
     if (!drop.verified && secret) {
       out.handoverOtp = secret;
     }
+
+    // Attach current coin settings min/max to allow frontend range display before delivery
+    try {
+      const { FoodBusinessSettings } = await import('../../admin/models/businessSettings.model.js');
+      const settings = await FoodBusinessSettings.findOne().select('coinSettings').lean();
+      if (settings?.coinSettings?.isActive) {
+        out.coinSettings = {
+          minCoinsPerOrder: settings.coinSettings.minCoinsPerOrder,
+          maxCoinsPerOrder: settings.coinSettings.maxCoinsPerOrder
+        };
+      }
+    } catch (err) {
+      console.error('Failed to attach coinSettings to order details:', err);
+    }
+
     return out;
   }
 
@@ -1224,6 +1277,12 @@ export async function updateOrderStatusRestaurant(
       });
     } catch (err) {
       logger.warn(`updateOrderStatusRestaurant delivered transaction sync failed: ${err?.message || err}`);
+    }
+
+    try {
+      await userWalletService.awardCoinsForOrder(order.userId, order._id);
+    } catch (err) {
+      logger.warn(`updateOrderStatusRestaurant award coins failed: ${err?.message || err}`);
     }
   }
 

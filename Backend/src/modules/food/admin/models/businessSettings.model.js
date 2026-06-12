@@ -50,7 +50,15 @@ const businessSettingsSchema = new mongoose.Schema(
                 fontFamily: { type: String, default: 'Poppins' }
             }
         },
-        orderAcceptanceTimeMinutes: { type: Number, default: 4, min: 1, max: 20 }
+        orderAcceptanceTimeMinutes: { type: Number, default: 4, min: 1, max: 20 },
+        coinSettings: {
+            isActive: { type: Boolean, default: true },
+            minCoinsPerOrder: { type: Number, default: 1 },
+            maxCoinsPerOrder: { type: Number, default: 3 },
+            coinExpiryDays: { type: Number, default: 30 },
+            coinToWalletValue: { type: Number, default: 10, min: 0 },
+            reviewUrl: { type: String, default: '' },
+        }
     },
     { timestamps: true }
 );

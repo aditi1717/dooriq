@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { motion } from "framer-motion"
 
-import { CheckCircle, MapPin, CreditCard, ArrowLeft } from "lucide-react"
+import { CheckCircle, MapPin, CreditCard, ArrowLeft, Coins } from "lucide-react"
 import { Link } from "react-router-dom"
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import ScrollReveal from "@food/components/user/ScrollReveal"
@@ -13,6 +14,7 @@ import { Badge } from "@food/components/ui/badge"
 import { useCart } from "@food/context/CartContext"
 import { useProfile } from "@food/context/ProfileContext"
 import { useOrders } from "@food/context/OrdersContext"
+import { userAPI } from "@food/api"
 
 export default function Checkout() {
   const navigate = useNavigate()
@@ -35,6 +37,22 @@ export default function Checkout() {
       setSelectedAddressId(defaultId || "")
     }
   }, [addresses, selectedAddressId, getDefaultAddress])
+
+  const [coinSettings, setCoinSettings] = useState(null)
+
+  useEffect(() => {
+    const fetchCoinSettings = async () => {
+      try {
+        const response = await userAPI.getCoinsInfo()
+        if (response?.data?.data?.settings) {
+          setCoinSettings(response.data.data.settings)
+        }
+      } catch (err) {
+        console.error("Error fetching coin settings:", err)
+      }
+    }
+    fetchCoinSettings()
+  }, [])
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity * 83, 0)
   const deliveryFee = 2.99 * 83
@@ -298,6 +316,40 @@ export default function Checkout() {
                       <span className="text-[#EB590E] dark:text-orange-400">₹{total.toFixed(0)}</span>
                     </div>
                   </div>
+
+                  {coinSettings && coinSettings.isActive && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                      className="relative overflow-hidden rounded-2xl p-4 bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-amber-600/10 dark:from-amber-950/20 dark:via-yellow-950/10 dark:to-amber-900/20 border border-amber-500/20 dark:border-amber-500/10 shadow-xs flex items-center gap-3.5 mt-4 group"
+                    >
+                      <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out" />
+                      
+                      <motion.div
+                        animate={{ 
+                          scale: [1, 1.12, 1],
+                          rotate: [0, 8, -8, 0]
+                        }}
+                        transition={{ 
+                          duration: 3, 
+                          repeat: Infinity, 
+                          ease: "easeInOut" 
+                        }}
+                        className="w-10 h-10 rounded-full bg-amber-500/20 dark:bg-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400 shadow-inner shrink-0"
+                      >
+                        <Coins className="w-5.5 h-5.5 animate-pulse" />
+                      </motion.div>
+                      <div>
+                        <p className="text-sm font-bold text-amber-950 dark:text-amber-200">
+                          Earn {coinSettings.minCoinsPerOrder || 1} to {coinSettings.maxCoinsPerOrder || 3} Reward Coins!
+                        </p>
+                        <p className="text-xs text-amber-800/80 dark:text-amber-400/80 mt-0.5">
+                          Coins will unlock in your wallet once order is delivered. 1 Coin = ₹{coinSettings.coinToWalletValue || 10}.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
 
                   <Button
                     className="w-full bg-[#EB590E] hover:bg-[#D94F0C] text-white mt-4 md:mt-6 h-11 md:h-12 text-sm md:text-base border-none"

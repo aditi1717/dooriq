@@ -115,6 +115,8 @@ const ShippingPolicy = lazy(() => import("@food/pages/admin/settings/ShippingPol
 const CancellationPolicy = lazy(() => import("@food/pages/admin/settings/CancellationPolicy"));
 const ReactRegistration = lazy(() => import("@food/pages/admin/settings/ReactRegistration"));
 const SupportCMS = lazy(() => import("@food/pages/admin/settings/SupportCMS"));
+const CoinSettings = lazy(() => import("@food/pages/admin/settings/CoinSettings"));
+const CoinRequests = lazy(() => import("@food/pages/admin/settings/CoinRequests"));
 
 // System Settings
 const ThirdParty = lazy(() => import("@food/pages/admin/system/ThirdParty"));
@@ -348,6 +350,10 @@ export default function AdminRouter() {
             <Route path="theme-settings" element={<ThemeSettings />} />
             <Route path="gallery" element={<Gallery />} />
             <Route path="login-setup" element={<LoginSetup />} />
+            
+            {/* Reward Coin System */}
+            <Route path="coin-settings" element={<CoinSettings />} />
+            <Route path="coin-requests" element={<CoinRequests />} />
             
             {/* PAGES & SOCIAL MEDIA */}
             <Route path="pages-social-media/terms" element={<TermsAndCondition />} />

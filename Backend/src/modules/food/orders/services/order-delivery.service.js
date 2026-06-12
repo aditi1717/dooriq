@@ -17,6 +17,7 @@ import { fetchPolyline } from '../utils/googleMaps.js';
 import * as foodTransactionService from './foodTransaction.service.js';
 import * as dispatchService from './order-dispatch.service.js';
 import * as paymentService from './order-payment.service.js';
+import * as userWalletService from '../../user/services/userWallet.service.js';
 
 import {
   buildOrderIdentityFilter,
@@ -850,6 +851,12 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
     recordedById: deliveryPartnerId,
     note: `Delivery completed. Prev status: ${prevPayStatus}`,
   });
+
+  try {
+    await userWalletService.awardCoinsForOrder(order.userId, order._id);
+  } catch (err) {
+    logger.warn(`completeDelivery award coins failed: ${err?.message || err}`);
+  }
 
   emitOrderUpdate(order, deliveryPartnerId);
   enqueueOrderEvent('delivery_completed', {

@@ -294,7 +294,8 @@ const orderSchema = new mongoose.Schema(
         lastRiderLocation: {
             type: { type: String, enum: ['Point'] },
             coordinates: { type: [Number] }
-        }
+        },
+        coinsEarned: { type: Number, default: 0 }
     },
     {
         collection: 'food_orders',

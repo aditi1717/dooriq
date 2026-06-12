@@ -161,6 +161,7 @@
 .animate-slide-in-left { animation: slide-in-left 0.8s ease-out; }
 .animate-fade-down { animation: fade-down 0.5s ease-out; }
 
+
 .leaflet-container { height: 100%; width: 100%; z-index: 1; }
 .custom-marker { background: transparent; border: none; }
 .touch-none { touch-action: none; }
@@ -170,4 +171,36 @@
 .pac-container {
   z-index: 999999 !important;
   pointer-events: auto !important;
+}
+
+/* Ensure toast close button is always visible, styled nicely, and matching the UI */
+[data-close-button] {
+  opacity: 1 !important;
+  display: flex !important;
+  background-color: #ffffff !important;
+  border: 1px solid #e4e4e7 !important;
+  color: #3f3f46 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  transition: background-color 0.15s, transform 0.15s !important;
+  
+  /* Force top right position inside the toast */
+  left: auto !important;
+  right: 8px !important;
+  top: 8px !important;
+  transform: none !important;
+}
+
+.dark [data-close-button] {
+  background-color: #18181b !important;
+  border-color: #27272a !important;
+  color: #d4d4d8 !important;
+}
+
+[data-close-button]:hover {
+  background-color: #f4f4f5 !important;
+  transform: scale(1.05);
+}
+
+.dark [data-close-button]:hover {
+  background-color: #27272a !important;
 }

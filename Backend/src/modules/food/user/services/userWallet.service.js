@@ -188,3 +188,209 @@ export const refundWalletBalance = async (userId, amountInr, description = 'Orde
     return { wallet: await getUserWallet(userId) };
 };
 
+export const awardCoinsForOrder = async (userId, orderId) => {
+    try {
+        const { FoodBusinessSettings } = await import('../../admin/models/businessSettings.model.js');
+        const settings = await FoodBusinessSettings.findOne().lean();
+        
+        if (!settings?.coinSettings?.isActive) {
+            return { awarded: 0, reason: 'coin_system_disabled' };
+        }
+
+        const { minCoinsPerOrder, maxCoinsPerOrder, coinExpiryDays } = settings.coinSettings;
+        const min = Number(minCoinsPerOrder) || 0;
+        const max = Number(maxCoinsPerOrder) || 0;
+        const expiryDays = Number(coinExpiryDays) || 0;
+
+        const wallet = await ensureWallet(userId);
+        
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + expiryDays);
+
+        let readableOrderId = orderId;
+        let awardedCoins = 0;
+        try {
+            if (mongoose.Types.ObjectId.isValid(orderId)) {
+                const { FoodOrder } = await import('../../orders/models/order.model.js');
+                const dbOrder = await FoodOrder.findById(orderId).select('order_id coinsEarned').lean();
+                if (dbOrder) {
+                    readableOrderId = dbOrder.order_id || orderId;
+                    awardedCoins = Number(dbOrder.coinsEarned) || 0;
+                }
+            }
+        } catch (err) {
+            console.error('Failed to get order details in awardCoinsForOrder:', err);
+        }
+
+        // If not already pre-calculated on order creation, calculate random coins
+        if (awardedCoins <= 0) {
+            awardedCoins = Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+        
+        if (awardedCoins <= 0) {
+            return { awarded: 0, reason: 'zero_coins_calculated' };
+        }
+
+        wallet.coinTransactions.push({
+            amount: awardedCoins,
+            type: 'earned',
+            expiresAt,
+            description: `Earned for order #${readableOrderId}`
+        });
+        wallet.coinBalance = Number(wallet.coinBalance || 0) + awardedCoins;
+        await wallet.save();
+
+        // Ensure coinsEarned is saved to the order in case it was a fallback calculation
+        try {
+            const { FoodOrder } = await import('../../orders/models/order.model.js');
+            await FoodOrder.findByIdAndUpdate(orderId, { coinsEarned: awardedCoins });
+        } catch (orderErr) {
+            console.error(`Failed to update coinsEarned on order ${orderId}:`, orderErr);
+        }
+
+        return { awarded: awardedCoins, balance: wallet.coinBalance };
+    } catch (error) {
+        // Log but don't fail the order process
+        console.error(`Failed to award coins for order ${orderId}:`, error);
+        return { awarded: 0, reason: 'error' };
+    }
+};
+
+export const getCoinsInfo = async (userId) => {
+    const wallet = await ensureWallet(userId);
+    
+    // Calculate total valid coins using FIFO deduction logic
+    const now = new Date();
+    const transactions = (wallet.coinTransactions || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    let totalDeductions = transactions
+        .filter((tx) => tx.type === "redeemed" || tx.type === "expired")
+        .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+
+    const earnedTx = transactions
+        .filter((tx) => tx.type === "earned")
+        .map((tx) => ({
+            amount: tx.amount,
+            expiresAt: tx.expiresAt,
+            createdAt: tx.createdAt
+        }))
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+    for (const tx of earnedTx) {
+        let remaining = tx.amount;
+        if (totalDeductions > 0) {
+            const deduct = Math.min(totalDeductions, remaining);
+            remaining -= deduct;
+            totalDeductions -= deduct;
+        }
+        tx.amount = remaining;
+    }
+
+    const actualBalance = earnedTx
+        .filter((tx) => tx.expiresAt > now)
+        .reduce((sum, tx) => sum + tx.amount, 0);
+    
+    if (wallet.coinBalance !== actualBalance) {
+        wallet.coinBalance = actualBalance;
+        await wallet.save();
+    }
+
+    const { FoodBusinessSettings } = await import('../../admin/models/businessSettings.model.js');
+    const settings = await FoodBusinessSettings.findOne().lean();
+
+    // Fetch redemption requests for this user
+    let redemptionRequests = [];
+    try {
+        const { CoinRedemptionRequest } = await import('../models/coinRedemptionRequest.model.js');
+        redemptionRequests = await CoinRedemptionRequest.find({ userId: wallet.userId }).sort({ createdAt: -1 }).lean();
+    } catch (err) {
+        console.error('Failed to fetch redemption requests:', err);
+    }
+
+    // Dynamic resolution of MongoDB object ID to human readable order ID in transaction descriptions
+    const orderIdsToResolve = [];
+    const txList = transactions.map(t => {
+        const doc = t.toObject ? t.toObject() : t;
+        const match = doc.description?.match(/#([0-9a-fA-F]{24})/);
+        if (match) {
+            orderIdsToResolve.push(match[1]);
+        }
+        return {
+            ...doc,
+            id: String(doc._id)
+        };
+    });
+
+    let orderMap = {};
+    if (orderIdsToResolve.length > 0) {
+        try {
+            const { FoodOrder } = await import('../../orders/models/order.model.js');
+            const orders = await FoodOrder.find({ _id: { $in: orderIdsToResolve } }).select('order_id').lean();
+            orderMap = orders.reduce((acc, order) => {
+                acc[String(order._id)] = order.order_id;
+                return acc;
+            }, {});
+        } catch (err) {
+            console.error('Failed to resolve order IDs in getCoinsInfo:', err);
+        }
+    }
+
+    const mappedTransactions = txList.map(tx => {
+        if (tx.description) {
+            const match = tx.description.match(/#([0-9a-fA-F]{24})/);
+            if (match && orderMap[match[1]]) {
+                tx.description = tx.description.replace(match[1], orderMap[match[1]]);
+            }
+        }
+        return tx;
+    });
+    
+    return {
+        balance: actualBalance,
+        transactions: mappedTransactions,
+        redemptionRequests,
+        settings: settings?.coinSettings || {}
+    };
+};
+
+export const submitCoinRedemption = async (userId, coinsToRedeem, screenshotUrl) => {
+    const { FoodBusinessSettings } = await import('../../admin/models/businessSettings.model.js');
+    const settings = await FoodBusinessSettings.findOne().lean();
+    
+    if (!settings?.coinSettings?.isActive) {
+        throw new ValidationError('Coin system is currently disabled');
+    }
+
+    const wallet = await ensureWallet(userId);
+    const coins = Number(coinsToRedeem);
+    
+    if (!Number.isFinite(coins) || coins <= 0) {
+        throw new ValidationError('Invalid coins amount');
+    }
+    
+    if (wallet.coinBalance < coins) {
+        throw new ValidationError('Insufficient coin balance');
+    }
+
+    const amountToCredit = coins * (settings.coinSettings.coinToWalletValue || 10);
+
+    // Deduct coins immediately (if rejected later, admin will refund)
+    wallet.coinBalance -= coins;
+    wallet.coinTransactions.unshift({
+        amount: coins,
+        type: 'redeemed',
+        description: 'Redeemed for wallet balance'
+    });
+    
+    await wallet.save();
+
+    const { CoinRedemptionRequest } = await import('../models/coinRedemptionRequest.model.js');
+    const request = await CoinRedemptionRequest.create({
+        userId: wallet.userId,
+        coinsRedeemed: coins,
+        amountToCredit,
+        screenshotUrl
+    });
+
+    return { request, walletBalance: wallet.coinBalance };
+};

@@ -30,18 +30,28 @@ import {
     createSupportTicketController,
     listMySupportTicketsController
 } from '../controllers/supportTicket.controller.js';
+import {
+    getCoinsInfoController,
+    submitCoinRedemptionController
+} from '../controllers/coin.controller.js';
+import { uploadGenericImageController } from '../controllers/upload.controller.js';
 
 const router = express.Router();
 
 router.get('/profile', getCurrentUserProfileController);
 router.patch('/profile', updateCurrentUserProfileController);
 router.post('/profile/profile-image', upload.single('file'), uploadCurrentUserProfileImageController);
+router.post('/upload-image', upload.single('file'), uploadGenericImageController);
 router.delete('/profile', deleteCurrentUserAccountController);
 
 // Wallet (Bearer USER)
 router.get('/wallet', getUserWalletController);
 router.post('/wallet/topup/order', createWalletTopupOrderController);
 router.post('/wallet/topup/verify', verifyWalletTopupPaymentController);
+
+// Reward Coins (Bearer USER)
+router.get('/coins', getCoinsInfoController);
+router.post('/coins/redeem', submitCoinRedemptionController);
 
 // Referral stats (Bearer USER)
 router.get('/referrals/stats', getUserReferralStatsController);

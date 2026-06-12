@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from "react"
 import { createPortal } from "react-dom"
 import { Link, useNavigate } from "react-router-dom"
-import { Plus, Minus, ArrowLeft, ChevronRight, Clock, MapPin, Phone, FileText, Utensils, Tag, Percent, Share2, ChevronUp, ChevronDown, X, Check, Settings, CreditCard, Wallet, Building2, Sparkles, Banknote, Zap, CheckCircle2, MessageCircle, Send, Mail, Copy } from "lucide-react"
+import { Plus, Minus, ArrowLeft, ChevronRight, Clock, MapPin, Phone, FileText, Utensils, Tag, Percent, Share2, ChevronUp, ChevronDown, X, Check, Settings, CreditCard, Wallet, Building2, Sparkles, Banknote, Zap, CheckCircle2, MessageCircle, Send, Mail, Copy, Coins } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import confetti from "canvas-confetti"
 
@@ -183,6 +183,21 @@ export default function Cart() {
   const [showOrderSuccess, setShowOrderSuccess] = useState(false)
   const [placedOrderId, setPlacedOrderId] = useState(null)
   const [selectedAddressId, setSelectedAddressId] = useState(null)
+  const [coinSettings, setCoinSettings] = useState(null)
+
+  useEffect(() => {
+    const fetchCoinSettings = async () => {
+      try {
+        const response = await userAPI.getCoinsInfo()
+        if (response?.data?.data?.settings) {
+          setCoinSettings(response.data.data.settings)
+        }
+      } catch (err) {
+        console.error("Error fetching coin settings in Cart:", err)
+      }
+    }
+    fetchCoinSettings()
+  }, [])
   const [deliveryAddressMode, setDeliveryAddressMode] = useState(() => {
     try {
       if (typeof window === "undefined") return "saved"
@@ -2653,6 +2668,24 @@ export default function Cart() {
       >
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4">
           <div className="w-full max-w-lg mx-auto space-y-3">
+            {coinSettings && coinSettings.isActive && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="relative overflow-hidden flex items-center justify-between p-2.5 px-3.5 bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-amber-600/10 border border-amber-500/20 dark:border-amber-500/10 rounded-xl"
+              >
+                <div className="flex items-center gap-2">
+                  <Coins className="w-4.5 h-4.5 text-amber-500 animate-pulse shrink-0" />
+                  <span className="text-[11px] font-semibold text-amber-950 dark:text-amber-200">
+                    Earn {coinSettings.minCoinsPerOrder || 1}–{coinSettings.maxCoinsPerOrder || 3} Coins on this order!
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-sm">
+                  1 Coin = ₹{coinSettings.coinToWalletValue || 10}
+                </span>
+              </motion.div>
+            )}
+
             {/* Pay Using - Slim Pro UI */}
             <div
               className="flex items-center justify-between p-2 bg-gray-50 dark:bg-[#222222] rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-[#282828] active:scale-[0.98] transition-all duration-200 shadow-sm"

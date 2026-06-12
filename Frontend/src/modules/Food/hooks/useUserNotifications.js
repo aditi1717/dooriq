@@ -131,7 +131,7 @@ export const useUserNotifications = () => {
       const title = orderId ? `Order ${orderId}` : 'Delivery OTP';
       const parts = [message, otp ? `OTP: ${otp}` : ''].filter(Boolean);
       toast.message(title, {
-        description: parts.join(' — ') || 'Handover OTP from your delivery partner.',
+        description: parts.join(' - ') || 'Handover OTP from your delivery partner.',
         duration: 90_000
       });
     });

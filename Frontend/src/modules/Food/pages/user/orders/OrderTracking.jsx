@@ -1,7 +1,8 @@
-import { useParams, Link, useSearchParams } from "react-router-dom"
+import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom"
 import React, { useState, useEffect, useMemo, useRef, useCallback, memo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
+import confetti from "canvas-confetti"
 import {
   ArrowLeft,
   RefreshCw,
@@ -18,7 +19,8 @@ import {
   Loader2,
   Star,
   Store,
-  FileText
+  FileText,
+  Coins
 } from "lucide-react"
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import { Card, CardContent } from "@food/components/ui/card"
@@ -379,7 +381,8 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
       }
       return merged
     })(),
-    note: apiOrder?.note || previousOrder?.note || ''
+    note: apiOrder?.note || previousOrder?.note || '',
+    coinsEarned: apiOrder?.coinsEarned || previousOrder?.coinsEarned || 0
   }
 }
 
@@ -436,6 +439,7 @@ function normalizeLookupId(value) {
 
 export default function OrderTracking() {
   const companyName = useCompanyName()
+  const navigate = useNavigate()
   const { orderId } = useParams()
   const [searchParams] = useSearchParams()
   const confirmed = searchParams.get("confirmed") === "true"
@@ -455,6 +459,55 @@ export default function OrderTracking() {
   const [estimatedTime, setEstimatedTime] = useState(29)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [showCelebration, setShowCelebration] = useState(false)
+
+  useEffect(() => {
+    if (!order || !orderId) return;
+    
+    const isDelivered = orderStatus === 'delivered' || order.status === 'delivered' || Boolean(order.deliveredAt);
+    const coins = Number(order.coinsEarned || 0);
+
+    if (isDelivered && coins > 0) {
+      const storageKey = `coin_celebration_seen_${orderId}`;
+      const alreadySeen = localStorage.getItem(storageKey);
+      
+      if (alreadySeen !== 'true') {
+        // Trigger confetti!
+        try {
+          const duration = 2.5 * 1000;
+          const end = Date.now() + duration;
+
+          const frame = () => {
+            confetti({
+              particleCount: 4,
+              angle: 60,
+              spread: 60,
+              origin: { x: 0, y: 0.8 },
+              colors: ['#FBBF24', '#F59E0B', '#D97706', '#EB590E']
+            });
+            confetti({
+              particleCount: 4,
+              angle: 120,
+              spread: 60,
+              origin: { x: 1, y: 0.8 },
+              colors: ['#FBBF24', '#F59E0B', '#D97706', '#EB590E']
+            });
+
+            if (Date.now() < end) {
+              requestAnimationFrame(frame);
+            }
+          };
+          frame();
+        } catch (confettiErr) {
+          console.error("Confetti explosion failed:", confettiErr);
+        }
+
+        setShowCelebration(true);
+        localStorage.setItem(storageKey, 'true');
+      }
+    }
+  }, [order, orderStatus, orderId]);
+
   const [showOrderDetails, setShowOrderDetails] = useState(false)
   const [cancellationReason, setCancellationReason] = useState("")
   const [isCancelling, setIsCancelling] = useState(false)
@@ -1414,6 +1467,17 @@ export default function OrderTracking() {
                   {order.note}
                 </p>
               )}
+              {!isCancelledOrder && (
+                <div className="mt-4 flex items-center gap-2 p-2 px-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/30 rounded-2xl w-fit">
+                  <Coins className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span className="text-xs font-semibold text-amber-950 dark:text-amber-200">
+                    {isDeliveredOrder 
+                      ? `You earned ${order?.coinsEarned || 0} Coins on this order!`
+                      : "Win 1–3 Coins upon order delivery!"
+                    }
+                  </span>
+                </div>
+              )}
             </div>
             <motion.button
               onClick={handleRefresh}
@@ -1686,6 +1750,77 @@ export default function OrderTracking() {
             >
               {isUpdatingInstructions ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Save Instructions"}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Coins Earned Celebration Modal */}
+      <Dialog open={showCelebration} onOpenChange={setShowCelebration}>
+        <DialogContent className="sm:max-w-md w-[95vw] rounded-3xl p-6 border-0 shadow-2xl bg-white dark:bg-zinc-900 max-h-[90vh] overflow-y-auto z-[200] text-center">
+          <div className="relative py-4 flex flex-col items-center">
+            {/* Soft glowing backdrop */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-amber-500/10 dark:bg-amber-500/5 blur-3xl rounded-full" />
+            
+            <motion.div
+              initial={{ scale: 0, rotate: -180 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: "spring", stiffness: 120, damping: 10, delay: 0.1 }}
+              className="w-20 h-20 rounded-full bg-gradient-to-b from-amber-400 to-yellow-500 flex items-center justify-center text-white shadow-xl shadow-amber-500/20 dark:shadow-amber-500/10 mb-6 relative z-10"
+            >
+              <Coins className="w-10 h-10 drop-shadow-[0_2px_6px_rgba(0,0,0,0.15)]" />
+            </motion.div>
+
+            <motion.h2
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="text-xl font-bold text-gray-900 dark:text-white"
+            >
+              Woohoo! Coins Won!
+            </motion.h2>
+
+            <motion.p
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="text-gray-500 dark:text-gray-400 mt-2 max-w-sm text-sm"
+            >
+              You earned <span className="font-extrabold text-amber-500 dark:text-amber-400 text-lg px-0.5">{order?.coinsEarned || 0} Coins</span> on this order.
+            </motion.p>
+            
+            <motion.p
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="text-xs text-gray-400 dark:text-zinc-500 mt-1"
+            >
+              These have been added directly to your coin balance.
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+              className="mt-6 flex flex-col sm:flex-row gap-3 w-full relative z-10"
+            >
+              <Button
+                variant="outline"
+                onClick={() => setShowCelebration(false)}
+                className="w-full sm:flex-1 rounded-xl h-11 border-gray-200 dark:border-zinc-800 font-bold dark:text-white"
+              >
+                Close
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowCelebration(false);
+                  navigate("/user/wallet");
+                }}
+                className="w-full sm:flex-1 text-white font-bold h-11 rounded-xl border-none"
+                style={{ backgroundImage: `linear-gradient(to right, ${themeColor}, rgba(${themeRgb}, 0.78))` }}
+              >
+                View Wallet
+              </Button>
+            </motion.div>
           </div>
         </DialogContent>
       </Dialog>
