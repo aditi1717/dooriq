@@ -9,7 +9,7 @@ const POWER_SCANNING_DEFAULT = {
 };
 
 const POWER_SCANNING_FONT_OPTIONS = [
-    'Poppins', 'Outfit', 'Inter', 'Roboto', 'Montserrat',
+    'Arial', 'Poppins', 'Outfit', 'Inter', 'Roboto', 'Montserrat',
     'Nunito', 'Open Sans', 'Lato', 'Manrope', 'Raleway',
     'Merriweather', 'Playfair Display', 'Ubuntu', 'Rubik', 'Work Sans'
 ];
