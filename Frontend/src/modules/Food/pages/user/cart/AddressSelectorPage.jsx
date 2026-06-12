@@ -756,7 +756,7 @@ export default function AddressSelectorPage() {
     const mapHeight = baseMapHeight 
     return (
       <AnimatedPage
-        className="fixed inset-0 z-50 bg-white dark:bg-[#0a0a0a] flex flex-col h-screen overflow-hidden"
+        className="fixed inset-0 z-50 bg-white dark:bg-[#0a0a0a] flex flex-col h-[100dvh] overflow-hidden"
       >
         <div className="flex-shrink-0 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800 px-4 py-3 flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={handleCancelAddressForm} className="rounded-full">
@@ -770,8 +770,8 @@ export default function AddressSelectorPage() {
           onScroll={(e) => {
             setFormScrollTop(e.currentTarget.scrollTop)
           }}
-          className="flex-1 overflow-y-auto"
-          style={{ paddingBottom: `${96 + keyboardInset}px` }}
+          className="flex-1 min-h-0 overflow-y-auto"
+          style={{ paddingBottom: "16px" }}
         >
           {/* Map Section - Parallax enabled */}
           <div
@@ -960,8 +960,10 @@ export default function AddressSelectorPage() {
         </div>
 
         <div
-          className="fixed left-0 right-0 p-4 bg-white dark:bg-[#1a1a1a] border-t dark:border-gray-800 transition-[bottom] duration-150"
-          style={{ bottom: `${keyboardInset}px` }}
+          className="relative z-[80] flex-shrink-0 px-4 pt-3 bg-white dark:bg-[#1a1a1a] border-t dark:border-gray-800 shadow-[0_-12px_30px_rgba(0,0,0,0.12)]"
+          style={{
+            paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${keyboardInset}px)`,
+          }}
         >
           <Button 
             className="w-full h-12 text-white font-bold text-lg" 

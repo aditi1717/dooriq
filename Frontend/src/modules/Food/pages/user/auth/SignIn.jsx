@@ -6,8 +6,7 @@ import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { authAPI } from "@food/api"
 import { motion } from "framer-motion"
-import loginBanner from "@food/assets/loginbanner.png"
-import logoImg from "@food/assets/switcheats-logo copy.png"
+import { getCachedSettings, getModuleLogoUrl, loadBusinessSettings } from "@food/utils/businessSettings"
 const debugLog = (...args) => { }
 const debugWarn = (...args) => { }
 const debugError = (...args) => { }
@@ -24,6 +23,7 @@ export default function SignIn() {
 
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [logoUrl, setLogoUrl] = useState(() => getModuleLogoUrl("user") || null)
   const submittingRef = useRef(false)
 
   useEffect(() => {
@@ -42,6 +42,28 @@ export default function SignIn() {
     } catch (err) {
       debugError("Error parsing stored auth data:", err)
     }
+  }, [])
+
+  useEffect(() => {
+    const syncLogo = () => {
+      const resolvedLogo = getModuleLogoUrl("user")
+      if (resolvedLogo) setLogoUrl(resolvedLogo)
+    }
+
+    const loadLogo = async () => {
+      try {
+        if (!getCachedSettings()) {
+          await loadBusinessSettings()
+        }
+        syncLogo()
+      } catch (err) {
+        debugError("Error loading user login logo:", err)
+      }
+    }
+
+    loadLogo()
+    window.addEventListener("businessSettingsUpdated", syncLogo)
+    return () => window.removeEventListener("businessSettingsUpdated", syncLogo)
   }, [])
 
   const validatePhone = (phone) => {
@@ -133,11 +155,15 @@ export default function SignIn() {
           className="relative z-10 flex flex-col items-center gap-4"
         >
           <div className="w-24 h-24 bg-white rounded-[2.2rem] flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.15)] border-4 border-white/10 overflow-hidden p-2">
-            <img src={logoImg} alt="Logo" className="w-full h-full object-contain" />
+            {logoUrl ? (
+              <img src={logoUrl} alt="dooriq" className="w-full h-full object-contain" />
+            ) : (
+              <span className="text-[#FA0272] text-5xl font-black not-italic">D</span>
+            )}
           </div>
           <div className="text-center">
-            <h1 className="text-white font-black text-4xl tracking-tighter leading-none mb-1 italic">
-              SWITCH<span className="opacity-60">EATS</span>
+            <h1 className="text-white font-black text-4xl tracking-tight leading-none mb-1">
+              dooriq
             </h1>
             <div className="h-0.5 w-12 bg-white/40 mx-auto rounded-full" />
           </div>

@@ -5,6 +5,7 @@ import { Phone, Lock, ArrowRight, ShieldCheck, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { authAPI } from "@food/api"
 import { setAuthData } from "@food/utils/auth"
+import { getCachedSettings, getModuleLogoUrl, loadBusinessSettings } from "@food/utils/businessSettings"
 
 export default function UnifiedOTPFastLogin() {
   const RESEND_COOLDOWN_SECONDS = 60
@@ -14,6 +15,7 @@ export default function UnifiedOTPFastLogin() {
   const [loading, setLoading] = useState(false)
   const [otpSent, setOtpSent] = useState(false)
   const [resendTimer, setResendTimer] = useState(0)
+  const [logoUrl, setLogoUrl] = useState(() => getModuleLogoUrl("user") || null)
   const navigate = useNavigate()
   const submitting = useRef(false)
 
@@ -153,6 +155,33 @@ export default function UnifiedOTPFastLogin() {
     return () => clearInterval(intervalId)
   }, [step, resendTimer])
 
+  useEffect(() => {
+    const syncLogo = () => {
+      const resolvedLogo = getModuleLogoUrl("user")
+      if (resolvedLogo) {
+        setLogoUrl(resolvedLogo)
+      }
+    }
+
+    const loadLogo = async () => {
+      try {
+        if (getCachedSettings()) {
+          syncLogo()
+          return
+        }
+
+        await loadBusinessSettings()
+        syncLogo()
+      } catch (error) {
+        console.warn("Failed to load user login logo", error)
+      }
+    }
+
+    loadLogo()
+    window.addEventListener("businessSettingsUpdated", syncLogo)
+    return () => window.removeEventListener("businessSettingsUpdated", syncLogo)
+  }, [])
+
   const formatResendTimer = (seconds) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -174,7 +203,7 @@ export default function UnifiedOTPFastLogin() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col pt-0 sm:pt-0">
-      {/* Top Banner section - Zomato Red */}
+      {/* Top Banner section */}
       <div className="w-full bg-[#FA0272] dark:bg-[#D6005E] rounded-b-[2.5rem] p-6 text-center text-white relative overflow-hidden shadow-2xl">
         <div className="absolute inset-0 bg-white/5 opacity-50 blur-3xl rounded-full -top-1/2 -left-1/4 animate-pulse" />
         <div className="absolute right-0 bottom-0 w-32 h-32 md:w-48 md:h-48 opacity-10 pointer-events-none">
@@ -187,16 +216,25 @@ export default function UnifiedOTPFastLogin() {
           <motion.div 
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center mb-3 shadow-xl"
+            className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mb-3 shadow-xl overflow-hidden"
           >
-             <span className="text-[#FA0272] text-3xl font-black">A</span>
+             {logoUrl ? (
+               <img
+                 src={logoUrl}
+                 alt="dooriq"
+                 className="h-full w-full object-contain p-1.5"
+                 loading="eager"
+               />
+             ) : (
+               <span className="text-[#FA0272] text-3xl font-black">D</span>
+             )}
           </motion.div>
           <motion.h1 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-2xl md:text-5xl font-black tracking-tight mb-1"
           >
-            SwitchEats <span className="text-white/80 font-normal">Master</span>
+            dooriq
           </motion.h1>
           <p className="text-xs md:text-base font-bold text-white/90 tracking-[0.2em] uppercase">
             Taste the best, forget the rest
