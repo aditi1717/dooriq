@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const foodSrc = path.resolve(__dirname, './src/modules/Food')
@@ -72,4 +73,4 @@ export default defineConfig({
       },
     },
   },
-})
+});
