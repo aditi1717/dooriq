@@ -9,6 +9,7 @@ import {
 } from "@food/utils/auth"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { motion, AnimatePresence } from "framer-motion"
+import { getCachedSettings, getModuleLogoUrl, loadBusinessSettings } from "@food/utils/businessSettings"
 
 export default function RestaurantOTP() {
   const companyName = useCompanyName()
@@ -24,6 +25,29 @@ export default function RestaurantOTP() {
   const inputRefs = useRef([])
   const hasSubmittedRef = useRef(false)
   const otpSectionRef = useRef(null)
+  const [logoUrl, setLogoUrl] = useState(() => getModuleLogoUrl("restaurant") || null)
+
+  useEffect(() => {
+    const syncLogo = () => {
+      const resolvedLogo = getModuleLogoUrl("restaurant")
+      if (resolvedLogo) setLogoUrl(resolvedLogo)
+    }
+
+    const loadLogo = async () => {
+      try {
+        if (!getCachedSettings()) {
+          await loadBusinessSettings()
+        }
+        syncLogo()
+      } catch (err) {
+        console.error("Error loading restaurant OTP logo:", err)
+      }
+    }
+
+    loadLogo()
+    window.addEventListener("businessSettingsUpdated", syncLogo)
+    return () => window.removeEventListener("businessSettingsUpdated", syncLogo)
+  }, [])
 
   useEffect(() => {
     const stored = sessionStorage.getItem("restaurantAuthData")
@@ -170,7 +194,6 @@ export default function RestaurantOTP() {
             isSubscriptionEnabled = feature ? Boolean(feature.isEnabled) : true
             localStorage.setItem("restaurant_subscription_feature_enabled", String(isSubscriptionEnabled))
           } catch (_error) {
-            // Fail-safe: avoid payment screen flash when feature endpoint is throttled/unavailable
             isSubscriptionEnabled = false
             localStorage.setItem("restaurant_subscription_feature_enabled", "false")
           }
@@ -234,45 +257,57 @@ export default function RestaurantOTP() {
   if (!authData) return null
 
   return (
-    <div className="min-h-[100dvh] bg-white dark:bg-[#0A0A0B] flex flex-col font-sans overflow-hidden">
-      {/* Top Branding Section - 35% height */}
-      <div className="relative h-[35dvh] w-full bg-[#FF5F00] overflow-hidden flex flex-col items-center justify-center">
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-0 left-0 w-64 h-64 border border-white/20 rounded-full -ml-20 -mt-20" />
-          <div className="absolute bottom-10 right-0 w-32 h-32 border border-white/10 rounded-full -mr-16" />
+    <div className="min-h-[100dvh] bg-slate-50 dark:bg-[#09090B] flex items-center justify-center font-sans p-4 sm:p-6">
+      {/* Compact Center Card */}
+      <div className="w-full max-w-[420px] bg-white dark:bg-[#0A0A0B] rounded-[2.5rem] shadow-[0_24px_70px_rgba(0,0,0,0.06)] border border-zinc-100 dark:border-zinc-800/50 flex flex-col overflow-hidden relative">
+        
+        {/* Top Branding Section */}
+        <div 
+          className="relative w-full overflow-hidden flex flex-col items-center justify-center min-h-[170px]"
+          style={{ 
+            background: "linear-gradient(135deg, rgba(var(--module-theme-rgb, 37,99,235), 0.94) 0%, var(--module-theme-color, #2563EB) 55%, rgba(var(--module-theme-rgb, 37,99,235), 0.82) 100%)" 
+          }}
+        >
+          <div className="absolute inset-0 opacity-20">
+            <div className="absolute top-0 left-0 w-64 h-64 border border-white/20 rounded-full -ml-20 -mt-20" />
+            <div className="absolute bottom-10 right-0 w-32 h-32 border border-white/10 rounded-full -mr-16" />
+          </div>
+
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.6 }}
+            className="relative z-10 flex flex-col items-center gap-3 px-6 text-center"
+          >
+            {logoUrl ? (
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg border border-white/10 overflow-hidden p-2">
+                <img src={logoUrl} alt="logo" className="w-full h-full object-contain" />
+              </div>
+            ) : (
+              <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30 shadow-lg mb-2">
+                <ShieldCheck className="w-8 h-8 text-white" />
+              </div>
+            )}
+            <div className="space-y-1">
+              <h1 className="text-white font-black text-2xl tracking-tight leading-none italic">
+                SECURITY CHECK
+              </h1>
+              <p className="text-white/70 text-[10px] font-bold uppercase tracking-[0.2em]">
+                Sent to {contactInfo}
+              </p>
+            </div>
+          </motion.div>
         </div>
 
+        {/* Bottom Content Section */}
         <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.6 }}
-          className="relative z-10 flex flex-col items-center gap-4 px-6 text-center"
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="p-8 flex flex-col gap-6"
         >
-          <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30 shadow-lg mb-2">
-            <ShieldCheck className="w-8 h-8 text-white" />
-          </div>
-          <div className="space-y-1">
-            <h1 className="text-white font-black text-3xl tracking-tight leading-none italic">
-              SECURITY CHECK
-            </h1>
-            <p className="text-white/70 text-xs font-bold uppercase tracking-[0.2em]">
-              Sent to {contactInfo}
-            </p>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Bottom Content Section - 65% height */}
-      <motion.div
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-        className="flex-1 bg-white dark:bg-[#0A0A0B] rounded-t-[40px] -mt-10 relative z-20 shadow-[0_-20px_40px_rgba(0,0,0,0.05)] px-6 pt-12 pb-6 flex flex-col"
-        style={{ marginBottom: keyboardOffset > 0 ? `${keyboardOffset}px` : 0 }}
-      >
-        <div className="max-w-md mx-auto w-full flex flex-col h-full">
-          <div className="space-y-10">
-            <div ref={otpSectionRef} className="flex justify-center gap-4">
+          <div className="w-full flex flex-col justify-center gap-6">
+            <div ref={otpSectionRef} className="flex justify-center gap-3">
               {otp.map((digit, index) => (
                 <motion.div
                   key={index}
@@ -293,12 +328,12 @@ export default function RestaurantOTP() {
                     onFocus={() => setFocusedIndex(index)}
                     onBlur={() => setFocusedIndex(null)}
                     disabled={isLoading}
-                    className={`w-16 h-20 text-center text-3xl font-black bg-zinc-100 dark:bg-zinc-900 border-2 rounded-2xl text-zinc-900 dark:text-white transition-all outline-none shadow-sm ${
-                      focusedIndex === index ? "border-[#FF5F00] shadow-[#FF5F00]/10" : "border-transparent"
+                    className={`w-12 h-16 text-center text-2xl font-black bg-zinc-100 dark:bg-zinc-900 border-2 rounded-xl text-zinc-900 dark:text-white transition-all outline-none shadow-sm ${
+                      focusedIndex === index ? "border-primary" : "border-transparent"
                     }`}
                   />
                   {digit && (
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-[#FF5F00] rounded-full" />
+                    <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-primary rounded-full" />
                   )}
                 </motion.div>
               ))}
@@ -308,22 +343,25 @@ export default function RestaurantOTP() {
               <motion.div
                 initial={{ opacity: 0, y: -5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-center justify-center gap-2 text-xs font-bold text-[#FF5F00] bg-[#FF5F00]/5 py-4 px-4 rounded-2xl border border-[#FF5F00]/10"
+                className="flex items-center justify-center gap-2 text-xs font-bold text-primary bg-primary/5 py-3 px-4 rounded-xl border border-primary/10"
               >
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{error}</span>
               </motion.div>
             )}
 
-            <div className="space-y-6 pt-4">
+            <div className="space-y-6">
               <Button
                 onClick={() => handleVerify()}
                 disabled={isLoading || otp.some(d => !d)}
-                className="w-full h-16 bg-[#FF5F00] hover:bg-[#E05400] text-white font-black text-base uppercase tracking-widest rounded-2xl transition-all duration-300 shadow-[0_12px_24px_rgba(255,95,0,0.3)] active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
+                className="w-full h-12 bg-primary hover:opacity-90 text-white font-black text-sm uppercase tracking-widest rounded-xl transition-all duration-300 active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
+                style={{ 
+                  boxShadow: "0 8px 16px rgba(var(--module-theme-rgb, 37,99,235), 0.2)" 
+                }}
               >
                 {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <RefreshCw className="h-5 w-5 animate-spin" />
+                  <div className="flex items-center gap-2 justify-center w-full">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
                     <span>Validating...</span>
                   </div>
                 ) : (
@@ -334,14 +372,14 @@ export default function RestaurantOTP() {
               <div className="flex justify-center flex-col items-center gap-4">
                 {resendTimer > 0 ? (
                   <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
-                    Request new code in <span className="text-[#FF5F00]">{resendTimer}s</span>
+                    Request new code in <span className="text-primary">{resendTimer}s</span>
                   </p>
                 ) : (
                   <button
                     type="button"
                     onClick={handleResend}
                     disabled={isLoading}
-                    className="text-xs font-black text-[#FF5F00] uppercase tracking-[0.2em] px-6 py-2 rounded-full bg-[#FF5F00]/5 hover:bg-[#FF5F00]/10 transition-colors"
+                    className="text-xs font-black text-primary uppercase tracking-[0.2em] px-6 py-2 rounded-full bg-primary/5 hover:bg-primary/10 transition-colors"
                   >
                     Resend OTP
                   </button>
@@ -358,13 +396,13 @@ export default function RestaurantOTP() {
             </div>
           </div>
 
-          <footer className="mt-auto pt-10 text-center">
+          <footer className="text-center pt-2">
             <p className="text-[9px] text-zinc-300 dark:text-zinc-700 font-black uppercase tracking-[0.4em]">
               Partner Security Network &bull; {companyName.toUpperCase()}
             </p>
           </footer>
-        </div>
-      </motion.div>
+        </motion.div>
+      </div>
     </div>
   )
 }
