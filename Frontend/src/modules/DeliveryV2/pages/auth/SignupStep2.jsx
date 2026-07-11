@@ -249,6 +249,20 @@ export default function SignupStep2() {
     document.body.scrollTop = 0
   }, [])
 
+  // Scroll focused input into view when keyboard opens on mobile
+  useEffect(() => {
+    const handleFocusIn = (e) => {
+      const tag = e.target?.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+        setTimeout(() => {
+          e.target.scrollIntoView({ behavior: "smooth", block: "center" })
+        }, 300)
+      }
+    }
+    document.addEventListener("focusin", handleFocusIn)
+    return () => document.removeEventListener("focusin", handleFocusIn)
+  }, [])
+
   useEffect(() => {
     const saved = sessionStorage.getItem("deliverySignupDocs")
     if (!saved) return

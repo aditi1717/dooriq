@@ -89,7 +89,7 @@ export default function AuthCallback() {
 
           // Redirect to home after short delay
           setTimeout(() => {
-            navigate("/food/user")
+            navigate("/food/user", { replace: true })
           }, 1500)
           return
         }
@@ -113,7 +113,7 @@ export default function AuthCallback() {
   }
 
   const handleGoHome = () => {
-    navigate("/food/user")
+    navigate("/food/user", { replace: true })
   }
 
   return (

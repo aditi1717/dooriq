@@ -339,12 +339,17 @@ export default function RestaurantNavbar({
 
           </div>
           {!loading && location && location.trim() !== "" && (
-            <div className="flex items-center gap-1 mt-1 opacity-70">
+            <button
+              type="button"
+              onClick={() => navigate("/food/restaurant/outlet-info")}
+              className="flex items-center gap-1 mt-1 opacity-70 hover:opacity-100 active:opacity-60 transition-opacity"
+            >
               <MapPin className="w-2 h-2 text-gray-400 shrink-0" />
               <p className="text-[9px] text-gray-500 truncate font-medium max-w-[150px]" title={location}>
                 {location}
               </p>
-            </div>
+              <ChevronRight className="w-2.5 h-2.5 text-gray-400 shrink-0" />
+            </button>
           )}
         </div>
       </div>

@@ -21,6 +21,12 @@ export default function DeliverySignIn() {
   const [logoUrl, setLogoUrl] = useState(() => getModuleLogoUrl("delivery") || null)
 
   useEffect(() => {
+    const draftPhone = sessionStorage.getItem("deliveryDraftPhone")
+    if (draftPhone) {
+      setFormData(prev => ({ ...prev, phone: draftPhone }))
+      return
+    }
+
     const stored = sessionStorage.getItem("deliveryAuthData")
     if (stored) {
       try {
@@ -84,6 +90,7 @@ export default function DeliverySignIn() {
         purpose: "login",
         module: "delivery",
       }))
+      sessionStorage.removeItem("deliveryDraftPhone")
       navigate("/food/delivery/otp")
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to send OTP")
@@ -95,6 +102,7 @@ export default function DeliverySignIn() {
   const handlePhoneChange = (e) => {
     const value = e.target.value.replace(/\D/g, "").slice(0, 10)
     setFormData(prev => ({ ...prev, phone: value }))
+    sessionStorage.setItem("deliveryDraftPhone", value)
     if (error) setError(validatePhone(value))
   }
 
@@ -171,7 +179,7 @@ export default function DeliverySignIn() {
                   placeholder="Mobile Number"
                   value={formData.phone}
                   onChange={handlePhoneChange}
-                  className="flex-1 bg-transparent border-0 outline-none ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 text-base font-black tracking-widest px-4 text-zinc-900 dark:text-white h-full text-center"
+                  className="flex-1 bg-transparent border-0 outline-none ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 text-base font-black tracking-widest px-4 text-zinc-900 dark:text-white h-full text-left"
                 />
               </div>
 
@@ -211,7 +219,7 @@ export default function DeliverySignIn() {
               By joining, you agree to our policies
             </p>
             <p className="text-[9px] text-zinc-300 dark:text-zinc-700 font-bold mt-1.5 uppercase tracking-widest">
-              <Link to="/food/delivery/terms" className="hover:text-[#00B761]">Terms</Link> • <Link to="/food/delivery/profile/privacy" className="hover:text-[#00B761]">Privacy</Link> • <Link to="/food/delivery/help/content" className="hover:text-[#00B761]">Support</Link>
+              <Link to="/food/delivery/terms" state={{ from: "/food/delivery/login" }} className="hover:text-[#00B761]">Terms</Link> • <Link to="/food/delivery/profile/privacy" state={{ from: "/food/delivery/login" }} className="hover:text-[#00B761]">Privacy</Link> • <Link to="/food/delivery/help/content" state={{ from: "/food/delivery/login" }} className="hover:text-[#00B761]">Support</Link>
             </p>
           </footer>
         </motion.div>

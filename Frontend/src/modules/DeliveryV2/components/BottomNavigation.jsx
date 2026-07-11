@@ -85,7 +85,7 @@ export default function BottomNavigation() {
   }, [])
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
+    <div className="light [color-scheme:light] md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50" style={{ backgroundColor: '#ffffff', colorScheme: 'light' }}>
       <div className="flex items-center justify-around py-2 px-4">
 
         {/* Feed */}

@@ -43,7 +43,7 @@ const resolveBackPath = ({ pathname, search, state }) => {
   }
 
   if (
-    /^\/user\/profile\/(terms|privacy|refund|shipping|cancellation)$/.test(
+    /^\/user\/profile\/(terms|privacy|refund|shipping|cancellation|help-content)$/.test(
       normalizedPath,
     )
   ) {
@@ -88,6 +88,10 @@ const resolveBackPath = ({ pathname, search, state }) => {
 
   if (/^\/user\/orders\/[^/]+(\/invoice|\/details)?$/.test(normalizedPath)) {
     return "/food/user/orders"
+  }
+
+  if (normalizedPath === "/user/orders") {
+    return "/food/user/profile"
   }
 
   if (

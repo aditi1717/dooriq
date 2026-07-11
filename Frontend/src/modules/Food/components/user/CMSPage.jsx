@@ -98,7 +98,7 @@ export default function CMSPage({ endpoint, title: defaultTitle, module = "USER"
              <h1 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">
                {pageData.title || defaultTitle}
              </h1>
-             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">SwitchEats Information</p>
+             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">dooriq Information</p>
           </div>
         </div>
       </div>
@@ -189,7 +189,7 @@ export default function CMSPage({ endpoint, title: defaultTitle, module = "USER"
 
         <p className="text-center mt-10 text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] leading-relaxed">
           Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} <br />
-          © {new Date().getFullYear()} SwitchEats. All Rights Reserved.
+          © {new Date().getFullYear()} dooriq. All Rights Reserved.
         </p>
       </div>
     </AnimatedPage>

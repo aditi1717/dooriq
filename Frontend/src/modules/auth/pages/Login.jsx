@@ -19,6 +19,13 @@ export default function UnifiedOTPFastLogin() {
   const navigate = useNavigate()
   const submitting = useRef(false)
 
+  useEffect(() => {
+    const draftPhone = sessionStorage.getItem("unifiedDraftPhone")
+    if (draftPhone) {
+      setPhoneNumber(draftPhone)
+    }
+  }, [])
+
   const normalizedPhone = () => {
     const digits = String(phoneNumber).replace(/\D/g, "").slice(-15)
     return digits.length >= 8 ? digits : ""
@@ -128,6 +135,7 @@ export default function UnifiedOTPFastLogin() {
       }
 
       setAuthData("user", accessToken, user, refreshToken)
+      sessionStorage.removeItem("unifiedDraftPhone")
       toast.success("Login successful!")
       navigate("/food/user", { replace: true })
     } catch (err) {
@@ -266,7 +274,11 @@ export default function UnifiedOTPFastLogin() {
                       required
                       autoFocus
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "").slice(0, 10)
+                        setPhoneNumber(val)
+                        sessionStorage.setItem("unifiedDraftPhone", val)
+                      }}
                       maxLength={10}
                       className="block w-full pl-20 pr-4 py-3 bg-transparent text-gray-900 dark:text-white border-b-2 border-gray-100 dark:border-gray-800 focus:border-[#FA0272] outline-none transition-all placeholder:text-gray-300 font-bold text-lg"
                       placeholder="Phone number"
@@ -379,7 +391,7 @@ export default function UnifiedOTPFastLogin() {
         <div className="mt-6 text-center space-y-2">
            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em] leading-relaxed">
              By continuing, you agree to our <br />
-             <Link to="/food/user/profile/terms" className="text-gray-900 dark:text-white underline cursor-pointer hover:text-[#FA0272] transition-colors">Terms of Service</Link> & <Link to="/food/user/profile/privacy" className="text-gray-900 dark:text-white underline cursor-pointer hover:text-[#FA0272] transition-colors">Privacy Policy</Link>
+             <Link to="/food/user/profile/terms" state={{ from: "/food/user/auth/login" }} className="text-gray-900 dark:text-white underline cursor-pointer hover:text-[#FA0272] transition-colors">Terms of Service</Link> & <Link to="/food/user/profile/privacy" state={{ from: "/food/user/auth/login" }} className="text-gray-900 dark:text-white underline cursor-pointer hover:text-[#FA0272] transition-colors">Privacy Policy</Link>
            </p>
         </div>
       </div>

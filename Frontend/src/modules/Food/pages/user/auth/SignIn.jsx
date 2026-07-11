@@ -27,6 +27,15 @@ export default function SignIn() {
   const submittingRef = useRef(false)
 
   useEffect(() => {
+    const draftPhone = sessionStorage.getItem("userDraftPhone")
+    if (draftPhone) {
+      setFormData((prev) => ({
+        ...prev,
+        phone: draftPhone,
+      }))
+      return
+    }
+
     const stored = sessionStorage.getItem("userAuthData")
     if (!stored) return
 
@@ -80,6 +89,7 @@ export default function SignIn() {
     if (name === "phone") {
       value = value.replace(/\D/g, "").slice(0, 10)
       setError(validatePhone(value))
+      sessionStorage.setItem("userDraftPhone", value)
     }
 
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -119,6 +129,7 @@ export default function SignIn() {
       }
 
       sessionStorage.setItem("userAuthData", JSON.stringify(authData))
+      sessionStorage.removeItem("userDraftPhone")
       navigate("/food/user/auth/otp")
     } catch (apiError) {
       const message =
@@ -241,7 +252,7 @@ export default function SignIn() {
               By joining, you agree to our policies
             </p>
             <p className="text-[10px] text-zinc-300 dark:text-zinc-700 font-bold mt-2 uppercase tracking-widest">
-              <Link to="/food/user/profile/terms" className="hover:text-[#FA0272]">Terms</Link> • <Link to="/food/user/profile/privacy" className="hover:text-[#FA0272]">Privacy</Link> • <Link to="/food/user/profile/help-content" className="hover:text-[#FA0272]">Support</Link>
+              <Link to="/food/user/profile/terms" state={{ from: "/food/user/auth/login" }} className="hover:text-[#FA0272]">Terms</Link> • <Link to="/food/user/profile/privacy" state={{ from: "/food/user/auth/login" }} className="hover:text-[#FA0272]">Privacy</Link> • <Link to="/food/user/profile/help-content" state={{ from: "/food/user/auth/login" }} className="hover:text-[#FA0272]">Support</Link>
             </p>
           </footer>
         </div>

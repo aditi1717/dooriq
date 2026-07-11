@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from "react"
 import { createPortal } from "react-dom"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useLocation } from "react-router-dom"
 import { Plus, Minus, ArrowLeft, ChevronRight, Clock, MapPin, Phone, FileText, Utensils, Tag, Percent, Share2, ChevronUp, ChevronDown, X, Check, Settings, CreditCard, Wallet, Building2, Sparkles, Banknote, Zap, CheckCircle2, MessageCircle, Send, Mail, Copy, Coins } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import confetti from "canvas-confetti"
@@ -96,6 +96,7 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
 export default function Cart() {
   const companyName = useCompanyName()
   const navigate = useNavigate()
+  const routerLocation = useLocation()
   const goBack = useAppBackNavigation()
   const orderSuccessAudioRef = useRef(null)
   const hasRestoredRecipientRef = useRef(false)
@@ -1272,12 +1273,10 @@ export default function Cart() {
   }
 
   const handleBack = () => {
-    // Priority: slug > restaurantId (both work for the restaurant details route)
-    const idOrSlug = restaurantData?.slug || restaurantId
-    if (idOrSlug) {
-      navigate(`/food/user/restaurants/${idOrSlug}`)
+    if (routerLocation.state?.from === "/food/user/profile") {
+      navigate("/food/user/profile")
     } else {
-      goBack()
+      navigate("/food/user")
     }
   }
 

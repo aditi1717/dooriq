@@ -204,7 +204,7 @@ export default function OTP() {
       setUserAuthData("user", accessToken, user, refreshToken)
       window.dispatchEvent(new Event("userAuthChanged"))
       setSuccess(true)
-      setTimeout(() => navigate("/food/user"), 600)
+      setTimeout(() => navigate("/food/user", { replace: true }), 600)
     } catch (err) {
       const status = err?.response?.status
       let message = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Verification failed."
@@ -248,7 +248,7 @@ export default function OTP() {
       setUserAuthData("user", accessToken, { ...user, name: normalizedName }, refreshToken)
       window.dispatchEvent(new Event("userAuthChanged"))
       setSuccess(true)
-      setTimeout(() => navigate("/food/user"), 600)
+      setTimeout(() => navigate("/food/user", { replace: true }), 600)
     } catch (err) {
       setError("Failed to complete registration. Please try again.")
     } finally {
@@ -444,7 +444,7 @@ export default function OTP() {
 
           <footer className="mt-auto pt-10 text-center">
             <p className="text-[9px] text-zinc-300 dark:text-zinc-700 font-black uppercase tracking-[0.4em]">
-              SwitchEats Secure Network
+              dooriq Secure Network
             </p>
           </footer>
         </div>

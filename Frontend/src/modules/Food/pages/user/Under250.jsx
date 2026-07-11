@@ -108,6 +108,18 @@ export default function Under250() {
 
   const { zoneId, zoneStatus, isInService, isOutOfService, refreshZone } = useZone(effectiveLocation)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const handlePopState = (e) => {
+      e.preventDefault()
+      navigate("/food/user", { replace: true })
+    }
+    window.history.pushState(null, null, window.location.pathname)
+    window.addEventListener("popstate", handlePopState)
+    return () => {
+      window.removeEventListener("popstate", handlePopState)
+    }
+  }, [navigate])
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
   const [activeCategory, setActiveCategory] = useState(initialFiltersRef.current.activeCategory)
   const [showSortPopup, setShowSortPopup] = useState(false)

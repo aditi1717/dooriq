@@ -3,9 +3,11 @@ import { useState, useEffect } from "react"
 import { ArrowLeft, Lock, Loader2, Mail, Phone, MessageSquare, Clock, ShieldCheck } from "lucide-react"
 import { motion } from "framer-motion"
 import api from "@food/api"
+import useDeliveryBackNavigation from "../hooks/useDeliveryBackNavigation"
 
 export default function DeliveryCMSPage({ endpoint, title: defaultTitle, module = "DELIVERY" }) {
   const navigate = useNavigate()
+  const goBack = useDeliveryBackNavigation()
   const [loading, setLoading] = useState(true)
   const [pageData, setPageData] = useState({
     title: defaultTitle,
@@ -73,7 +75,7 @@ export default function DeliveryCMSPage({ endpoint, title: defaultTitle, module 
     <div className="min-h-screen bg-white dark:bg-[#0a0a0a] overflow-x-hidden">
       <div className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-4 py-4 flex items-center gap-4 sticky top-0 z-10 shadow-sm">
         <button
-          onClick={() => navigate(-1)}
+          onClick={goBack}
           className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
         >
           <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
@@ -158,7 +160,7 @@ export default function DeliveryCMSPage({ endpoint, title: defaultTitle, module 
             
             <p className="mt-12 pt-6 border-t border-gray-100 text-center text-gray-400 text-[10px] uppercase tracking-widest">
               Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} <br />
-              © {new Date().getFullYear()} SwitchEats. All Rights Reserved.
+              © {new Date().getFullYear()} dooriq. All Rights Reserved.
             </p>
           </motion.div>
         </div>

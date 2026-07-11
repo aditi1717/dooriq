@@ -821,11 +821,6 @@ export default function OutletInfo() {
       toast.error("Primary contact must be a valid 10-digit Indian mobile number")
       return
     }
-    // Business rule: allow Pure Veg -> Mixed, but restrict Mixed -> Pure Veg from edit info flow.
-    if (!currentPureVeg && nextPureVeg) {
-      toast.error("Changing restaurant type from Mixed to Pure Veg is not allowed from Edit Info.")
-      return
-    }
 
     try {
       setSavingBasic(true)
@@ -1407,37 +1402,6 @@ export default function OutletInfo() {
                 }
                 placeholder="Enter email"
               />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-2">Restaurant type</p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setBasicForm((prev) => ({ ...prev, pureVegRestaurant: true }))
-                  }
-                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                    basicForm.pureVegRestaurant === true
-                      ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  Pure Veg
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setBasicForm((prev) => ({ ...prev, pureVegRestaurant: false }))
-                  }
-                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                    basicForm.pureVegRestaurant === false
-                      ? "border-rose-500 bg-rose-50 text-rose-700"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  Mixed
-                </button>
-              </div>
             </div>
           </div>
           <DialogFooter className="p-4 bg-gray-50 flex flex-row gap-3">

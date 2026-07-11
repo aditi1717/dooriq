@@ -77,14 +77,12 @@ function BottomNavOrders() {
                     />
                   )}
                   <Icon
-                    className={`relative z-10 h-[18px] w-[18px] transition-all duration-300 ${isActive ? "scale-110" : "text-white/40"
+                    className={`relative z-10 h-[18px] w-[18px] transition-all duration-300 ${isActive ? "text-white scale-110" : "text-white"
                       }`}
-                    style={isActive ? { color: "var(--module-theme-color, #2563EB)" } : undefined}
                   />
                   <span
-                    className={`relative z-10 whitespace-nowrap text-[9px] font-bold tracking-tight transition-colors duration-300 ${isActive ? "" : "text-white/40"
+                    className={`relative z-10 whitespace-nowrap text-[9px] font-bold tracking-tight transition-colors duration-300 ${isActive ? "text-white" : "text-white"
                       }`}
-                    style={isActive ? { color: "var(--module-theme-color, #2563EB)" } : undefined}
                   >
                     {tab.label}
                   </span>

@@ -163,7 +163,7 @@ export default function RestaurantLogin() {
                   placeholder="00000 00000"
                   value={formData.phone}
                   onChange={handlePhoneChange}
-                  className="flex-1 bg-transparent border-0 outline-none ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 text-base font-black tracking-widest px-4 text-zinc-900 dark:text-white text-center"
+                  className="flex-1 bg-transparent border-0 outline-none ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 text-base font-black tracking-widest px-4 text-zinc-900 dark:text-white text-left"
                 />
               </div>
 

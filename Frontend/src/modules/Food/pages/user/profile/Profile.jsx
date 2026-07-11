@@ -557,7 +557,7 @@ export default function Profile() {
             </motion.div>
           </Link>
 
-          <Link to="/user/cart" className="block">
+          <Link to="/user/cart" state={{ from: "/food/user/profile" }} className="block">
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}
               transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
@@ -822,7 +822,7 @@ export default function Profile() {
             </h3>
           </div>
           <div className="space-y-2">
-            <Link to="/user/orders" className="block">
+            <Link to="/user/orders" state={{ from: "/food/user/profile" }} className="block">
               <motion.div
                 whileHover={{ x: 4, scale: 1.01 }}
                 transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>

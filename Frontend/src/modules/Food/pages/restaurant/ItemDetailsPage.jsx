@@ -297,9 +297,17 @@ export default function ItemDetailsPage() {
       const isFormField = target.matches?.('input, textarea, select, [contenteditable="true"]')
       if (!isFormField) return
 
+      // First pass: scroll after a short delay (most devices)
       window.setTimeout(() => {
         target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
-      }, 120)
+      }, 300)
+
+      // Second pass: some Android devices animate keyboard slower, re-check at 650ms
+      window.setTimeout(() => {
+        if (document.activeElement === target) {
+          target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
+        }
+      }, 650)
     }
 
     const handleFocusIn = (event) => {

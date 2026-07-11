@@ -496,6 +496,21 @@ export default function RestaurantOnboarding() {
       setStep(s)
     }
   }, [searchParams, step])
+
+  // Scroll focused input into view when keyboard opens on mobile
+  useEffect(() => {
+    const handleFocusIn = (e) => {
+      const tag = e.target?.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+        setTimeout(() => {
+          e.target.scrollIntoView({ behavior: "smooth", block: "center" })
+        }, 300)
+      }
+    }
+    document.addEventListener("focusin", handleFocusIn)
+    return () => document.removeEventListener("focusin", handleFocusIn)
+  }, [])
+
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [paymentProcessing, setPaymentProcessing] = useState(false)
@@ -679,6 +694,19 @@ export default function RestaurantOnboarding() {
   })
   const normalizeLocationQuery = (value) => String(value || "").replace(/\s+/g, " ").trim()
 
+  const fetchPincodeFromLatLng = async (lat, lng) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+        { headers: { "Accept-Language": "en" } }
+      )
+      const data = await res.json()
+      return data?.address?.postcode || ""
+    } catch {
+      return ""
+    }
+  }
+
   const detectAndSetZoneForLocation = async (lat, lng) => {
     const latitude = Number(lat)
     const longitude = Number(lng)
@@ -718,10 +746,29 @@ export default function RestaurantOnboarding() {
         return
       }
 
-      setStep1((prev) => ({ ...prev, zoneId: "" }))
+      // Out of zone — reset location so user must pick a valid one
+      setStep1((prev) => ({
+        ...prev,
+        zoneId: "",
+        location: {
+          formattedAddress: "",
+          addressLine1: "",
+          addressLine2: prev.location?.addressLine2 || "",
+          area: "",
+          city: "",
+          state: "",
+          pincode: "",
+          landmark: prev.location?.landmark || "",
+          latitude: "",
+          longitude: "",
+        },
+      }))
+      setLocationSearchValue("")
+      setLocationSuggestions([])
+      setIsAutoFilledLocationLocked(false)
       setZoneDetectionState({
         status: "out_of_zone",
-        message: "No active zone found at this location.",
+        message: "No active zone found at this location. Please search for a different address.",
         zoneName: "",
       })
     } catch (err) {
@@ -1860,10 +1907,34 @@ export default function RestaurantOnboarding() {
                 ref={locationSearchInputRef}
                 value={locationSearchValue}
                 onChange={(e) => {
-                  setLocationSearchValue(e.target.value)
-                  setZoneDetectionState((prev) =>
-                    prev.status === "idle" ? prev : { status: "idle", message: "", zoneName: "" }
-                  )
+                  const val = e.target.value
+                  setLocationSearchValue(val)
+                  // If the search field is cleared, reset all auto-filled location fields and unlock
+                  if (!val.trim()) {
+                    setStep1((prev) => ({
+                      ...prev,
+                      zoneId: "",
+                      location: {
+                        formattedAddress: "",
+                        addressLine1: "",
+                        addressLine2: prev.location?.addressLine2 || "",
+                        area: "",
+                        city: "",
+                        state: "",
+                        pincode: "",
+                        landmark: prev.location?.landmark || "",
+                        latitude: "",
+                        longitude: "",
+                      },
+                    }))
+                    setIsAutoFilledLocationLocked(false)
+                    setLocationSuggestions([])
+                    setZoneDetectionState({ status: "idle", message: "", zoneName: "" })
+                  } else {
+                    setZoneDetectionState((prev) =>
+                      prev.status === "idle" ? prev : { status: "idle", message: "", zoneName: "" }
+                    )
+                  }
                 }}
                 className="mt-1 bg-white text-sm text-black! dark:text-white! placeholder:text-gray-500 dark:placeholder:text-gray-400 caret-black dark:caret-white"
                 style={{ color: "#000", WebkitTextFillColor: "#000" }}
@@ -1913,16 +1984,18 @@ export default function RestaurantOnboarding() {
                           const lat = place?.geometry?.location?.lat?.()
                           const lng = place?.geometry?.location?.lng?.()
 
+                          // If pincode not in address components, fetch via reverse geocode
+                          const resolvedPincode = pincode || (typeof lat === "number" && typeof lng === "number" ? await fetchPincodeFromLatLng(lat, lng) : "")
+
                           setStep1((prev) => ({
                             ...prev,
                             location: {
                               ...prev.location,
                               formattedAddress,
-                              addressLine1: formattedAddress,
                               area: area || prev.location.area,
                               city: city || prev.location.city,
                               state: state || prev.location.state,
-                              pincode: pincode || prev.location.pincode,
+                              pincode: resolvedPincode || prev.location.pincode,
                               latitude: typeof lat === "number" ? Number(lat.toFixed(6)) : prev.location.latitude,
                               longitude: typeof lng === "number" ? Number(lng.toFixed(6)) : prev.location.longitude,
                             },
@@ -1948,16 +2021,18 @@ export default function RestaurantOnboarding() {
                       const state = addr.state || ""
                       const pincode = addr.postcode || ""
 
+                      // If pincode not available from Nominatim addr, fetch via reverse geocode
+                      const resolvedPincode = pincode || (Number.isFinite(lat) && Number.isFinite(lng) ? await fetchPincodeFromLatLng(lat, lng) : "")
+
                       setStep1((prev) => ({
                         ...prev,
                         location: {
                           ...prev.location,
                           formattedAddress: display,
-                          addressLine1: display,
                           area: area || prev.location.area,
                           city: city || prev.location.city,
                           state: state || prev.location.state,
-                          pincode: pincode || prev.location.pincode,
+                          pincode: resolvedPincode || prev.location.pincode,
                           latitude: Number.isFinite(lat) ? lat : prev.location.latitude,
                           longitude: Number.isFinite(lng) ? lng : prev.location.longitude,
                         },
@@ -2012,7 +2087,6 @@ export default function RestaurantOnboarding() {
                 location: { ...step1.location, addressLine1: e.target.value },
               })
             }
-            readOnly={isAutoFilledLocationLocked}
             className="bg-white text-sm"
             placeholder="Shop no. / building no. (optional)"
           />
@@ -2040,51 +2114,27 @@ export default function RestaurantOnboarding() {
           />
           <Input
             value={step1.location?.area || ""}
-            onChange={(e) =>
-              setStep1({
-                ...step1,
-                location: { ...step1.location, area: e.target.value },
-              })
-            }
-            readOnly={isAutoFilledLocationLocked}
-            className="bg-white text-sm"
+            readOnly
+            className="bg-gray-50 text-sm cursor-not-allowed text-gray-600"
             placeholder="Area / Sector / Locality*"
           />
           <Input
             value={step1.location?.city || ""}
-            onChange={(e) =>
-              setStep1({
-                ...step1,
-                location: { ...step1.location, city: e.target.value },
-              })
-            }
-            readOnly={isAutoFilledLocationLocked}
-            className="bg-white text-sm"
+            readOnly
+            className="bg-gray-50 text-sm cursor-not-allowed text-gray-600"
             placeholder="City"
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               value={step1.location?.state || ""}
-              onChange={(e) =>
-                setStep1({
-                  ...step1,
-                  location: { ...step1.location, state: e.target.value },
-                })
-              }
-              readOnly={isAutoFilledLocationLocked}
-              className="bg-white text-sm"
+              readOnly
+              className="bg-gray-50 text-sm cursor-not-allowed text-gray-600"
               placeholder="State"
             />
             <Input
               value={step1.location?.pincode || ""}
-              onChange={(e) =>
-                setStep1({
-                  ...step1,
-                  location: { ...step1.location, pincode: e.target.value },
-                })
-              }
-              readOnly={isAutoFilledLocationLocked}
-              className="bg-white text-sm"
+              readOnly
+              className="bg-gray-50 text-sm cursor-not-allowed text-gray-600"
               placeholder="Pincode"
             />
           </div>
@@ -2220,21 +2270,26 @@ export default function RestaurantOnboarding() {
         inputElement.setAttribute("data-google-places-initialized", "true")
         placesAutocompleteRef.current = autocomplete
 
-        autocomplete.addListener("place_changed", () => {
+        autocomplete.addListener("place_changed", async () => {
           const place = autocomplete.getPlace()
           if (!place?.geometry) return
 
           const parsed = parsePlace(place)
+          // If pincode not in address components, fetch via reverse geocode
+          const resolvedPincode = parsed.pincode || (
+            parsed.latitude !== "" && parsed.longitude !== ""
+              ? await fetchPincodeFromLatLng(parsed.latitude, parsed.longitude)
+              : ""
+          )
           setStep1((prev) => ({
             ...prev,
             location: {
               ...prev.location,
               formattedAddress: parsed.formattedAddress || prev.location.formattedAddress,
-              addressLine1: parsed.formattedAddress || prev.location.addressLine1 || "",
               area: parsed.area || prev.location.area,
               city: parsed.city || prev.location.city,
               state: parsed.state || prev.location.state,
-              pincode: parsed.pincode || prev.location.pincode,
+              pincode: resolvedPincode || prev.location.pincode,
               latitude: parsed.latitude !== "" ? parsed.latitude : prev.location.latitude,
               longitude: parsed.longitude !== "" ? parsed.longitude : prev.location.longitude,
             },

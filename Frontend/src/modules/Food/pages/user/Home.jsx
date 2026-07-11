@@ -732,6 +732,18 @@ export default function Home() {
   const HERO_BANNER_AUTO_SLIDE_MS = 3500;
   const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handlePopState = (e) => {
+      e.preventDefault();
+      window.location.replace("about:blank");
+    };
+    window.history.pushState(null, null, window.location.pathname);
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const [heroSearch, setHeroSearch] = useState("");

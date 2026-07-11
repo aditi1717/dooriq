@@ -669,7 +669,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
           {/* Main Floating Dock */}
           <div className="px-4 pt-4 pointer-events-auto">
-            <div className="bg-[#111111]/95 backdrop-blur-md rounded-full p-1.5 flex items-center justify-between border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+            <div className="bg-white backdrop-blur-md rounded-full p-1.5 flex items-center justify-between border border-gray-200 shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
               <div className="flex items-center gap-3 pl-1">
                 <div
                   onClick={() => navigate('/food/delivery/profile')}
@@ -707,7 +707,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                   }}
                   className={`relative w-[110px] h-[34px] rounded-full p-1 transition-all duration-300 flex items-center ${isOnline ? 'bg-[#10b981]' : 'bg-[#2a2a2a]'}`}
                 >
-                  <div className={`relative z-10 flex items-center justify-between w-full px-2.5 text-[10px] font-bold uppercase tracking-wider ${isOnline ? 'text-black' : 'text-gray-400'}`}>
+                  <div className={`relative z-10 flex items-center justify-between w-full px-2.5 text-[10px] font-bold uppercase tracking-wider ${isOnline ? 'text-white' : 'text-gray-500'}`}>
                     <span className={isOnline ? 'opacity-100' : 'opacity-0'}>Online</span>
                     <span className={!isOnline ? 'opacity-100' : 'opacity-0'}>Offline</span>
                   </div>
@@ -720,11 +720,11 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
               </div>
 
               <div className="flex items-center gap-1 pr-1.5">
-                <button onClick={() => setShowEmergencyPopup(true)} className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 active:scale-90 transition-transform hover:text-white"><AlertTriangle className="w-[20px] h-[20px]" /></button>
-                <button onClick={() => navigate('/food/delivery/help/id-card')} className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 active:scale-90 transition-transform hover:text-white"><Contact className="w-[20px] h-[20px]" /></button>
-                <button onClick={() => navigate('/food/delivery/notifications')} className="relative w-10 h-10 rounded-full flex items-center justify-center text-gray-400 active:scale-90 transition-transform hover:text-white">
+                <button onClick={() => setShowEmergencyPopup(true)} className="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 active:scale-90 transition-transform hover:text-gray-800"><AlertTriangle className="w-[20px] h-[20px]" /></button>
+                <button onClick={() => navigate('/food/delivery/help/id-card')} className="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 active:scale-90 transition-transform hover:text-gray-800"><Contact className="w-[20px] h-[20px]" /></button>
+                <button onClick={() => navigate('/food/delivery/notifications')} className="relative w-10 h-10 rounded-full flex items-center justify-center text-gray-500 active:scale-90 transition-transform hover:text-gray-800">
                   <Bell className="w-[20px] h-[20px]" />
-                  {notificationUnreadCount > 0 && <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-[#ef4444] border-2 border-[#111]" />}
+                  {notificationUnreadCount > 0 && <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-[#ef4444] border-2 border-white" />}
                 </button>
               </div>
             </div>
@@ -1154,7 +1154,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
       {/* ─── 3. BOTTOM NAV (Ultra Premium Minimalist Island) ─── */}
       <div className="absolute bottom-0 left-0 right-0 w-full pb-8 pt-2 flex justify-center z-[200] bg-transparent pointer-events-none">
-        <div className="bg-[#111111]/95 backdrop-blur-md border border-white/10 rounded-full p-1.5 flex items-center shadow-[0_20px_40px_rgba(0,0,0,0.6)] pointer-events-auto">
+        <div className="bg-white border border-gray-200 rounded-full p-1.5 flex items-center shadow-[0_8px_32px_rgba(0,0,0,0.12)] pointer-events-auto">
           {[
             { id: 'feed', icon: LayoutGrid, label: 'Feed' },
             { id: 'pocket', icon: Wallet, label: 'Pocket' },
@@ -1167,7 +1167,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
               <button
                 key={item.id}
                 onClick={() => navigate(`/food/delivery/${item.id}`)}
-                className={`relative flex items-center justify-center h-12 transition-all duration-500 ease-out rounded-full ${isActive ? 'bg-[#222222] px-5 shadow-inner border border-white/5' : 'w-12 px-0 text-gray-500 hover:text-gray-300'}`}
+                className={`relative flex items-center justify-center h-12 transition-all duration-500 ease-out rounded-full ${isActive ? 'bg-gray-100 px-5 shadow-inner border border-gray-200' : 'w-12 px-0 text-gray-400 hover:text-gray-600'}`}
               >
                 <Icon
                   className="w-5 h-5 shrink-0 transition-all duration-500"
@@ -1183,7 +1183,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                       transition={{ duration: 0.3, ease: "easeInOut" }}
                       className="overflow-hidden whitespace-nowrap flex items-center"
                     >
-                      <span className="ml-2 text-[11px] font-black uppercase tracking-wider text-white">
+                      <span className="ml-2 text-[11px] font-black uppercase tracking-wider text-gray-800">
                         {item.label}
                       </span>
                     </motion.div>

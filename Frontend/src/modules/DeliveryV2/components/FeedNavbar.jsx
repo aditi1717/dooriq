@@ -407,7 +407,7 @@ export default function FeedNavbar({ className = "" }) {
 
   return (
     <>
-    <div className={`bg-white px-4 py-3 flex items-center justify-between sticky top-0 z-50 border-b border-gray-200 ${className}`}>
+    <div className={`light bg-white px-4 py-3 flex items-center justify-between sticky top-0 z-50 border-b border-gray-200 [color-scheme:light] ${className}`} style={{ backgroundColor: '#ffffff', colorScheme: 'light' }}>
         {/* Logo and Online/Offline Toggle */}
       <div className="flex items-center gap-3">
         {logoUrl && (

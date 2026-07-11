@@ -261,6 +261,7 @@ export default function RestaurantsList() {
             isActive: restaurant.isActive !== false && restaurant.status === "approved",
             rating: restaurant.rating || restaurant.ratings?.average || 0,
             logo: getPrimaryRestaurantImage(restaurant, PLACEHOLDER_40),
+            pureVegRestaurant: restaurant.pureVegRestaurant === true,
             originalData: restaurant,
           }))
           if (!cancelled) setRestaurants(mappedRestaurants)
@@ -1286,13 +1287,18 @@ export default function RestaurantsList() {
                         <ArrowUpDown className={`w-3 h-3 ${sortConfig.key === 'status' ? 'text-blue-600' : 'text-slate-400'}`} />
                       </div>
                     </th>
+                    <th
+                      className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider"
+                    >
+                      Veg Mode
+                    </th>
                     <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">Action</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
                   {filteredRestaurants.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-20 text-center">
+                      <td colSpan={8} className="px-6 py-20 text-center">
                         <div className="flex flex-col items-center justify-center">
                           <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
                           <p className="text-sm text-slate-500">No restaurants match your search</p>
@@ -1361,6 +1367,19 @@ export default function RestaurantsList() {
                               Outlet: {restaurant.isActive ? "Active" : "Inactive"}
                             </span>
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {(restaurant.originalData?.pureVegRestaurant === true || restaurant.pureVegRestaurant === true) ? (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                              Pure Veg
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                              <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span>
+                              Mixed
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <div className="flex items-center justify-center gap-2">
@@ -1463,6 +1482,7 @@ export default function RestaurantsList() {
                   <span className="mt-4 text-slate-500 font-medium tracking-wide">Fetching restaurant data...</span>
                 </div>
               )}
+
               {!loadingDetails && isEditingDetails && (
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1499,33 +1519,6 @@ export default function RestaurantsList() {
                       <input type="text" value={detailsForm.name} onChange={(e) => setDetailsForm((prev) => ({ ...prev, name: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Pure Veg</label>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setDetailsForm((prev) => ({ ...prev, pureVegRestaurant: true }))}
-                          className={`px-3 py-1.5 text-xs rounded-full border ${
-                            detailsForm.pureVegRestaurant === true
-                              ? "bg-green-600 text-white border-green-600"
-                              : "bg-white text-slate-700 border-slate-300"
-                          }`}
-                        >
-                          Yes
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDetailsForm((prev) => ({ ...prev, pureVegRestaurant: false }))}
-                          className={`px-3 py-1.5 text-xs rounded-full border ${
-                            detailsForm.pureVegRestaurant === false
-                              ? "bg-slate-900 text-white border-slate-900"
-                              : "bg-white text-slate-700 border-slate-300"
-                          }`}
-                        >
-                          No
-                        </button>
-                      </div>
-                    </div>
-                    <div>
                       <label className="block text-xs text-slate-500 mb-1">Restaurant Email</label>
                       <input type="email" value={detailsForm.email} onChange={(e) => setDetailsForm((prev) => ({ ...prev, email: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
                     </div>
@@ -1560,6 +1553,7 @@ export default function RestaurantsList() {
                   </div>
                 </div>
               )}
+
               {!loadingDetails && !isEditingDetails && (restaurantDetails || selectedRestaurant) && (() => {
                 const r = restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant
                 const detailsApprovalStatus = normalizeApprovalStatus(r)

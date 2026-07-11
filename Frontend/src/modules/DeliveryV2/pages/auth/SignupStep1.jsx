@@ -87,6 +87,20 @@ export default function SignupStep1() {
     sessionStorage.setItem("deliverySignupDetails", JSON.stringify(formData))
   }, [formData])
 
+  // Scroll focused input into view when keyboard opens on mobile
+  useEffect(() => {
+    const handleFocusIn = (e) => {
+      const tag = e.target?.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+        setTimeout(() => {
+          e.target.scrollIntoView({ behavior: "smooth", block: "center" })
+        }, 300)
+      }
+    }
+    document.addEventListener("focusin", handleFocusIn)
+    return () => document.removeEventListener("focusin", handleFocusIn)
+  }, [])
+
   const handleChange = (e) => {
     const { name, value } = e.target
     let updatedValue = value
