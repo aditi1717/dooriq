@@ -157,7 +157,9 @@ export default function SignupStep1() {
       newErrors.name = "Name can contain letters only"
     }
 
-    if (formData.email && !isValidEmailValue(formData.email)) {
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required"
+    } else if (!isValidEmailValue(formData.email)) {
       newErrors.email = "Enter a valid email address. Gmail must be gmail.com"
     }
 
@@ -294,7 +296,7 @@ export default function SignupStep1() {
           {/* Email */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email (Optional)
+              Email <span className="text-red-500">*</span>
             </label>
             <input
               type="email"
@@ -384,7 +386,7 @@ export default function SignupStep1() {
           {/* Vehicle Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Vehicle Name/Model (Optional)
+              Vehicle Name/Model
             </label>
             <input
               type="text"

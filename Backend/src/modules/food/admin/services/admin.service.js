@@ -3525,6 +3525,15 @@ export async function approveRestaurant(id) {
         } catch (e) {
             console.error('Failed to send restaurant approval notification:', e);
         }
+        // Send approval email to restaurant owner
+        if (updated.ownerEmail) {
+            try {
+                const { sendRestaurantApprovedEmail } = await import('../../../../utils/email.js');
+                await sendRestaurantApprovedEmail(updated.ownerEmail, updated.restaurantName);
+            } catch (e) {
+                console.error('Failed to send restaurant approval email:', e);
+            }
+        }
     }
     return updated;
 }
@@ -3562,6 +3571,15 @@ export async function rejectRestaurant(id, reason) {
             );
         } catch (e) {
             console.error('Failed to send restaurant rejection notification:', e);
+        }
+        // Send rejection email to restaurant owner
+        if (updated.ownerEmail) {
+            try {
+                const { sendRestaurantRejectedEmail } = await import('../../../../utils/email.js');
+                await sendRestaurantRejectedEmail(updated.ownerEmail, updated.restaurantName, reason);
+            } catch (e) {
+                console.error('Failed to send restaurant rejection email:', e);
+            }
         }
     }
     return updated;
@@ -4844,6 +4862,16 @@ export async function approveDeliveryPartner(id) {
         console.error('Failed to send delivery partner approval notification:', e);
     }
 
+    // Send approval email to delivery partner
+    if (partner.email) {
+        try {
+            const { sendDeliveryPartnerApprovedEmail } = await import('../../../../utils/email.js');
+            await sendDeliveryPartnerApprovedEmail(partner.email, partner.name);
+        } catch (e) {
+            console.error('Failed to send delivery partner approval email:', e);
+        }
+    }
+
     // Referral crediting: on approval, credit the referrer partner's pocket balance via DeliveryBonusTransaction.
     try {
         const referrerId = partner.referredBy ? String(partner.referredBy) : '';
@@ -4924,6 +4952,15 @@ export async function rejectDeliveryPartner(id, reason) {
             );
         } catch (e) {
             console.error('Failed to send delivery partner rejection notification:', e);
+        }
+        // Send rejection email to delivery partner
+        if (updated.email) {
+            try {
+                const { sendDeliveryPartnerRejectedEmail } = await import('../../../../utils/email.js');
+                await sendDeliveryPartnerRejectedEmail(updated.email, updated.name, reason);
+            } catch (e) {
+                console.error('Failed to send delivery partner rejection email:', e);
+            }
         }
     }
     return updated;
