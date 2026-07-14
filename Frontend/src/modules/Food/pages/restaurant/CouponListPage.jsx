@@ -117,16 +117,6 @@ export default function CouponListPage() {
                 <p className="text-gray-900 font-semibold text-sm">No coupons yet</p>
                 <p className="text-gray-500 text-xs mt-1">Create your first offer to attract customers</p>
               </div>
-              <button
-                onClick={() => navigate("/restaurant/coupon/new")}
-                className="flex items-center gap-2 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
-                style={{
-                  background: "linear-gradient(135deg, rgba(var(--module-theme-rgb,37,99,235),0.9), var(--module-theme-color,#2563EB))",
-                }}
-              >
-                <Plus className="w-4 h-4" />
-                Create Coupon
-              </button>
             </div>
           </div>
         ) : (

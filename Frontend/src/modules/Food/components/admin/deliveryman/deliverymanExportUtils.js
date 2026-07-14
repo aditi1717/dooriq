@@ -1,3 +1,4 @@
+import { downloadPDF } from "../commonPDFExport"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -228,59 +229,21 @@ export const exportReviewsToExcel = (reviews, filename = "deliveryman_reviews", 
   document.body.removeChild(link)
 }
 
-export const exportReviewsToPDF = (reviews, filename = "deliveryman_reviews", options = {}) => {
+export const exportReviewsToPDF = async (reviews, filename = "deliveryman_reviews", options = {}) => {
   const reportTitle = options?.reportTitle || "Deliveryman Reviews Report"
   const subjectLabel = options?.subjectLabel || "Deliveryman"
   const subjectKey = options?.subjectKey || "deliveryman"
   const headers = ["SI", subjectLabel, "Customer", "Review", "Rating"]
   
-  let htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>${reportTitle}</title>
-      <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 10px; }
-        th { background-color: #f2f2f2; font-weight: bold; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        h1 { text-align: center; }
-      </style>
-    </head>
-    <body>
-      <h1>${reportTitle}</h1>
-      <p>Generated on: ${new Date().toLocaleString()}</p>
-      <table>
-        <thead>
-          <tr>
-            ${headers.map(h => `<th>${h}</th>`).join("")}
-          </tr>
-        </thead>
-        <tbody>
-          ${reviews.map(review => `
-            <tr>
-              <td>${review.sl}</td>
-              <td>${review?.[subjectKey] || review?.deliveryman || "N/A"}</td>
-              <td>${review.customer}</td>
-              <td>${review.review}</td>
-              <td>${review.rating}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    </body>
-    </html>
-  `
+  const rows = reviews.map((review) => [
+    review.sl,
+    review?.[subjectKey] || review?.deliveryman || "N/A",
+    review.customer,
+    review.review,
+    review.rating
+  ])
   
-  const printWindow = window.open("", "_blank")
-  printWindow.document.write(htmlContent)
-  printWindow.document.close()
-  printWindow.focus()
-  setTimeout(() => {
-    printWindow.print()
-    printWindow.close()
-  }, 250)
+  await downloadPDF({ headers, rows, filename, title: reportTitle })
 }
 
 export const exportReviewsToJSON = (reviews, filename = "deliveryman_reviews") => {

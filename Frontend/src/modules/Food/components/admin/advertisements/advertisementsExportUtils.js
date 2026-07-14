@@ -1,3 +1,4 @@
+import { downloadPDF } from "../commonPDFExport"
 // Export utility functions for advertisements
 export const exportAdvertisementsToCSV = (ads, filename = "advertisements") => {
   const headers = ["SI", "Ads ID", "Ads Title", "Restaurant Name", "Restaurant Email", "Ads Type", "Duration"]
@@ -55,7 +56,7 @@ export const exportAdvertisementsToExcel = (ads, filename = "advertisements") =>
   document.body.removeChild(link)
 }
 
-export const exportAdvertisementsToPDF = (ads, filename = "advertisements") => {
+export const exportAdvertisementsToPDF = async (ads, filename = "advertisements") => {
   const headers = ["SI", "Ads ID", "Ads Title", "Restaurant Name", "Restaurant Email", "Ads Type", "Duration"]
   const rows = ads.map((ad, index) => [
     index + 1,
@@ -67,37 +68,7 @@ export const exportAdvertisementsToPDF = (ads, filename = "advertisements") => {
     ad.duration || ""
   ])
   
-  const printWindow = window.open("", "_blank")
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>${filename}</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f2f2f2; font-weight: bold; }
-        </style>
-      </head>
-      <body>
-        <h1>${filename}</h1>
-        <table>
-          <thead>
-            <tr>
-              ${headers.map(h => `<th>${h}</th>`).join("")}
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join("")}</tr>`).join("")}
-          </tbody>
-        </table>
-      </body>
-    </html>
-  `
-  printWindow.document.write(htmlContent)
-  printWindow.document.close()
-  printWindow.print()
+  await downloadPDF({ headers, rows, filename, title: "Advertisements Report" })
 }
 
 export const exportAdvertisementsToJSON = (ads, filename = "advertisements") => {

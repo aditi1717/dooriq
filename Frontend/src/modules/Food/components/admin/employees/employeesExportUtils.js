@@ -1,3 +1,4 @@
+import { downloadPDF } from "../commonPDFExport"
 // Export utility functions for employee management
 
 export const exportEmployeesToCSV = (employees, headers, filename = "employees") => {
@@ -45,45 +46,17 @@ export const exportEmployeesToExcel = (employees, headers, filename = "employees
   document.body.removeChild(link);
 };
 
-export const exportEmployeesToPDF = (employees, headers, filename = "employees", title = "Employee Report") => {
-  const printWindow = window.open("", "_blank");
-  printWindow.document.write(`
-    <html>
-      <head>
-        <title>${title}</title>
-        <style>
-          body { font-family: sans-serif; padding: 20px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f2f2f2; font-weight: bold; }
-          h1 { text-align: center; margin-bottom: 1rem; }
-        </style>
-      </head>
-      <body>
-        <h1>${title}</h1>
-        <table>
-          <thead>
-            <tr>
-              ${headers.map(h => `<th>${h.label}</th>`).join("")}
-            </tr>
-          </thead>
-          <tbody>
-            ${employees.map(row => `
-              <tr>
-                ${headers.map(h => {
-                  const value = row[h.key];
-                  if (Array.isArray(value)) return `<td>${value.join(', ')}</td>`;
-                  return `<td>${value || ''}</td>`;
-                }).join("")}
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </body>
-    </html>
-  `);
-  printWindow.document.close();
-  printWindow.print();
+export const exportEmployeesToPDF = async (employees, headers, filename = "employees", title = "Employee Report") => {
+  const headerLabels = headers.map(h => h.label)
+  const rows = employees.map(row => 
+    headers.map(h => {
+      const value = row[h.key]
+      if (Array.isArray(value)) return value.join(', ')
+      return value || ''
+    })
+  )
+  
+  await downloadPDF({ headers: headerLabels, rows, filename, title })
 };
 
 export const exportEmployeesToJSON = (employees, filename = "employees") => {

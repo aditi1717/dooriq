@@ -403,10 +403,6 @@ export default function DeliveryEarnings() {
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Export Format</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => handleExport("csv")}>
-                  <FileText className="w-4 h-4 mr-2" />
-                  Export as CSV
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleExport("excel")}>
                   <FileSpreadsheet className="w-4 h-4 mr-2" />
                   Export as Excel
@@ -414,10 +410,6 @@ export default function DeliveryEarnings() {
                 <DropdownMenuItem onClick={() => handleExport("pdf")}>
                   <FileDown className="w-4 h-4 mr-2" />
                   Export as PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport("json")}>
-                  <Code className="w-4 h-4 mr-2" />
-                  Export as JSON
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -554,4 +546,3 @@ export default function DeliveryEarnings() {
     </div>
   )
 }
-

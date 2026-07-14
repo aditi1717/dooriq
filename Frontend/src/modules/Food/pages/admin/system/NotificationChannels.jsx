@@ -451,10 +451,6 @@ export default function NotificationChannels() {
               <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
                 <DropdownMenuLabel>Export Format</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => handleExport("csv")} className="cursor-pointer">
-                  <FileText className="w-4 h-4 mr-2" />
-                  Export as CSV
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleExport("excel")} className="cursor-pointer">
                   <FileSpreadsheet className="w-4 h-4 mr-2" />
                   Export as Excel
@@ -462,10 +458,6 @@ export default function NotificationChannels() {
                 <DropdownMenuItem onClick={() => handleExport("pdf")} className="cursor-pointer">
                   <FileText className="w-4 h-4 mr-2" />
                   Export as PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport("json")} className="cursor-pointer">
-                  <Code className="w-4 h-4 mr-2" />
-                  Export as JSON
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

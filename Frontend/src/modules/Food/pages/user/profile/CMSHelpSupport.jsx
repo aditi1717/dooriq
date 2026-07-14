@@ -7,6 +7,7 @@ export default function CMSHelpSupport() {
       endpoint={API_ENDPOINTS.ADMIN.SUPPORT_PUBLIC} 
       title="Help & Support" 
       module="USER"
+      compact={true}
     />
   )
 }

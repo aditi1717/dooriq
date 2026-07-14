@@ -1419,8 +1419,8 @@ export default function OrderTracking() {
             </button>
           </Link>
           <div>
-            <h1 className="text-lg font-bold text-gray-800 dark:text-white">Track Order</h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Order #{orderId?.slice(-6).toUpperCase()}</p>
+            <h1 className="text-lg font-bold text-gray-800 dark:text-white">{restaurantDisplayName}</h1>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Track Order • Order #{orderId?.slice(-6).toUpperCase()}</p>
           </div>
         </div>
         <div className="w-10" /> {/* Spacer to keep title centered if needed, or just empty */}

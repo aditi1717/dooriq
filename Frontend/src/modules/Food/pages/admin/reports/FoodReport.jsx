@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from "react"
+import { useState, useMemo } from "react"
 import { Search, Download, ChevronDown, Filter, UtensilsCrossed, Settings, ArrowUpDown, Star, BarChart3, FileText, FileSpreadsheet, Code } from "lucide-react"
 import { emptyFoodReports, emptyYearlySalesData } from "@food/utils/adminFallbackData"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
@@ -96,7 +96,7 @@ export default function FoodReport() {
     }
     const fullStars = Math.floor(rating)
     const hasHalfStar = rating % 1 !== 0
-    return "?".repeat(fullStars) + (hasHalfStar ? "�" : "") + "?".repeat(5 - Math.ceil(rating)) + ` (${reviews})`
+    return "?".repeat(fullStars) + (hasHalfStar ? "?" : "") + "?".repeat(5 - Math.ceil(rating)) + ` (${reviews})`
   }
 
   const maxChartValue = emptyYearlySalesData.chartData.length > 0 ? Math.max(...emptyYearlySalesData.chartData.map((d) => d.amount)) : 0
@@ -143,7 +143,7 @@ export default function FoodReport() {
                 >
                   <option value="All restaurants">All restaurants</option>
                   <option value="Hungry Puppets">Hungry Puppets</option>
-                  <option value="Caf� Monarch">Caf� Monarch</option>
+                  <option value="Caf? Monarch">Caf? Monarch</option>
                   <option value="Redcliff Cafe">Redcliff Cafe</option>
                 </select>
                 <ChevronDown className="absolute right-2 bottom-2.5 w-4 h-4 text-slate-500 pointer-events-none" />
@@ -337,10 +337,6 @@ export default function FoodReport() {
                 <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50 animate-in fade-in-0 zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95">
                   <DropdownMenuLabel>Export Format</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleExport("csv")} className="cursor-pointer">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Export as CSV
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleExport("excel")} className="cursor-pointer">
                     <FileSpreadsheet className="w-4 h-4 mr-2" />
                     Export as Excel
@@ -348,10 +344,6 @@ export default function FoodReport() {
                   <DropdownMenuItem onClick={() => handleExport("pdf")} className="cursor-pointer">
                     <FileText className="w-4 h-4 mr-2" />
                     Export as PDF
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport("json")} className="cursor-pointer">
-                    <Code className="w-4 h-4 mr-2" />
-                    Export as JSON
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

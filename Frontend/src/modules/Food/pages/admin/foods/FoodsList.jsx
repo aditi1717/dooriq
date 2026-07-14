@@ -55,6 +55,22 @@ const FOOD_FALLBACK_IMAGE =
     </svg>`
   )
 
+const getFoodTypeFromCategory = (category, isPureVegRestaurant) => {
+  if (isPureVegRestaurant) return "Veg"
+  if (!category) return "Veg"
+
+  const scope = String(category.foodTypeScope || "Both").trim()
+  if (scope === "Veg") return "Veg"
+  if (scope === "Non-Veg") return "Non-Veg"
+
+  const name = String(category.name || "").toLowerCase()
+  const nonVegKeywords = ["nonveg", "non-veg", "chicken", "mutton", "fish", "egg", "meat", "pork", "beef"]
+  if (nonVegKeywords.some(keyword => name.includes(keyword))) {
+    return "Non-Veg"
+  }
+  return "Veg"
+}
+
 export default function FoodsList() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedRestaurant, setSelectedRestaurant] = useState("all")
@@ -113,6 +129,7 @@ export default function FoodsList() {
         restaurantsMap.set(restaurantId, {
           id: restaurantId,
           name: getRestaurantName(restaurant) || "Unknown Restaurant",
+          pureVegRestaurant: restaurant.pureVegRestaurant === true,
         })
       })
 
@@ -259,6 +276,32 @@ export default function FoodsList() {
     return restaurantsForFilter
   }, [restaurantsForFilter])
 
+  const filteredCategoryOptions = useMemo(() => {
+    let list = categoryOptions
+
+    if (foodForm.restaurantId) {
+      const selectedRestaurantObj = restaurantOptions.find(r => r.id === foodForm.restaurantId)
+      const isPureVeg = selectedRestaurantObj?.pureVegRestaurant === true
+
+      list = list.filter((c) => {
+        const isGlobal = !c.restaurantId
+        const isMatchingRestro = c.restaurantId === foodForm.restaurantId
+        const isScopeMatch = isGlobal || isMatchingRestro
+
+        if (!isScopeMatch) return false
+
+        if (isPureVeg) {
+          const scope = String(c.foodTypeScope || "Both").toLowerCase()
+          return scope !== "non-veg"
+        }
+
+        return true
+      })
+    }
+
+    return list
+  }, [categoryOptions, foodForm.restaurantId, restaurantOptions])
+
   const openAddFoodModal = () => {
     if (!ensureActionAccess("create")) return
     setFoodFormMode("add")
@@ -312,7 +355,12 @@ export default function FoodsList() {
         const list = res?.data?.data?.categories || []
         const options = Array.isArray(list)
           ? list
-              .map((c) => ({ id: String(c.id || c._id || c.name), name: String(c.name || "").trim() }))
+              .map((c) => ({
+                id: String(c.id || c._id || c.name),
+                name: String(c.name || "").trim(),
+                restaurantId: c.restaurantId ? String(c.restaurantId._id || c.restaurantId) : null,
+                foodTypeScope: c.foodTypeScope || "Both",
+              }))
               .filter((c) => c.name)
           : []
         if (!cancelled) setCategoryOptions(options)
@@ -391,9 +439,15 @@ export default function FoodsList() {
       return
     }
 
-    if (!hasVariants && (!Number.isFinite(parsedPrice) || parsedPrice <= 0)) {
-      toast.error("Base price must be greater than 0")
-      return
+    if (!hasVariants) {
+      if (!foodForm.price || String(foodForm.price).trim() === "") {
+        toast.error("Base price is required")
+        return
+      }
+      if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+        toast.error("Base price must be greater than 0")
+        return
+      }
     }
 
     try {
@@ -784,7 +838,18 @@ export default function FoodsList() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Restaurant</label>
                 <select
                   value={foodForm.restaurantId}
-                  onChange={(e) => setFoodForm((prev) => ({ ...prev, restaurantId: e.target.value, categoryId: "", categoryName: "" }))}
+                  onChange={(e) => {
+                    const restId = e.target.value
+                    const selectedRestaurantObj = restaurantOptions.find(r => r.id === restId)
+                    const isPureVeg = selectedRestaurantObj?.pureVegRestaurant === true
+                    setFoodForm((prev) => ({ 
+                      ...prev, 
+                      restaurantId: restId, 
+                      categoryId: "", 
+                      categoryName: "",
+                      foodType: isPureVeg ? "Veg" : "Veg"
+                    }))
+                  }}
                   disabled={foodFormMode === "edit"}
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100"
                 >
@@ -820,7 +885,7 @@ export default function FoodsList() {
                       autoFocus
                     />
                     <div className="max-h-56 overflow-y-auto">
-                      {categoryOptions
+                      {filteredCategoryOptions
                         .filter((c) => {
                           const q = String(categorySearch || "").trim().toLowerCase()
                           if (!q) return true
@@ -831,7 +896,16 @@ export default function FoodsList() {
                             key={c.id}
                             type="button"
                             onClick={() => {
-                              setFoodForm((prev) => ({ ...prev, categoryId: c.id, categoryName: c.name }))
+                              const selectedRestaurantObj = restaurantOptions.find(r => r.id === foodForm.restaurantId)
+                              const isPureVeg = selectedRestaurantObj?.pureVegRestaurant === true
+                              const calculatedFoodType = getFoodTypeFromCategory(c, isPureVeg)
+
+                              setFoodForm((prev) => ({ 
+                                ...prev, 
+                                categoryId: c.id, 
+                                categoryName: c.name,
+                                foodType: calculatedFoodType
+                              }))
                               setCategoryPopoverOpen(false)
                             }}
                             className={`w-full text-left px-3 py-2 rounded-md text-sm hover:bg-slate-100 ${
@@ -841,7 +915,7 @@ export default function FoodsList() {
                             {c.name}
                           </button>
                         ))}
-                      {categoryOptions.length === 0 && (
+                      {filteredCategoryOptions.length === 0 && (
                         <div className="px-3 py-2 text-sm text-slate-500">No categories found</div>
                       )}
                     </div>
@@ -858,7 +932,9 @@ export default function FoodsList() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Base Price</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Base Price {!((foodForm.variants || []).length > 0) && <span className="text-red-500">*</span>}
+                </label>
                 <input
                   type="number"
                   min="0"
@@ -871,17 +947,6 @@ export default function FoodsList() {
                 {(foodForm.variants || []).length > 0 ? (
                   <p className="mt-1 text-xs text-slate-500">Variants are active, so customers will see the lowest variant price as the starting price.</p>
                 ) : null}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Food Type</label>
-                <select
-                  value={foodForm.foodType}
-                  onChange={(e) => setFoodForm((prev) => ({ ...prev, foodType: e.target.value }))}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white"
-                >
-                  <option value="Veg">Veg</option>
-                  <option value="Non-Veg">Non-Veg</option>
-                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Upload Image</label>

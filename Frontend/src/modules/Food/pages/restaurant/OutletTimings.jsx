@@ -65,6 +65,7 @@ export default function OutletTimings() {
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [timeErrors, setTimeErrors] = useState({})
 
   // Load from backend on mount.
   useEffect(() => {
@@ -135,11 +136,26 @@ export default function OutletTimings() {
   }
 
   const handleSave = async () => {
+    // Validate: opening and closing time cannot be the same for any open day
+    const invalidDays = Object.entries(days)
+      .filter(([, d]) => d.isOpen && d.openingTime && d.closingTime && d.openingTime === d.closingTime)
+      .map(([day]) => day)
+
+    if (invalidDays.length > 0) {
+      toast.error(`Opening and closing time cannot be the same for: ${invalidDays.join(", ")}`)
+      // Highlight errors for affected days
+      const errors = {}
+      invalidDays.forEach(day => { errors[day] = "Opening and closing time cannot be the same." })
+      setTimeErrors(errors)
+      return
+    }
+
     setIsSaving(true)
     try {
       await restaurantAPI.saveOutletTimings(days)
       window.dispatchEvent(new Event("outletTimingsUpdated"))
       setHasUnsavedChanges(false)
+      setTimeErrors({})
       toast.success("Outlet timings saved successfully!")
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to save timings. Please try again.")
@@ -165,13 +181,17 @@ export default function OutletTimings() {
     
     debugLog(`?? Time changed for ${day} - ${timeType}: ${timeString}`)
     
-    setDays(prev => ({
-      ...prev,
-      [day]: {
-        ...prev[day],
-        [timeType]: timeString
+    setDays(prev => {
+      const updatedDay = { ...prev[day], [timeType]: timeString }
+      // Check if opening and closing times are now the same
+      const otherType = timeType === "openingTime" ? "closingTime" : "openingTime"
+      if (timeString === updatedDay[otherType]) {
+        setTimeErrors(errs => ({ ...errs, [day]: "Opening and closing time cannot be the same." }))
+      } else {
+        setTimeErrors(errs => { const next = { ...errs }; delete next[day]; return next })
       }
-    }))
+      return { ...prev, [day]: updatedDay }
+    })
   }
 
   const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -392,6 +412,12 @@ export default function OutletTimings() {
                                   Current: {formatTime12Hour(dayData.closingTime)}
                                 </p>
                               </div>
+                              {/* Validation error */}
+                              {timeErrors[day] && (
+                                <p className="text-xs font-medium text-red-500 flex items-center gap-1 mt-1">
+                                  <span>⚠</span> {timeErrors[day]}
+                                </p>
+                              )}
                             </>
                           ) : (
                             <p className="text-sm text-gray-500 pl-6">This day is closed</p>

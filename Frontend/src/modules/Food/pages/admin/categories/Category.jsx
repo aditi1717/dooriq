@@ -456,26 +456,27 @@ export default function Category() {
           <table className="min-w-full table-fixed">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
-                <th className="w-[25%] px-5 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Category</th>
-                <th className="w-[17%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Owner</th>
-                <th className="w-[15%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Zone</th>
+                <th className="w-[20%] px-5 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Category</th>
+                <th className="w-[15%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Owner</th>
+                <th className="w-[12%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Visibility</th>
+                <th className="w-[12%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Zone</th>
                 <th className="w-[10%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Diet</th>
-                <th className="w-[10%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Status</th>
-                <th className="w-[13%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Approval</th>
-                <th className="w-[20%] px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-slate-600">Actions</th>
+                <th className="w-[8%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Status</th>
+                <th className="w-[10%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Approval</th>
+                <th className="w-[13%] px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-slate-600">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center">
+                  <td colSpan={8} className="px-6 py-20 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-600" />
                     <p className="mt-2 text-sm text-slate-500">Loading categories...</p>
                   </td>
                 </tr>
               ) : filteredCategories.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center">
+                  <td colSpan={8} className="px-6 py-20 text-center">
                     <p className="text-lg font-semibold text-slate-700">No categories found</p>
                     <p className="mt-1 text-sm text-slate-500">Try a different search or create a new category.</p>
                   </td>
@@ -483,9 +484,9 @@ export default function Category() {
               ) : (
                 filteredCategories.map((category) => {
                   const categoryId = resolveCategoryId(category)
-                  const creatorName = category?.createdByRestaurant?.name || category?.restaurant?.name || "Admin"
-                  const approvalStatus = category?.approvalStatus || "pending"
                   const isRestaurantCategory = Boolean(category?.createdByRestaurantId || category?.restaurantId)
+                  const creatorName = category?.createdByRestaurant?.name || category?.restaurant?.name || (isRestaurantCategory ? "Unknown Restaurant" : "Admin")
+                  const approvalStatus = category?.approvalStatus || "pending"
                   const zoneText = zoneLabel(category?.zoneId)
 
                   return (
@@ -506,6 +507,8 @@ export default function Category() {
                             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
                               <span>{category?.type || "No type"}</span>
                               <span className="text-slate-300">•</span>
+                              <span>Order: {category?.sortOrder || 0}</span>
+                              <span className="text-slate-300">•</span>
                               <span>Items linked: {category?.itemCount || 0}</span>
                             </div>
                           </div>
@@ -513,17 +516,16 @@ export default function Category() {
                       </td>
                       <td className="px-4 py-5 text-sm text-slate-600">
                         <div className="space-y-1">
-                          <p className="font-medium leading-6 text-slate-800">{creatorName}</p>
-                          <p className="text-xs text-slate-400">
-                            {category?.isGlobal ? "Global category" : "Private to creator"}
-                          </p>
-                          {category?.isGlobal && isRestaurantCategory && (
-                            <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700">
-                              <Globe className="mr-1 h-3.5 w-3.5" />
-                              Shared
-                            </span>
+                          <p className="font-semibold leading-6 text-slate-800">{creatorName}</p>
+                          {category?.createdByRestaurantId && (
+                            <p className="text-[10px] text-slate-400">Originated from Restro</p>
                           )}
                         </div>
+                      </td>
+                      <td className="px-4 py-5 text-center">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${category?.isGlobal ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-slate-100 text-slate-700 border-slate-200"}`}>
+                          {category?.isGlobal ? "Global" : "Private"}
+                        </span>
                       </td>
                       <td className="px-4 py-5">
                         <div className="max-w-[180px]">
@@ -639,27 +641,6 @@ export default function Category() {
 
                     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
                       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
-                        <div>
-                          <label className="mb-2 block text-sm font-medium text-slate-700">Zone</label>
-                          <select
-                            value={formData.zoneId}
-                            onChange={(event) => setFormData((prev) => ({ ...prev, zoneId: event.target.value }))}
-                            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-900"
-                          >
-                            <option value="global">Global (all zones)</option>
-                            {zonesLoading && <option value="" disabled>Loading zones...</option>}
-                            {zones.map((zone) => {
-                              const id = String(zone?._id || zone?.id || "")
-                              const label = zone?.name || zone?.zoneName || zone?.serviceLocation || id
-                              return (
-                                <option key={id} value={id}>
-                                  {label}
-                                </option>
-                              )
-                            })}
-                          </select>
-                        </div>
-
                         <div>
                           <label className="mb-2 block text-sm font-medium text-slate-700">Diet Scope</label>
                           <select

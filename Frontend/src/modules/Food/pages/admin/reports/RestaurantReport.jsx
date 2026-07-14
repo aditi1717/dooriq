@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Search, Download, ChevronDown, Filter, Briefcase, RefreshCw, Settings, ArrowUpDown, FileText, FileSpreadsheet, Code, Loader2, Star } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
@@ -131,7 +131,7 @@ export default function RestaurantReport() {
     const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0)
     return (
       <span className="flex items-center gap-1">
-        <span className="text-yellow-500 font-bold">{fullStars > 0 ? "★".repeat(fullStars) : ''}{hasHalfStar ? "★" : ''}{emptyStars > 0 ? "☆".repeat(emptyStars) : ''}</span>
+        <span className="text-yellow-500 font-bold">{fullStars > 0 ? "?".repeat(fullStars) : ''}{hasHalfStar ? "?" : ''}{emptyStars > 0 ? "?".repeat(emptyStars) : ''}</span>
         <span className="text-sm text-slate-500">({reviews || 0})</span>
       </span>
     )
@@ -288,10 +288,6 @@ export default function RestaurantReport() {
                 <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50 animate-in fade-in-0 zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95">
                   <DropdownMenuLabel>Export Format</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleExport("csv")} className="cursor-pointer">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Export as CSV
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleExport("excel")} className="cursor-pointer">
                     <FileSpreadsheet className="w-4 h-4 mr-2" />
                     Export as Excel
@@ -299,10 +295,6 @@ export default function RestaurantReport() {
                   <DropdownMenuItem onClick={() => handleExport("pdf")} className="cursor-pointer">
                     <FileText className="w-4 h-4 mr-2" />
                     Export as PDF
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport("json")} className="cursor-pointer">
-                    <Code className="w-4 h-4 mr-2" />
-                    Export as JSON
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -476,4 +468,3 @@ export default function RestaurantReport() {
     </div>
   )
 }
-

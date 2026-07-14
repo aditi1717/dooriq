@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useLocation } from "react-router-dom"
 import { useState, useEffect } from "react"
 import { ArrowLeft, Lock, Loader2, Mail, Phone, MessageSquare, Clock, ShieldCheck } from "lucide-react"
 import { motion } from "framer-motion"
@@ -7,10 +7,12 @@ import { Button } from "@food/components/ui/button"
 import api from "@food/api"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 
-export default function CMSPage({ endpoint, title: defaultTitle, module = "USER" }) {
+export default function CMSPage({ endpoint, title: defaultTitle, module = "USER", compact = false }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const goBack = useAppBackNavigation()
   const [loading, setLoading] = useState(true)
+  const [expandedFaq, setExpandedFaq] = useState(null)
   const [pageData, setPageData] = useState({
     title: defaultTitle,
     content: '',
@@ -63,11 +65,16 @@ export default function CMSPage({ endpoint, title: defaultTitle, module = "USER"
   }
 
   const handleBack = () => {
-    if (window.history.length > 2) {
-      goBack()
+    const explicitBackPath = location.state?.backTo || location.state?.from
+    if (explicitBackPath) {
+      navigate(explicitBackPath)
     } else {
-      navigate('/food/user')
+      navigate(-1)
     }
+  }
+
+  const toggleFaq = (idx) => {
+    setExpandedFaq(prev => prev === idx ? null : idx)
   }
 
   if (loading) {
@@ -103,30 +110,30 @@ export default function CMSPage({ endpoint, title: defaultTitle, module = "USER"
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className={compact ? "max-w-3xl mx-auto px-4 py-4" : "max-w-4xl mx-auto px-4 py-8"}>
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-[#111] rounded-[2rem] p-6 md:p-10 shadow-sm border border-gray-50 dark:border-gray-900"
+          className={`bg-white dark:bg-[#111] rounded-[2rem] shadow-sm border border-gray-50 dark:border-gray-900 ${compact ? "p-4 sm:p-6" : "p-6 md:p-10"}`}
         >
           {/* Support Specific Header Cards */}
           {(endpoint.includes('support') || pageData.title?.toLowerCase().includes('support')) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
-              <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center group transition-all hover:border-[#FA0272]/30">
-                <div className="w-12 h-12 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform">
-                  <Mail className="w-6 h-6 text-[#FA0272]" />
+            <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${compact ? "mb-6" : "mb-10"}`}>
+              <div className={`bg-gray-50 dark:bg-gray-900/50 rounded-3xl border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center group transition-all hover:border-[#FA0272]/30 ${compact ? "p-4" : "p-6"}`}>
+                <div className={`bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform ${compact ? "w-10 h-10 mb-2" : "w-12 h-12 mb-4"}`}>
+                  <Mail className={`${compact ? "w-5 h-5" : "w-6 h-6"} text-[#FA0272]`} />
                 </div>
-                <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider mb-2">Email Us</h3>
-                <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">{pageData.email || 'support@switcheats.com'}</p>
-                <a href={`mailto:${pageData.email || 'support@switcheats.com'}`} className="mt-4 text-xs font-black text-[#FA0272] uppercase tracking-widest hover:underline">Send Message</a>
+                <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider mb-1">Email Us</h3>
+                <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{pageData.email || 'support@switcheats.com'}</p>
+                <a href={`mailto:${pageData.email || 'support@switcheats.com'}`} className={`font-black text-[#FA0272] uppercase tracking-widest hover:underline ${compact ? "mt-2 text-[10px]" : "mt-4 text-xs"}`}>Send Message</a>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center group transition-all hover:border-[#FA0272]/30">
-                <div className="w-12 h-12 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform">
-                  <Phone className="w-6 h-6 text-[#FA0272]" />
+              <div className={`bg-gray-50 dark:bg-gray-900/50 rounded-3xl border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center group transition-all hover:border-[#FA0272]/30 ${compact ? "p-4" : "p-6"}`}>
+                <div className={`bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform ${compact ? "w-10 h-10 mb-2" : "w-12 h-12 mb-4"}`}>
+                  <Phone className={`${compact ? "w-5 h-5" : "w-6 h-6"} text-[#FA0272]`} />
                 </div>
-                <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider mb-2">Call Us</h3>
-                <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">{pageData.mobile || '+91 00000 00000'}</p>
-                <a href={`tel:${pageData.mobile}`} className="mt-4 text-xs font-black text-[#FA0272] uppercase tracking-widest hover:underline">Call Now</a>
+                <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider mb-1">Call Us</h3>
+                <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{pageData.mobile || '+91 00000 00000'}</p>
+                <a href={`tel:${pageData.mobile}`} className={`font-black text-[#FA0272] uppercase tracking-widest hover:underline ${compact ? "mt-2 text-[10px]" : "mt-4 text-xs"}`}>Call Now</a>
               </div>
             </div>
           )}
@@ -150,36 +157,71 @@ export default function CMSPage({ endpoint, title: defaultTitle, module = "USER"
 
           {/* Professional Static Content for Support */}
           {(endpoint.includes('support') || pageData.title?.toLowerCase().includes('support')) && (
-            <div className="mt-12 pt-10 border-t border-gray-100 dark:border-gray-900">
-              <h2 className="text-xl font-black text-gray-900 dark:text-white mb-8 tracking-tight">Frequently Asked Questions</h2>
-              <div className="grid gap-6">
-                {[
-                  { q: "How do I track my order?", a: "You can track your order in real-time through the 'My Orders' section in your profile." },
-                  { q: "What if I receive a wrong item?", a: "Please contact our support immediately via call or email with your order ID for a quick resolution." },
-                  { q: "Can I cancel my order?", a: "Orders can only be cancelled before the restaurant starts preparing your food." }
-                ].map((faq, idx) => (
-                  <div key={idx} className="space-y-2">
-                    <h4 className="text-sm font-black text-gray-900 dark:text-white flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-[#FA0272]" /> {faq.q}
-                    </h4>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed pl-6">{faq.a}</p>
-                  </div>
-                ))}
-              </div>
+            <div className={`${compact ? "mt-8 pt-6" : "mt-12 pt-10"} border-t border-gray-100 dark:border-gray-900`}>
+              <h2 className={`${compact ? "text-lg mb-4" : "text-xl mb-8"} font-black text-gray-900 dark:text-white tracking-tight`}>Frequently Asked Questions</h2>
+              
+              {compact ? (
+                <div className="space-y-3">
+                  {[
+                    { q: "How do I track my order?", a: "You can track your order in real-time through the 'My Orders' section in your profile." },
+                    { q: "What if I receive a wrong item?", a: "Please contact our support immediately via call or email with your order ID for a quick resolution." },
+                    { q: "Can I cancel my order?", a: "Orders can only be cancelled before the restaurant starts preparing your food." }
+                  ].map((faq, idx) => {
+                    const isOpen = expandedFaq === idx
+                    return (
+                      <div key={idx} className="border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden bg-gray-50/50 dark:bg-gray-900/30">
+                        <button
+                          type="button"
+                          onClick={() => toggleFaq(idx)}
+                          className="w-full flex items-center justify-between p-4 text-left font-bold text-gray-900 dark:text-white text-sm"
+                        >
+                          <span className="flex items-center gap-2">
+                            <MessageSquare className="w-4 h-4 text-[#FA0272] shrink-0" />
+                            {faq.q}
+                          </span>
+                          <span className={`transform transition-transform text-gray-400 ${isOpen ? "rotate-180" : ""}`}>
+                            ▼
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="px-4 pb-4 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100/50 dark:border-gray-800/30 pt-3 leading-relaxed">
+                            {faq.a}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="grid gap-6">
+                  {[
+                    { q: "How do I track my order?", a: "You can track your order in real-time through the 'My Orders' section in your profile." },
+                    { q: "What if I receive a wrong item?", a: "Please contact our support immediately via call or email with your order ID for a quick resolution." },
+                    { q: "Can I cancel my order?", a: "Orders can only be cancelled before the restaurant starts preparing your food." }
+                  ].map((faq, idx) => (
+                    <div key={idx} className="space-y-2">
+                      <h4 className="text-sm font-black text-gray-900 dark:text-white flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-[#FA0272]" /> {faq.q}
+                      </h4>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed pl-6">{faq.a}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-              <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="flex items-start gap-4 p-4 rounded-2xl bg-gray-50 dark:bg-gray-900/30">
-                  <Clock className="w-5 h-5 text-[#FA0272] mt-1" />
+              <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${compact ? "mt-6" : "mt-12"}`}>
+                <div className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 dark:bg-gray-900/30">
+                  <Clock className="w-4 h-4 text-[#FA0272] mt-0.5 shrink-0" />
                   <div>
-                    <h4 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest mb-1">Operational Hours</h4>
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">Available 24/7 for emergency support. General inquiries: 9 AM - 11 PM.</p>
+                    <h4 className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest mb-0.5">Operational Hours</h4>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-normal">Available 24/7 for emergency support. General inquiries: 9 AM - 11 PM.</p>
                   </div>
                 </div>
-                <div className="flex items-start gap-4 p-4 rounded-2xl bg-gray-50 dark:bg-gray-900/30">
-                  <ShieldCheck className="w-5 h-5 text-[#FA0272] mt-1" />
+                <div className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 dark:bg-gray-900/30">
+                  <ShieldCheck className="w-4 h-4 text-[#FA0272] mt-0.5 shrink-0" />
                   <div>
-                    <h4 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest mb-1">Data Privacy</h4>
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">Your conversations with our support team are encrypted and secure.</p>
+                    <h4 className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest mb-0.5">Data Privacy</h4>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-normal">Your conversations with our support team are encrypted and secure.</p>
                   </div>
                 </div>
               </div>
@@ -187,7 +229,7 @@ export default function CMSPage({ endpoint, title: defaultTitle, module = "USER"
           )}
         </motion.div>
 
-        <p className="text-center mt-10 text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] leading-relaxed">
+        <p className={`text-center text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] leading-relaxed ${compact ? "mt-6" : "mt-10"}`}>
           Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} <br />
           © {new Date().getFullYear()} dooriq. All Rights Reserved.
         </p>

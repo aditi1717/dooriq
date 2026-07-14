@@ -535,7 +535,7 @@ export const DeliveryVerificationModal = ({ order, onComplete, onClose }) => {
                 <CheckCircle2 className="w-9 h-9" />
               </div>
               <div>
-                <h2 className="text-3xl font-black text-gray-900 tracking-tight">Verified √</h2>
+                <h2 className="text-3xl font-black text-gray-900 tracking-tight">Verified</h2>
                 <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Secure Drop Authenticated</p>
               </div>
             </div>

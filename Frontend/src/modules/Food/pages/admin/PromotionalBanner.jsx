@@ -27,6 +27,13 @@ export default function PromotionalBanner() {
   // Get today's date for validation
   const today = new Date().toISOString().split('T')[0]
 
+  const isBannerExpired = (banner) => {
+    if (!banner.endDate) return false
+    const end = new Date(banner.endDate)
+    end.setHours(23, 59, 59, 999)
+    return end < new Date()
+  }
+
   const fetchZones = useCallback(async () => {
     try {
       const response = await api.get("/food/admin/zones")
@@ -307,16 +314,24 @@ export default function PromotionalBanner() {
                     </button>
                   </div>
                   <div className="absolute bottom-2 left-2">
-                    <button
-                      onClick={() => handleToggleStatus(banner._id, banner.isActive)}
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-md transition-all ${
-                        banner.isActive 
-                          ? "bg-green-500/90 text-white" 
-                          : "bg-slate-500/90 text-white"
-                      }`}
-                    >
-                      {banner.isActive ? "Active" : "Paused"}
-                    </button>
+                    {(() => {
+                      const isExpired = isBannerExpired(banner);
+                      return (
+                        <button
+                          onClick={() => !isExpired && handleToggleStatus(banner._id, banner.isActive)}
+                          disabled={isExpired}
+                          className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-md transition-all ${
+                            isExpired 
+                              ? "bg-red-500/90 text-white cursor-not-allowed" 
+                              : banner.isActive 
+                                ? "bg-green-500/90 text-white" 
+                                : "bg-slate-500/90 text-white"
+                          }`}
+                        >
+                          {isExpired ? "Deactivated" : banner.isActive ? "Active" : "Paused"}
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div className="p-4">

@@ -1,3 +1,4 @@
+import { downloadPDF } from "../commonPDFExport"
 // Export utility functions for reports
 export const exportReportsToCSV = (data, headers, filename = "report") => {
   const rows = data.map((item, index) => {
@@ -72,54 +73,16 @@ export const exportReportsToExcel = (data, headers, filename = "report") => {
   URL.revokeObjectURL(url)
 }
 
-export const exportReportsToPDF = (data, headers, filename = "report", title = "Report") => {
+export const exportReportsToPDF = async (data, headers, filename = "report", title = "Report") => {
   const headerRow = headers.map(h => typeof h === 'string' ? h : h.label)
+  const rows = data.map(item => {
+    return headers.map(header => {
+      const value = item[header.key] || item[header] || ""
+      return String(value)
+    })
+  })
   
-  let htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>${title}</title>
-      <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 10px; }
-        th { background-color: #f2f2f2; font-weight: bold; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        h1 { text-align: center; }
-      </style>
-    </head>
-    <body>
-      <h1>${title}</h1>
-      <p>Generated on: ${new Date().toLocaleString()}</p>
-      <table>
-        <thead>
-          <tr>
-            ${headerRow.map(h => `<th>${h}</th>`).join("")}
-          </tr>
-        </thead>
-        <tbody>
-          ${data.map(item => {
-            const cells = headers.map(header => {
-              const value = item[header.key] || item[header] || ""
-              return `<td>${String(value)}</td>`
-            })
-            return `<tr>${cells.join("")}</tr>`
-          }).join("")}
-        </tbody>
-      </table>
-    </body>
-    </html>
-  `
-  
-  const printWindow = window.open("", "_blank")
-  printWindow.document.write(htmlContent)
-  printWindow.document.close()
-  printWindow.focus()
-  setTimeout(() => {
-    printWindow.print()
-    printWindow.close()
-  }, 250)
+  await downloadPDF({ headers: headerRow, rows, filename, title })
 }
 
 export const exportReportsToJSON = (data, filename = "report") => {
@@ -220,61 +183,22 @@ export const exportTransactionReportToExcel = (transactions, filename = "transac
   URL.revokeObjectURL(url)
 }
 
-export const exportTransactionReportToPDF = (transactions, filename = "transaction_report") => {
+export const exportTransactionReportToPDF = async (transactions, filename = "transaction_report") => {
   const headers = ["SI", "Order ID", "Restaurant", "Customer Name", "Total Item Amount", "Coupon Discount", "VAT/Tax", "Delivery Charge", "Platform Fee", "Order Amount"]
+  const rows = transactions.map((transaction, index) => [
+    index + 1,
+    transaction.orderId,
+    transaction.restaurant,
+    transaction.customerName,
+    `Rs.${transaction.totalItemAmount.toFixed(2)}`,
+    `Rs.${transaction.couponDiscount.toFixed(2)}`,
+    `Rs.${transaction.vatTax.toFixed(2)}`,
+    `Rs.${transaction.deliveryCharge.toFixed(2)}`,
+    `Rs.${Number(transaction.platformFee || 0).toFixed(2)}`,
+    `Rs.${transaction.orderAmount.toFixed(2)}`
+  ])
   
-  let htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Transaction Report</title>
-      <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 8px; }
-        th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
-        th { background-color: #f2f2f2; font-weight: bold; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        h1 { text-align: center; }
-      </style>
-    </head>
-    <body>
-      <h1>Transaction Report</h1>
-      <p>Generated on: ${new Date().toLocaleString()}</p>
-      <table>
-        <thead>
-          <tr>
-            ${headers.map(h => `<th>${h}</th>`).join("")}
-          </tr>
-        </thead>
-        <tbody>
-          ${transactions.map((transaction, index) => `
-            <tr>
-              <td>${index + 1}</td>
-              <td>${transaction.orderId}</td>
-              <td>${transaction.restaurant}</td>
-              <td>${transaction.customerName}</td>
-              <td>₹${transaction.totalItemAmount.toFixed(2)}</td>
-              <td>₹${transaction.couponDiscount.toFixed(2)}</td>
-              <td>₹${transaction.vatTax.toFixed(2)}</td>
-              <td>₹${transaction.deliveryCharge.toFixed(2)}</td>
-              <td>₹${Number(transaction.platformFee || 0).toFixed(2)}</td>
-              <td>₹${transaction.orderAmount.toFixed(2)}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    </body>
-    </html>
-  `
-  
-  const printWindow = window.open("", "_blank")
-  printWindow.document.write(htmlContent)
-  printWindow.document.close()
-  printWindow.focus()
-  setTimeout(() => {
-    printWindow.print()
-    printWindow.close()
-  }, 250)
+  await downloadPDF({ headers, rows, filename, title: "Transaction Report" })
 }
 
 export const exportTransactionReportToJSON = (transactions, filename = "transaction_report") => {
