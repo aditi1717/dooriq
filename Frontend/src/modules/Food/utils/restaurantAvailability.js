@@ -109,6 +109,10 @@ const formatTimeLabel = (timeValue) => {
 const formatClosingCountdown = (minutesUntilClose, closingTime) => {
   if (minutesUntilClose === null || minutesUntilClose === undefined) return null
 
+  if (minutesUntilClose > 180) {
+    return null
+  }
+
   if (minutesUntilClose <= 0) {
     const closingLabel = formatTimeLabel(closingTime)
     return closingLabel ? `Closes at ${closingLabel}` : null

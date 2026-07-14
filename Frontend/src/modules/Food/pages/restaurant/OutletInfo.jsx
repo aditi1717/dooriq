@@ -19,10 +19,11 @@ import {
 } from "@food/components/ui/dialog"
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
-import { restaurantAPI, uploadAPI } from "@food/api"
+import { restaurantAPI, uploadAPI, zoneAPI } from "@food/api"
 import { toast } from "sonner"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 import { isFlutterBridgeAvailable } from "@food/utils/imageUploadUtils"
+import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 
 const debugLog = (...args) => {}
 const debugError = (...args) => {}
@@ -62,6 +63,36 @@ export default function OutletInfo() {
   const [coverImages, setCoverImages] = useState([]) // Array of cover images (separate from menu images)
   const [showEditNameDialog, setShowEditNameDialog] = useState(false)
   const [editNameValue, setEditNameValue] = useState("")
+  const [showEditAddressDialog, setShowEditAddressDialog] = useState(false)
+  const [addressForm, setAddressForm] = useState({
+    addressLine1: "",
+    addressLine2: "",
+    area: "",
+    city: "",
+    state: "",
+    pincode: "",
+    landmark: "",
+    latitude: "",
+    longitude: "",
+    zoneId: "",
+  })
+  const [savingAddress, setSavingAddress] = useState(false)
+  const [locationSearchValue, setLocationSearchValue] = useState("")
+  const [locationSuggestions, setLocationSuggestions] = useState([])
+  const [isSearchingLocation, setIsSearchingLocation] = useState(false)
+  const [zoneDetectionState, setZoneDetectionState] = useState({
+    status: "idle",
+    message: "",
+    zoneName: "",
+  })
+
+  const locationSearchInputRef = useRef(null)
+  const placesAutocompleteRef = useRef(null)
+  const placesAutocompleteServiceRef = useRef(null)
+  const placesDetailsServiceRef = useRef(null)
+  const placesSessionTokenRef = useRef(null)
+  const suppressSuggestionFetchRef = useRef(false)
+  const mapsScriptLoadedRef = useRef(false)
   const [showEditBasicDialog, setShowEditBasicDialog] = useState(false)
   const [basicForm, setBasicForm] = useState({
     ownerName: "",
@@ -249,6 +280,39 @@ export default function OutletInfo() {
     return parts.join(", ") || ""
   }
 
+  const formatRestaurantId = (id) => {
+    if (!id) return "REST000000"
+
+    const idString = String(id)
+    const parts = idString.split(/[-.]/)
+    let lastDigits = ""
+
+    if (parts.length > 0) {
+      const lastPart = parts[parts.length - 1]
+      const digits = lastPart.match(/\d+/g)
+      if (digits && digits.length > 0) {
+        const allDigits = digits.join("")
+        lastDigits = allDigits.slice(-6).padStart(6, "0")
+      } else {
+        const allParts = parts.join("")
+        const allDigits = allParts.match(/\d+/g)
+        if (allDigits && allDigits.length > 0) {
+          const combinedDigits = allDigits.join("")
+          lastDigits = combinedDigits.slice(-6).padStart(6, "0")
+        }
+      }
+    }
+
+    if (!lastDigits) {
+      const hash = idString.split("").reduce((acc, char) => {
+        return ((acc << 5) - acc) + char.charCodeAt(0) | 0
+      }, 0)
+      lastDigits = Math.abs(hash).toString().slice(-6).padStart(6, "0")
+    }
+
+    return `REST${lastDigits}`
+  }
+
   const refreshRestaurantData = useCallback(async () => {
     try {
       const response = await restaurantAPI.getCurrentRestaurant()
@@ -389,6 +453,377 @@ export default function OutletInfo() {
   }, [restaurantData])
 
   useEffect(() => {
+    const loc = restaurantData?.location || {}
+    const addr1 = String(loc.addressLine1 || restaurantData?.addressLine1 || "")
+    const addr2 = String(loc.addressLine2 || restaurantData?.addressLine2 || "")
+    const area = String(loc.area || restaurantData?.area || "")
+    const city = String(loc.city || restaurantData?.city || "")
+    const state = String(loc.state || restaurantData?.state || "")
+    const pincode = String(loc.pincode || restaurantData?.pincode || "")
+    const landmark = String(loc.landmark || restaurantData?.landmark || "")
+    const latitude = loc.latitude ?? restaurantData?.location?.coordinates?.[1] ?? ""
+    const longitude = loc.longitude ?? restaurantData?.location?.coordinates?.[0] ?? ""
+    const zoneId = restaurantData?.zoneId || ""
+
+    setAddressForm({
+      addressLine1: addr1,
+      addressLine2: addr2,
+      area,
+      city,
+      state,
+      pincode,
+      landmark,
+      latitude,
+      longitude,
+      zoneId,
+    })
+
+    const fullAddr = loc.formattedAddress || loc.address || restaurantData?.address || ""
+    setLocationSearchValue(fullAddr)
+  }, [restaurantData])
+
+  const fetchPincodeFromLatLng = async (lat, lng) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+        { headers: { "Accept-Language": "en" } }
+      )
+      const data = await res.json()
+      return data?.address?.postcode || ""
+    } catch {
+      return ""
+    }
+  }
+
+  const detectAndSetZoneForLocation = async (lat, lng) => {
+    const latitude = Number(lat)
+    const longitude = Number(lng)
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      setZoneDetectionState({
+        status: "failed",
+        message: "Unable to detect zone because location coordinates are missing.",
+        zoneName: "",
+      })
+      return
+    }
+
+    try {
+      setZoneDetectionState({
+        status: "detecting",
+        message: "Detecting service zone for this location...",
+        zoneName: "",
+      })
+      const res = await zoneAPI.detectZone(latitude, longitude)
+      const payload = res?.data?.data
+      const isInService = payload?.status === "IN_SERVICE" && !!payload?.zoneId
+      const detectedZoneId = String(payload?.zoneId || "")
+      const detectedZone = payload?.zone
+      const detectedZoneName =
+        detectedZone?.name || detectedZone?.zoneName || detectedZone?.serviceLocation || ""
+
+      if (isInService) {
+        setZoneDetectionState({
+          status: "matched",
+          message: detectedZoneName
+            ? `Zone auto-detected: ${detectedZoneName}`
+            : "Zone auto-detected for this location.",
+          zoneName: detectedZoneName,
+        })
+        setAddressForm((prev) => ({
+          ...prev,
+          latitude,
+          longitude,
+          zoneId: detectedZoneId,
+        }))
+        return
+      }
+
+      setAddressForm({
+        addressLine1: "",
+        addressLine2: "",
+        area: "",
+        city: "",
+        state: "",
+        pincode: "",
+        landmark: "",
+        latitude: "",
+        longitude: "",
+        zoneId: "",
+      })
+      setLocationSearchValue("")
+      setLocationSuggestions([])
+      setZoneDetectionState({
+        status: "out_of_zone",
+        message: "No active zone found at this location. All fields cleared.",
+        zoneName: "",
+      })
+      toast.error("This location is outside our service zones. Address fields have been cleared.")
+    } catch (err) {
+      debugError("Failed to detect zone for location:", err)
+      setZoneDetectionState({
+        status: "failed",
+        message: "Could not verify zone right now. Please reselect the location.",
+        zoneName: "",
+      })
+    }
+  }
+
+  useEffect(() => {
+    if (!showEditAddressDialog) return
+
+    let cancelled = false
+    let autocomplete = null
+
+    const init = async () => {
+      let inputElement = null
+      for (let i = 0; i < 50; i++) {
+        if (locationSearchInputRef.current) {
+          inputElement = locationSearchInputRef.current
+          break
+        }
+        await new Promise((r) => setTimeout(r, 100))
+      }
+
+      if (!inputElement || cancelled) return
+
+      const loadMaps = async () => {
+        if (window.google?.maps?.places?.Autocomplete) {
+          mapsScriptLoadedRef.current = true
+          return true
+        }
+
+        const apiKey = await getGoogleMapsApiKey()
+        if (!apiKey) {
+          debugError("Google Maps API Key missing or invalid")
+          return false
+        }
+
+        window.gm_authFailure = () => {
+          debugError("Google Maps authentication failed.")
+        }
+
+        const scripts = Array.from(document.getElementsByTagName("script"))
+        const mapsScript = scripts.find(s => s.src?.includes("maps.googleapis.com/maps/api/js"))
+        
+        if (mapsScript && !mapsScript.src.includes("libraries=places")) {
+          mapsScript.remove()
+        } else if (mapsScript && mapsScript.src.includes("libraries=places")) {
+           for (let i = 0; i < 60; i++) {
+             if (window.google?.maps?.places?.Autocomplete) return true
+             if (cancelled) return false
+             await new Promise(r => setTimeout(r, 100))
+           }
+        }
+
+        return new Promise((resolve) => {
+          const script = document.createElement("script")
+          script.id = "google-maps-sdk"
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`
+          script.async = true
+          script.defer = true
+          script.onload = () => {
+            setTimeout(() => {
+              const ok = !!window.google?.maps?.places?.Autocomplete
+              mapsScriptLoadedRef.current = ok
+              resolve(ok)
+            }, 200)
+          }
+          script.onerror = () => resolve(false)
+          document.head.appendChild(script)
+        })
+      }
+
+      const parsePlace = (place) => {
+        const formattedAddress = place?.formatted_address || ""
+        const comps = Array.isArray(place?.address_components) ? place.address_components : []
+        const get = (types) => comps.find((c) => types.some((t) => c.types?.includes(t)))?.long_name || ""
+
+        const area = get(["sublocality_level_1", "sublocality", "neighborhood"]) || get(["locality"])
+        const city = get(["locality"]) || get(["administrative_area_level_2"])
+        const state = get(["administrative_area_level_1"]) || get(["administrative_area_level_2"])
+        const pincode = get(["postal_code"])
+        const lat = place?.geometry?.location?.lat?.()
+        const lng = place?.geometry?.location?.lng?.()
+
+        return {
+          formattedAddress,
+          area,
+          city,
+          state,
+          pincode,
+          latitude: typeof lat === "number" ? Number(lat.toFixed(6)) : "",
+          longitude: typeof lng === "number" ? Number(lng.toFixed(6)) : "",
+        }
+      }
+
+      const ok = await loadMaps()
+      if (!ok || cancelled || !inputElement) return
+
+      if (inputElement.hasAttribute("data-google-places-initialized")) return
+
+      try {
+        if (!placesAutocompleteServiceRef.current && window.google?.maps?.places?.AutocompleteService) {
+          placesAutocompleteServiceRef.current = new window.google.maps.places.AutocompleteService()
+        }
+        if (!placesDetailsServiceRef.current && window.google?.maps?.places?.PlacesService) {
+          const detailsHost = document.createElement("div")
+          placesDetailsServiceRef.current = new window.google.maps.places.PlacesService(detailsHost)
+        }
+        if (!placesSessionTokenRef.current && window.google?.maps?.places?.AutocompleteSessionToken) {
+          placesSessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken()
+        }
+
+        autocomplete = new window.google.maps.places.Autocomplete(inputElement, {
+          fields: ["formatted_address", "address_components", "geometry"],
+          componentRestrictions: { country: "in" }
+        })
+
+        inputElement.setAttribute("data-google-places-initialized", "true")
+        placesAutocompleteRef.current = autocomplete
+
+        autocomplete.addListener("place_changed", async () => {
+          const place = autocomplete.getPlace()
+          if (!place?.geometry) return
+
+          const parsed = parsePlace(place)
+          const resolvedPincode = parsed.pincode || (
+            parsed.latitude !== "" && parsed.longitude !== ""
+              ? await fetchPincodeFromLatLng(parsed.latitude, parsed.longitude)
+              : ""
+          )
+          setAddressForm((prev) => ({
+            ...prev,
+            area: parsed.area || prev.area,
+            city: parsed.city || prev.city,
+            state: parsed.state || prev.state,
+            pincode: resolvedPincode || prev.pincode,
+            latitude: parsed.latitude !== "" ? parsed.latitude : prev.latitude,
+            longitude: parsed.longitude !== "" ? parsed.longitude : prev.longitude,
+          }))
+          
+          setLocationSearchValue(parsed.formattedAddress)
+          inputElement.blur()
+          void detectAndSetZoneForLocation(parsed.latitude, parsed.longitude)
+        })
+
+        const pacContainerFix = () => {
+          const applyFix = () => {
+            const containers = document.querySelectorAll(".pac-container")
+            if (containers.length > 0) {
+              containers.forEach((container) => {
+                container.style.zIndex = "999999"
+                container.style.pointerEvents = "auto"
+                container.style.visibility = "visible"
+                container.style.display = "block"
+              })
+            }
+          }
+          applyFix()
+          setTimeout(applyFix, 100)
+          setTimeout(applyFix, 300)
+        }
+
+        inputElement.addEventListener("focus", pacContainerFix)
+        inputElement.addEventListener("input", pacContainerFix)
+      } catch (e) {
+        debugError("Autocomplete error:", e)
+      }
+    }
+
+    init().catch(() => {})
+
+    return () => {
+      cancelled = true
+      if (autocomplete) {
+        try { window.google?.maps?.event?.clearInstanceListeners(autocomplete) } catch {}
+      }
+      if (locationSearchInputRef.current) {
+        locationSearchInputRef.current.removeAttribute("data-google-places-initialized")
+      }
+      placesAutocompleteRef.current = null
+    }
+  }, [showEditAddressDialog])
+
+  useEffect(() => {
+    if (!showEditAddressDialog) return
+    if (suppressSuggestionFetchRef.current) {
+      suppressSuggestionFetchRef.current = false
+      return
+    }
+    const q = locationSearchValue ? locationSearchValue.replace(/\s+/g, " ").trim() : ""
+    if (q.length < 3) {
+      setLocationSuggestions([])
+      setIsSearchingLocation(false)
+      if (window.google?.maps?.places?.AutocompleteSessionToken) {
+        placesSessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken()
+      }
+      return
+    }
+
+    const t = setTimeout(async () => {
+      try {
+        setIsSearchingLocation(true)
+        const hasGoogleAutocompleteService =
+          !!placesAutocompleteServiceRef.current && !!window.google?.maps?.places?.PlacesServiceStatus
+
+        if (hasGoogleAutocompleteService) {
+          if (!placesSessionTokenRef.current && window.google?.maps?.places?.AutocompleteSessionToken) {
+            placesSessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken()
+          }
+
+          const predictions = await new Promise((resolve) => {
+            placesAutocompleteServiceRef.current.getPlacePredictions(
+              {
+                input: q,
+                componentRestrictions: { country: "in" },
+                sessionToken: placesSessionTokenRef.current || undefined,
+              },
+              (items, status) => {
+                const ok = status === window.google.maps.places.PlacesServiceStatus.OK
+                resolve(ok && Array.isArray(items) ? items : [])
+              }
+            )
+          })
+
+          if (predictions.length > 0) {
+            const mappedGoogle = predictions.slice(0, 6).map((p) => ({
+              id: p.place_id,
+              placeId: p.place_id,
+              display: p.description || "",
+              mainText: p.structured_formatting?.main_text || "",
+              secondaryText: p.structured_formatting?.secondary_text || "",
+              source: "google",
+            }))
+            setLocationSuggestions(mappedGoogle)
+            return
+          }
+        }
+
+        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=${encodeURIComponent(q)}&countrycodes=in`
+        const res = await fetch(url, { headers: { Accept: "application/json" } })
+        const json = await res.json()
+        if (Array.isArray(json)) {
+          const mappedNominatim = json.map((item) => ({
+            id: String(item.place_id),
+            display: item.display_name,
+            lat: parseFloat(item.lat),
+            lng: parseFloat(item.lon),
+            addr: item.address || {},
+            source: "nominatim",
+          }))
+          setLocationSuggestions(mappedNominatim)
+        }
+      } catch (err) {
+        debugError("Suggestion search error:", err)
+      } finally {
+        setIsSearchingLocation(false)
+      }
+    }, 500)
+
+    return () => clearTimeout(t)
+  }, [locationSearchValue, showEditAddressDialog])
+
+  useEffect(() => {
     try {
       const raw = localStorage.getItem(OUTLET_APPROVAL_STATUS_KEY)
       const parsed = raw ? JSON.parse(raw) : {}
@@ -401,7 +836,7 @@ export default function OutletInfo() {
 
   useEffect(() => {
     if (!restaurantData) return
-    const sections = ["name", "basic", "compliance", "bank"]
+    const sections = ["name", "basic", "compliance", "bank", "address"]
     const next = { ...localApprovalStatus }
     const backendUpdatedAt = Number(new Date(restaurantData?.updatedAt || 0))
     let changed = false
@@ -802,6 +1237,106 @@ export default function OutletInfo() {
     }
   }
 
+  const handleSaveAddressDetails = async () => {
+    const addressLine1 = addressForm.addressLine1.trim()
+    const addressLine2 = addressForm.addressLine2.trim()
+    const area = addressForm.area.trim()
+    const city = addressForm.city.trim()
+    const state = addressForm.state.trim()
+    const pincode = addressForm.pincode.trim()
+    const landmark = addressForm.landmark.trim()
+
+    if (!addressLine1) {
+      toast.error("Shop no. / building no. is required")
+      return
+    }
+    if (!addressLine2) {
+      toast.error("Floor / tower is required")
+      return
+    }
+    if (!landmark) {
+      toast.error("Nearby landmark is required")
+      return
+    }
+    if (!area) {
+      toast.error("Area is required")
+      return
+    }
+    if (!city) {
+      toast.error("City is required")
+      return
+    }
+    if (!state) {
+      toast.error("State is required")
+      return
+    }
+    if (!pincode) {
+      toast.error("Pincode is required")
+      return
+    }
+
+    try {
+      setSavingAddress(true)
+      const existingLocation = restaurantData?.location || {}
+      
+      const parts = [addressLine1]
+      if (addressLine2) parts.push(addressLine2)
+      parts.push(area)
+      parts.push(city)
+      if (landmark) parts.push(landmark)
+      const formattedAddress = parts.join(", ")
+
+      const payload = {
+        location: {
+          ...existingLocation,
+          addressLine1,
+          addressLine2,
+          area,
+          city,
+          state,
+          pincode,
+          landmark,
+          formattedAddress,
+          address: formattedAddress,
+          latitude: addressForm.latitude || existingLocation.latitude,
+          longitude: addressForm.longitude || existingLocation.longitude,
+          coordinates: addressForm.latitude && addressForm.longitude 
+            ? [addressForm.longitude, addressForm.latitude] 
+            : existingLocation.coordinates,
+        },
+        zoneId: addressForm.zoneId || restaurantData?.zoneId,
+      }
+      await restaurantAPI.updateProfile(payload)
+      
+      setRestaurantData((prev) => {
+        if (!prev) return null
+        return {
+          ...prev,
+          addressLine1,
+          addressLine2,
+          area,
+          city,
+          state,
+          pincode,
+          landmark,
+          zoneId: payload.zoneId,
+          location: {
+            ...prev.location,
+            ...payload.location
+          }
+        }
+      })
+      
+      markSectionPending("address")
+      setShowEditAddressDialog(false)
+      toast.success("Address details updated successfully")
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to update address details")
+    } finally {
+      setSavingAddress(false)
+    }
+  }
+
   const handleSaveBasicDetails = async () => {
     const ownerName = String(basicForm.ownerName || "").trim()
     const ownerEmail = String(basicForm.ownerEmail || "").trim().toLowerCase()
@@ -1003,7 +1538,7 @@ export default function OutletInfo() {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-900 font-normal">
-                Restaurant id: {loading ? "Loading..." : (restaurantMongoId && restaurantMongoId.length >= 5 ? restaurantMongoId.slice(-5) : (restaurantId || "N/A"))}
+                Restaurant id: {loading ? "Loading..." : formatRestaurantId(restaurantMongoId || restaurantId)}
               </span>
             </div>
           </div>
@@ -1170,9 +1705,25 @@ export default function OutletInfo() {
           </div>
 
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-900 mb-3">Address and location</h3>
-            <div className="space-y-2">
-              <div><p className="text-xs text-slate-500">Full address</p><p className="text-sm font-medium text-slate-900">{direct(fullAddress)}</p></div>
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-slate-900">Address and location</h3>
+                <span className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold ${getApprovalBadgeClass(getSectionStatus("address"))}`}>
+                  {getApprovalLabel(getSectionStatus("address"))}
+                </span>
+              </div>
+              <button onClick={() => setShowEditAddressDialog(true)} className="text-blue-600 text-sm font-medium">Edit</button>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><p className="text-xs text-slate-500">Shop no. / building no. *</p><p className="text-sm font-medium text-slate-900">{direct(restaurantData?.location?.addressLine1 || restaurantData?.addressLine1)}</p></div>
+                <div><p className="text-xs text-slate-500">Floor / tower *</p><p className="text-sm font-medium text-slate-900">{direct(restaurantData?.location?.addressLine2 || restaurantData?.addressLine2 || "—")}</p></div>
+                <div><p className="text-xs text-slate-500">Nearby landmark *</p><p className="text-sm font-medium text-slate-900">{direct(restaurantData?.location?.landmark || restaurantData?.landmark || "—")}</p></div>
+                <div><p className="text-xs text-slate-500">Area / Sector / Locality*</p><p className="text-sm font-medium text-slate-900">{direct(restaurantData?.location?.area || restaurantData?.area)}</p></div>
+                <div><p className="text-xs text-slate-500">City *</p><p className="text-sm font-medium text-slate-900">{direct(restaurantData?.location?.city || restaurantData?.city)}</p></div>
+                <div><p className="text-xs text-slate-500">State *</p><p className="text-sm font-medium text-slate-900">{direct(restaurantData?.location?.state || restaurantData?.state)}</p></div>
+                <div><p className="text-xs text-slate-500">Pincode *</p><p className="text-sm font-medium text-slate-900">{direct(restaurantData?.location?.pincode || restaurantData?.pincode)}</p></div>
+              </div>
             </div>
           </div>
 
@@ -1632,6 +2183,250 @@ export default function OutletInfo() {
           </div>
         </div>
       ) : null}
+
+      <Dialog open={showEditAddressDialog} onOpenChange={setShowEditAddressDialog}>
+        <DialogContent className="sm:max-w-lg p-0 overflow-hidden rounded-xl w-[92%]">
+          <DialogHeader className="p-4 border-b border-gray-100">
+            <DialogTitle className="text-lg font-bold">Edit address details</DialogTitle>
+          </DialogHeader>
+          <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
+            {/* Search location bar */}
+            <div>
+              <p className="text-xs text-slate-500 mb-1 font-semibold">Search location</p>
+              <div className="relative">
+                <Input
+                  ref={locationSearchInputRef}
+                  value={locationSearchValue}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setLocationSearchValue(val)
+                    if (!val.trim()) {
+                      setAddressForm({
+                        addressLine1: "",
+                        addressLine2: "",
+                        area: "",
+                        city: "",
+                        state: "",
+                        pincode: "",
+                        landmark: "",
+                        latitude: "",
+                        longitude: "",
+                        zoneId: "",
+                      })
+                      setLocationSuggestions([])
+                      setZoneDetectionState({ status: "idle", message: "", zoneName: "" })
+                    } else {
+                      setZoneDetectionState((prev) =>
+                        prev.status === "idle" ? prev : { status: "idle", message: "", zoneName: "" }
+                      )
+                    }
+                  }}
+                  className="bg-white text-sm text-black placeholder:text-gray-400"
+                  placeholder="Start typing your restaurant address..."
+                />
+                {isSearchingLocation && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-orange-500 border-t-transparent" />
+                  </div>
+                )}
+              </div>
+
+              {/* Suggestions Dropdown */}
+              {locationSuggestions.length > 0 && (
+                <div className="relative">
+                  <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-xl z-[9999] overflow-hidden max-h-60 overflow-y-auto">
+                    {locationSuggestions.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={async () => {
+                          if (s.source === "google" && s.placeId && placesDetailsServiceRef.current && window.google?.maps?.places?.PlacesServiceStatus) {
+                            try {
+                              const place = await new Promise((resolve, reject) => {
+                                placesDetailsServiceRef.current.getDetails(
+                                  {
+                                    placeId: s.placeId,
+                                    fields: ["formatted_address", "address_components", "geometry"],
+                                    sessionToken: placesSessionTokenRef.current || undefined,
+                                  },
+                                  (result, status) => {
+                                    if (status === window.google.maps.places.PlacesServiceStatus.OK && result) {
+                                      resolve(result)
+                                      return
+                                    }
+                                    reject(new Error(String(status || "Failed to fetch place details")))
+                                  }
+                                )
+                              })
+
+                              const comps = Array.isArray(place?.address_components) ? place.address_components : []
+                              const get = (types) => comps.find((c) => types.some((t) => c.types?.includes(t)))?.long_name || ""
+                              const formattedAddress = place?.formatted_address || s.display || ""
+                              const area = get(["sublocality_level_1", "sublocality", "neighborhood"]) || get(["locality"])
+                              const city = get(["locality"]) || get(["administrative_area_level_2"])
+                              const state = get(["administrative_area_level_1"]) || get(["administrative_area_level_2"])
+                              const pincode = get(["postal_code"])
+                              const lat = place?.geometry?.location?.lat?.()
+                              const lng = place?.geometry?.location?.lng?.()
+
+                              const resolvedPincode = pincode || (typeof lat === "number" && typeof lng === "number" ? await fetchPincodeFromLatLng(lat, lng) : "")
+
+                              setAddressForm((prev) => ({
+                                ...prev,
+                                area: area || prev.area,
+                                city: city || prev.city,
+                                state: state || prev.state,
+                                pincode: resolvedPincode || prev.pincode,
+                                latitude: typeof lat === "number" ? Number(lat.toFixed(6)) : prev.latitude,
+                                longitude: typeof lng === "number" ? Number(lng.toFixed(6)) : prev.longitude,
+                              }))
+                              suppressSuggestionFetchRef.current = true
+                              setLocationSearchValue(formattedAddress)
+                              setLocationSuggestions([])
+                              locationSearchInputRef.current?.blur()
+                              if (window.google?.maps?.places?.AutocompleteSessionToken) {
+                                placesSessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken()
+                              }
+                              await detectAndSetZoneForLocation(lat, lng)
+                              return
+                            } catch (err) {
+                              debugError("Google place details failed, falling back to manual suggestion mapping:", err)
+                            }
+                          }
+
+                          const { lat, lng, display, addr = {} } = s
+                          const area = addr.suburb || addr.neighbourhood || addr.city_district || addr.locality || ""
+                          const city = addr.city || addr.town || addr.village || ""
+                          const state = addr.state || ""
+                          const pincode = addr.postcode || ""
+
+                          const resolvedPincode = pincode || (Number.isFinite(lat) && Number.isFinite(lng) ? await fetchPincodeFromLatLng(lat, lng) : "")
+
+                          setAddressForm((prev) => ({
+                            ...prev,
+                            area: area || prev.area,
+                            city: city || prev.city,
+                            state: state || prev.state,
+                            pincode: resolvedPincode || prev.pincode,
+                            latitude: Number.isFinite(lat) ? lat : prev.latitude,
+                            longitude: Number.isFinite(lng) ? lng : prev.longitude,
+                          }))
+                          suppressSuggestionFetchRef.current = true
+                          setLocationSearchValue(display)
+                          setLocationSuggestions([])
+                          locationSearchInputRef.current?.blur()
+                          await detectAndSetZoneForLocation(lat, lng)
+                        }}
+                        className="w-full px-4 py-2 text-left text-[13px] hover:bg-orange-50 border-b border-gray-100 last:border-none font-medium text-gray-700"
+                      >
+                        <span className="block truncate text-black">{s.mainText || s.display}</span>
+                        {s.secondaryText && (
+                          <span className="block truncate text-[11px] text-gray-500">{s.secondaryText}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Zone status banner */}
+            {zoneDetectionState.status === "detecting" && (
+              <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700">
+                Detecting service zone...
+              </p>
+            )}
+            {zoneDetectionState.status === "matched" && (
+              <p className="rounded-md border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">
+                {zoneDetectionState.message}
+              </p>
+            )}
+            {zoneDetectionState.status === "out_of_zone" && (
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">
+                No active zone found at this location. All fields cleared.
+              </p>
+            )}
+            {zoneDetectionState.status === "failed" && (
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+                {zoneDetectionState.message}
+              </p>
+            )}
+
+            {/* Address Form Fields */}
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Shop no. / building no. <span className="text-red-500">*</span></p>
+              <Input
+                value={addressForm.addressLine1}
+                onChange={(e) => setAddressForm((prev) => ({ ...prev, addressLine1: e.target.value }))}
+                placeholder="Shop no. / building no."
+              />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Floor / tower <span className="text-red-500">*</span></p>
+              <Input
+                value={addressForm.addressLine2}
+                onChange={(e) => setAddressForm((prev) => ({ ...prev, addressLine2: e.target.value }))}
+                placeholder="Floor / tower"
+              />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Nearby landmark <span className="text-red-500">*</span></p>
+              <Input
+                value={addressForm.landmark}
+                onChange={(e) => setAddressForm((prev) => ({ ...prev, landmark: e.target.value }))}
+                placeholder="Nearby landmark"
+              />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Area / Sector / Locality <span className="text-red-500">*</span></p>
+              <Input
+                value={addressForm.area}
+                readOnly
+                className="bg-gray-50 text-slate-600 cursor-not-allowed"
+                placeholder="Area / Sector / Locality"
+              />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">City <span className="text-red-500">*</span></p>
+              <Input
+                value={addressForm.city}
+                readOnly
+                className="bg-gray-50 text-slate-600 cursor-not-allowed"
+                placeholder="City"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-slate-500 mb-1">State <span className="text-red-500">*</span></p>
+                <Input
+                  value={addressForm.state}
+                  readOnly
+                  className="bg-gray-50 text-slate-600 cursor-not-allowed"
+                  placeholder="State"
+                />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Pincode <span className="text-red-500">*</span></p>
+                <Input
+                  value={addressForm.pincode}
+                  readOnly
+                  className="bg-gray-50 text-slate-600 cursor-not-allowed"
+                  placeholder="Pincode"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Please ensure that this address is the same as mentioned on your FSSAI license.
+            </p>
+          </div>
+          <DialogFooter className="p-4 bg-gray-50 flex flex-row gap-3">
+            <Button variant="outline" onClick={() => setShowEditAddressDialog(false)}>Cancel</Button>
+            <Button onClick={handleSaveAddressDetails} disabled={savingAddress} className="bg-blue-600 text-white">
+              {savingAddress ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
  
 
       <ImageSourcePicker

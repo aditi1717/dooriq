@@ -1728,7 +1728,16 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
         'upiQrImage',
         'profileImage',
         'coverImages',
-        'menuImages'
+        'menuImages',
+        'location',
+        'addressLine1',
+        'addressLine2',
+        'area',
+        'city',
+        'state',
+        'pincode',
+        'landmark',
+        'zoneId'
     ]);
 
     const requiresReview = Object.keys(update).some((field) => reviewRequiredFields.has(field));
@@ -1738,15 +1747,6 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
         // Backfill for restaurants that were incorrectly moved to pending by earlier
         // location/zone/timing edits. Restore approved when only operational fields change.
         const approvalRestoreSafeFields = new Set([
-            'location',
-            'zoneId',
-            'addressLine1',
-            'addressLine2',
-            'area',
-            'city',
-            'state',
-            'pincode',
-            'landmark',
             'openingTime',
             'closingTime',
             'openDays',

@@ -24,6 +24,14 @@ import { isModuleAuthenticated } from "@food/utils/auth"
 import { flattenMenuItems, getMenuFromResponse } from "@food/utils/menuItems"
 import { calculateDistance, formatDistance } from "@food/utils/common"
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
+import {
+  buildCartLineId,
+  getDefaultFoodVariant,
+  getFoodDisplayPrice,
+  getFoodPriceLabel,
+  getFoodVariants,
+  hasFoodVariants,
+} from "@food/utils/foodVariants"
 const debugLog = (...args) => { }
 const debugWarn = (...args) => { }
 const debugError = (...args) => { }
@@ -128,6 +136,7 @@ export default function Under250() {
   const [under30MinsFilter, setUnder30MinsFilter] = useState(initialFiltersRef.current.under30MinsFilter)
   const [showItemDetail, setShowItemDetail] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
+  const [selectedVariantId, setSelectedVariantId] = useState("")
   const [itemDetailQuantity, setItemDetailQuantity] = useState(1)
   const [showShareOptions, setShowShareOptions] = useState(false)
   const { openSearch, closeSearch, setSearchValue } = useSearchOverlay()
@@ -230,6 +239,33 @@ export default function Under250() {
     await Promise.all(workers)
     return output
   }, [])
+
+  const getLineItemIdForDish = (item, variant = null) =>
+    buildCartLineId(item?.id || item?._id || "", variant?.id || variant?._id || "")
+
+  const getVariantForDish = (item, preferredVariantId = "") => {
+    const variants = getFoodVariants(item)
+    if (variants.length === 0) return null
+    return variants.find((variant) => String(variant.id) === String(preferredVariantId || "")) || variants[0]
+  }
+
+  const getDishQuantity = (item, preferredVariantId = "") => {
+    const variant = getVariantForDish(item, preferredVariantId)
+    const lineItemId = getLineItemIdForDish(item, variant)
+    return quantities[lineItemId] || 0
+  }
+
+  const getDishTotalQuantity = (item, restaurantName) => {
+    const itemId = item?.id || item?._id
+    if (!itemId) return 0
+    let total = 0
+    cart.forEach((cartItem) => {
+      if (String(cartItem.itemId || "") === String(itemId) && cartItem.restaurant === restaurantName) {
+        total += cartItem.quantity || 0
+      }
+    })
+    return total
+  }
 
   const sortOptions = [
     { id: null, label: 'Relevance' },
@@ -823,7 +859,7 @@ export default function Under250() {
   }, [])
 
   // Helper function to update item quantity in bothlocal state and cart
-  const updateItemQuantity = (item, newQuantity, event = null, restaurantName = null) => {
+  const updateItemQuantity = (item, newQuantity, event = null, restaurantName = null, preferredVariant = null) => {
     // Check authentication
     if (!isModuleAuthenticated('user')) {
       toast.error("Please login to add items to cart")
@@ -837,10 +873,13 @@ export default function Under250() {
       return
     }
 
+    const resolvedVariant = preferredVariant || getDefaultFoodVariant(item)
+    const lineItemId = getLineItemIdForDish(item, resolvedVariant)
+
     // Update local state
     setQuantities((prev) => ({
       ...prev,
-      [item.id]: newQuantity,
+      [lineItemId]: newQuantity,
     }))
 
     // Find restaurant name from the item or use provided parameter
@@ -848,9 +887,14 @@ export default function Under250() {
 
     // Prepare cart item with all required properties
     const cartItem = {
-      id: item.id,
+      id: lineItemId,
+      lineItemId,
+      itemId: item.id,
       name: item.name,
-      price: item.price,
+      price: resolvedVariant?.price ?? item.price,
+      variantId: resolvedVariant?.id || "",
+      variantName: resolvedVariant?.name || "",
+      variantPrice: resolvedVariant?.price ?? item.price,
       image: item.image,
       restaurant: restaurant,
       description: item.description || "",
@@ -877,7 +921,7 @@ export default function Under250() {
           viewportY: rect.top + rect.height / 2,
           scrollX: scrollX,
           scrollY: scrollY,
-          itemId: item.id,
+          itemId: lineItemId,
         }
       }
     }
@@ -885,16 +929,16 @@ export default function Under250() {
     // Update cart context
     if (newQuantity <= 0) {
       const productInfo = {
-        id: item.id,
+        id: lineItemId,
         name: item.name,
         imageUrl: item.image,
       }
-      removeFromCart(item.id, sourcePosition, productInfo)
+      removeFromCart(lineItemId, sourcePosition, productInfo)
     } else {
-      const existingCartItem = getCartItem(item.id)
+      const existingCartItem = getCartItem(lineItemId)
       if (existingCartItem) {
         const productInfo = {
-          id: item.id,
+          id: lineItemId,
           name: item.name,
           imageUrl: item.image,
         }
@@ -902,25 +946,29 @@ export default function Under250() {
         if (newQuantity > existingCartItem.quantity && sourcePosition) {
           const result = addToCart(cartItem, sourcePosition)
           if (result?.ok === false) {
-            toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
+            if (result.code !== 'RESTAURANT_MISMATCH_PENDING') {
+              toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
+            }
             return
           }
           if (newQuantity > existingCartItem.quantity + 1) {
-            updateQuantity(item.id, newQuantity)
+            updateQuantity(lineItemId, newQuantity)
           }
         } else if (newQuantity < existingCartItem.quantity && sourcePosition) {
-          updateQuantity(item.id, newQuantity, sourcePosition, productInfo)
+          updateQuantity(lineItemId, newQuantity, sourcePosition, productInfo)
         } else {
-          updateQuantity(item.id, newQuantity)
+          updateQuantity(lineItemId, newQuantity)
         }
       } else {
         const result = addToCart(cartItem, sourcePosition)
         if (result?.ok === false) {
-          toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
+          if (result.code !== 'RESTAURANT_MISMATCH_PENDING') {
+            toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
+          }
           return
         }
         if (newQuantity > 1) {
-          updateQuantity(item.id, newQuantity)
+          updateQuantity(lineItemId, newQuantity)
         }
       }
     }
@@ -941,8 +989,11 @@ export default function Under250() {
       customisable: item.customisable || false,
       notEligibleForCoupons: item.notEligibleForCoupons || false,
     }
-    const existingQuantity = quantities[item.id] || 0
-    setItemDetailQuantity(existingQuantity > 0 ? existingQuantity : 1)
+    const defaultVariant = getDefaultFoodVariant(item)
+    const varId = defaultVariant ? defaultVariant.id : ""
+    setSelectedVariantId(varId)
+    const cartQty = getDishQuantity(item, varId)
+    setItemDetailQuantity(cartQty > 0 ? cartQty : 1)
     setSelectedItem(itemWithRestaurant)
     setShowShareOptions(false)
     setShowItemDetail(true)
@@ -1301,7 +1352,7 @@ export default function Under250() {
                       }}
                     >
                       {restaurant.menuItems.map((item, itemIndex) => {
-                        const quantity = quantities[item.id] || 0
+                        const quantity = getDishTotalQuantity(item, restaurant.name)
                         return (
                           <motion.div
                             key={item.id}
@@ -1373,15 +1424,39 @@ export default function Under250() {
                                   )}
                                 </div>
                                 {quantity > 0 ? (
-                                  <Link to="/user/cart" onClick={(e) => e.stopPropagation()}>
-                                    <Button
-                                      variant={"outline"}
-                                      size="sm"
-                                      className="bg-[#FFF2EB] text-[#EB590E] border-[#EB590E] hover:bg-[#EB590E] hover:text-white h-7 md:h-8 lg:h-9 px-3 md:px-4 lg:px-5 text-xs md:text-sm lg:text-base"
+                                  <div
+                                    className={`bg-white border font-bold px-4 py-1.5 rounded-lg shadow-md flex items-center gap-1 ${shouldShowGrayscale
+                                      ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
+                                      : 'border-[#EB590E] text-[#EB590E] hover:bg-orange-50'
+                                      }`}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        if (!shouldShowGrayscale) {
+                                          updateItemQuantity(item, Math.max(0, quantity - 1), e, restaurant.name)
+                                        }
+                                      }}
+                                      disabled={shouldShowGrayscale}
+                                      className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-[#EB590E] hover:text-[#D94F0C]'}
                                     >
-                                      View cart
-                                    </Button>
-                                  </Link>
+                                      <Minus size={14} />
+                                    </button>
+                                    <span className={`mx-2 text-sm ${shouldShowGrayscale ? 'text-gray-400' : ''}`}>{quantity}</span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        if (!shouldShowGrayscale) {
+                                          handleItemClick(item, restaurant)
+                                        }
+                                      }}
+                                      disabled={shouldShowGrayscale}
+                                      className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-[#EB590E] hover:text-[#D94F0C]'}
+                                    >
+                                      <Plus size={14} className="stroke-[3px]" />
+                                    </button>
+                                  </div>
                                 ) : (
                                   <Button
                                     variant={"outline"}
@@ -1655,6 +1730,32 @@ export default function Under250() {
                     NOT ELIGIBLE FOR COUPONS
                   </p>
                 )}
+
+                {hasFoodVariants(selectedItem) && (
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Choose a variant</p>
+                    <div className="flex flex-wrap gap-2">
+                      {getFoodVariants(selectedItem).map((variant) => (
+                        <button
+                          key={variant.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedVariantId(variant.id)
+                            const cartQty = getDishQuantity(selectedItem, variant.id)
+                            setItemDetailQuantity(cartQty > 0 ? cartQty : 1)
+                          }}
+                          className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                            String(selectedVariantId || "") === String(variant.id)
+                              ? "border-red-500 bg-red-50 text-red-600 dark:border-red-400 dark:bg-red-900/30 dark:text-red-200"
+                              : "border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-[#2a2a2a] dark:text-gray-300"
+                          }`}
+                        >
+                          {variant.name} · {RUPEE_SYMBOL}{Math.round(variant.price)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Bottom Action Bar */}
@@ -1673,10 +1774,10 @@ export default function Under250() {
                         }
                       }}
                       disabled={itemDetailQuantity <= 1 || shouldShowGrayscale}
-                      className={`${shouldShowGrayscale
+                      className={shouldShowGrayscale
                         ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed'
-                        }`}
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed'
+                      }
                     >
                       <Minus className="h-5 w-5 md:h-6 md:w-6 lg:h-7 lg:w-7" />
                     </button>
@@ -1696,7 +1797,7 @@ export default function Under250() {
                       disabled={shouldShowGrayscale}
                       className={shouldShowGrayscale
                         ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                       }
                     >
                       <Plus className="h-5 w-5 md:h-6 md:w-6 lg:h-7 lg:w-7" />
@@ -1711,7 +1812,13 @@ export default function Under250() {
                       }`}
                     onClick={(e) => {
                       if (!shouldShowGrayscale) {
-                        updateItemQuantity(selectedItem, itemDetailQuantity, e)
+                        updateItemQuantity(
+                          selectedItem,
+                          itemDetailQuantity,
+                          e,
+                          selectedItem.restaurant,
+                          getVariantForDish(selectedItem, selectedVariantId),
+                        )
                         closeItemDetail()
                       }
                     }}
@@ -1725,7 +1832,9 @@ export default function Under250() {
                         </span>
                       )}
                       <span className="text-base md:text-lg lg:text-xl font-bold">
-                        {RUPEE_SYMBOL}{Math.round(selectedItem.price)}
+                        {hasFoodVariants(selectedItem)
+                          ? `${getVariantForDish(selectedItem, selectedVariantId)?.name || "Default"} · ${RUPEE_SYMBOL}${Math.round((getVariantForDish(selectedItem, selectedVariantId)?.price || selectedItem.price) * itemDetailQuantity)}`
+                          : `${RUPEE_SYMBOL}${Math.round(selectedItem.price * itemDetailQuantity)}`}
                       </span>
                     </div>
                   </Button>

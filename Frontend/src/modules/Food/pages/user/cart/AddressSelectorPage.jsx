@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { ChevronLeft, ChevronRight, Plus, MapPin, MoreHorizontal, Navigation, Home, Building2, Briefcase, Phone, X, Crosshair, Search } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, MapPin, MoreHorizontal, Navigation, Home, Building2, Briefcase, Phone, X, Crosshair, Search, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
@@ -51,8 +51,9 @@ export default function AddressSelectorPage() {
   const routerLocation = useLocation()
   const goBack = useAppBackNavigation()
   const { location, loading, requestLocation } = useGeoLocation()
-  const { addresses = [], addAddress, updateAddress, setDefaultAddress, userProfile } = useProfile()
+  const { addresses = [], addAddress, updateAddress, deleteAddress, setDefaultAddress, userProfile } = useProfile()
   const [showAddressForm, setShowAddressForm] = useState(false)
+  const [editingAddressId, setEditingAddressId] = useState(null)
   const [mapPosition, setMapPosition] = useState([
     Number.isFinite(location?.latitude) ? location.latitude : 20.5937,
     Number.isFinite(location?.longitude) ? location.longitude : 78.9629,
@@ -89,6 +90,19 @@ export default function AddressSelectorPage() {
   const placesDetailsServiceRef = useRef(null)
   const placesSessionTokenRef = useRef(null)
   const suppressSuggestionFetchRef = useRef(false)
+  const suppressReverseGeocodeRef = useRef(false)
+  const suppressTimerRef = useRef(null)
+
+  const suppressReverseGeocodingTemporarily = () => {
+    suppressReverseGeocodeRef.current = true
+    if (suppressTimerRef.current) {
+      clearTimeout(suppressTimerRef.current)
+    }
+    suppressTimerRef.current = setTimeout(() => {
+      suppressReverseGeocodeRef.current = false
+      suppressTimerRef.current = null
+    }, 1500)
+  }
   
   const ENABLE_LOCATION_REVERSE_GEOCODE = import.meta.env.VITE_ENABLE_LOCATION_REVERSE_GEOCODE !== "false"
   const ENABLE_NOMINATIM_SEARCH = import.meta.env.VITE_ENABLE_NOMINATIM_SEARCH !== "false"
@@ -348,6 +362,12 @@ export default function AddressSelectorPage() {
           const lat = center.lat()
           const lng = center.lng()
           setMapPosition([lat, lng])
+          
+          if (suppressReverseGeocodeRef.current) {
+            suppressReverseGeocodeRef.current = false
+            return
+          }
+          
           handleMapMoveEnd(lat, lng)
         })
 
@@ -405,6 +425,7 @@ export default function AddressSelectorPage() {
 
         // Explicitly pan the map to center the user location
         if (googleMapRef.current) {
+          suppressReverseGeocodingTemporarily()
           googleMapRef.current.panTo({ lat: loc.latitude, lng: loc.longitude })
           googleMapRef.current.setZoom(17)
         }
@@ -472,7 +493,65 @@ export default function AddressSelectorPage() {
       navigate("/food/user/auth/login", { state: { from: routerLocation.pathname } })
       return
     }
+    setEditingAddressId(null)
+    setAddressFormData({
+      street: "",
+      city: "",
+      state: "",
+      zipCode: "",
+      additionalDetails: "",
+      label: "Home",
+      phone: "",
+    })
+    setAddressAutocompleteValue("")
+    setCurrentAddress("")
     setShowAddressForm(true)
+  }
+
+  const handleEditAddress = (e, address) => {
+    e.stopPropagation()
+    setEditingAddressId(getAddressId(address))
+    
+    setAddressFormData({
+      street: address.street || address.address || "",
+      city: address.city || "",
+      state: address.state || "",
+      zipCode: address.zipCode || "",
+      additionalDetails: address.additionalDetails || "",
+      label: address.label || "Home",
+      phone: address.phone || "",
+    })
+    
+    setAddressAutocompleteValue(address.street || address.address || "")
+    setCurrentAddress(address.street || address.address || "")
+    
+    const coords = address.location?.coordinates
+    const lng = Array.isArray(coords) && coords.length >= 2 ? coords[0] : address.longitude || address.lng
+    const lat = Array.isArray(coords) && coords.length >= 2 ? coords[1] : address.latitude || address.lat
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      setMapPosition([lat, lng])
+      if (googleMapRef.current) {
+        suppressReverseGeocodingTemporarily()
+        googleMapRef.current.panTo({ lat, lng })
+        googleMapRef.current.setZoom(17)
+      }
+    }
+    
+    setShowAddressForm(true)
+  }
+
+  const handleDeleteAddress = async (e, address) => {
+    e.stopPropagation()
+    const id = getAddressId(address)
+    if (!id) return
+    if (window.confirm("Are you sure you want to delete this address?")) {
+      try {
+        await deleteAddress(id)
+        toast.success("Address deleted successfully")
+      } catch (error) {
+        toast.error("Failed to delete address")
+      }
+    }
   }
 
   const handleCancelAddressForm = () => {
@@ -621,17 +700,20 @@ export default function AddressSelectorPage() {
       const zipCode = getComponent(["postal_code"])
 
       setMapPosition([lat, lng])
-      googleMapRef.current?.panTo({ lat, lng })
-      googleMapRef.current?.setZoom(17)
+      if (googleMapRef.current) {
+        suppressReverseGeocodingTemporarily()
+        googleMapRef.current.panTo({ lat, lng })
+        googleMapRef.current.setZoom(17)
+      }
       suppressSuggestionFetchRef.current = true
       setAddressAutocompleteValue(formattedAddress)
       setCurrentAddress(formattedAddress)
       setAddressFormData((prev) => ({
         ...prev,
         street:
+          formattedAddress ||
           streetParts.join(", ") ||
           suggestion.mainText ||
-          formattedAddress ||
           prev.street,
         city: city || prev.city,
         state: state || prev.state,
@@ -670,8 +752,11 @@ export default function AddressSelectorPage() {
       ""
 
     setMapPosition([lat, lng])
-    googleMapRef.current?.panTo({ lat, lng })
-    googleMapRef.current?.setZoom(17)
+    if (googleMapRef.current) {
+      suppressReverseGeocodingTemporarily()
+      googleMapRef.current.panTo({ lat, lng })
+      googleMapRef.current.setZoom(17)
+    }
     suppressSuggestionFetchRef.current = true
     setAddressAutocompleteValue(display || "")
     setCurrentAddress(display || "")
@@ -688,8 +773,14 @@ export default function AddressSelectorPage() {
 
   const handleAddressFormSubmit = async (e) => {
     e.preventDefault()
-    if (!addressFormData.street || !addressFormData.city) {
-      toast.error("Please fill required fields")
+    if (
+      !addressFormData.street?.trim() ||
+      !addressFormData.additionalDetails?.trim() ||
+      !addressFormData.city?.trim() ||
+      !addressFormData.state?.trim() ||
+      !addressFormData.zipCode?.trim()
+    ) {
+      toast.error("All address fields are compulsory. Please fill in all fields (use location search/map to auto-populate City, State, and Pincode).")
       return
     }
     setLoadingAddress(true)
@@ -701,19 +792,24 @@ export default function AddressSelectorPage() {
         latitude: mapPosition[0],
         longitude: mapPosition[1]
       }
-      const created = await addAddress(payload)
-      if (created) {
-        const id = getAddressId(created)
+      let createdOrUpdated;
+      if (editingAddressId) {
+        createdOrUpdated = await updateAddress(editingAddressId, payload)
+      } else {
+        createdOrUpdated = await addAddress(payload)
+      }
+      if (createdOrUpdated) {
+        const id = getAddressId(createdOrUpdated)
         if (id) await setDefaultAddress(id)
         try {
           localStorage.setItem("deliveryAddressMode", "saved")
           window.dispatchEvent(new Event("deliveryAddressModeChanged"))
         } catch {}
-        toast.success("Address saved")
+        toast.success(editingAddressId ? "Address updated" : "Address saved")
         handleBack()
       }
     } catch (error) {
-      toast.error("Failed to save address")
+      toast.error(editingAddressId ? "Failed to update address" : "Failed to save address")
     } finally {
       setLoadingAddress(false)
     }
@@ -762,7 +858,7 @@ export default function AddressSelectorPage() {
           <Button variant="ghost" size="icon" onClick={handleCancelAddressForm} className="rounded-full">
             <ChevronLeft className="h-6 w-6" />
           </Button>
-          <h1 className="text-lg font-bold">Add delivery location</h1>
+          <h1 className="text-lg font-bold">{editingAddressId ? "Edit delivery location" : "Add delivery location"}</h1>
         </div>
 
         <div
@@ -905,38 +1001,32 @@ export default function AddressSelectorPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="text-xs mb-1 block">City</Label>
+                <Label className="text-xs mb-1 block text-gray-500">City</Label>
                 <Input 
                   value={addressFormData.city} 
-                  onChange={e => setAddressFormData({...addressFormData, city: e.target.value})} 
-                  onFocus={() => scrollFieldIntoView("city")}
-                  ref={(el) => { manualFieldRefs.current.city = el }}
-                  className="h-12 rounded-xl"
+                  disabled
+                  className="h-12 rounded-xl bg-gray-50 dark:bg-gray-850/50 text-gray-500 dark:text-gray-400 cursor-not-allowed border border-gray-200 dark:border-gray-800"
                   required 
                 />
               </div>
               <div>
-                <Label className="text-xs mb-1 block">State</Label>
+                <Label className="text-xs mb-1 block text-gray-500">State</Label>
                 <Input 
                   value={addressFormData.state} 
-                  onChange={e => setAddressFormData({...addressFormData, state: e.target.value})} 
-                  onFocus={() => scrollFieldIntoView("state")}
-                  ref={(el) => { manualFieldRefs.current.state = el }}
-                  className="h-12 rounded-xl"
+                  disabled
+                  className="h-12 rounded-xl bg-gray-50 dark:bg-gray-850/50 text-gray-500 dark:text-gray-400 cursor-not-allowed border border-gray-200 dark:border-gray-800"
                   required 
                 />
               </div>
             </div>
 
             <div>
-              <Label className="text-xs mb-1 block">Pincode / ZIP</Label>
+              <Label className="text-xs mb-1 block text-gray-500">Pincode / ZIP</Label>
               <Input 
                 placeholder="Pincode" 
                 value={addressFormData.zipCode || ""} 
-                onChange={e => setAddressFormData({...addressFormData, zipCode: e.target.value})} 
-                onFocus={() => scrollFieldIntoView("zipCode")}
-                ref={(el) => { manualFieldRefs.current.zipCode = el }}
-                className="h-12 rounded-xl"
+                disabled
+                className="h-12 rounded-xl bg-gray-50 dark:bg-gray-850/50 text-gray-500 dark:text-gray-400 cursor-not-allowed border border-gray-200 dark:border-gray-800"
               />
             </div>
 
@@ -971,7 +1061,7 @@ export default function AddressSelectorPage() {
             onClick={handleAddressFormSubmit}
             disabled={loadingAddress}
           >
-            {loadingAddress ? "Saving..." : "Save Address \u0026 Proceed"}
+            {loadingAddress ? "Saving..." : editingAddressId ? "Update Address" : "Save Address \u0026 Proceed"}
           </Button>
         </div>
       </AnimatedPage>
@@ -1022,12 +1112,12 @@ export default function AddressSelectorPage() {
               addresses.map((addr, idx) => {
                 const Icon = getAddressIcon(addr)
                 return (
-                  <button
+                  <div
                     key={getAddressId(addr) || idx}
                     onClick={() => handleSelectSavedAddress(addr)}
-                    className="w-full flex items-start gap-4 p-4 bg-slate-50 dark:bg-[#1a1a1a] rounded-xl hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-colors text-left group"
+                    className="w-full flex items-start gap-4 p-4 bg-slate-50 dark:bg-[#1a1a1a] rounded-xl hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-colors text-left group cursor-pointer"
                   >
-                    <div className="h-10 w-10 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
+                    <div className="h-10 w-10 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm flex-shrink-0">
                       <Icon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -1036,10 +1126,25 @@ export default function AddressSelectorPage() {
                         {[addr.additionalDetails, addr.street, addr.city, addr.state].filter(Boolean).join(", ")}
                       </p>
                     </div>
-                    <div className="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-700 mt-2 flex items-center justify-center group-hover:border-[#EB590E]">
-                       <ChevronRight className="h-3 w-3 text-gray-400 group-hover:text-[#EB590E]" />
+                    <div className="flex items-center gap-1.5 self-center flex-shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => handleEditAddress(e, addr)}
+                        className="h-8 w-8 rounded-full hover:bg-orange-105 dark:hover:bg-orange-950 text-gray-500 hover:text-[#EB590E] transition-colors"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => handleDeleteAddress(e, addr)}
+                        className="h-8 w-8 rounded-full hover:bg-red-105 dark:hover:bg-red-950 text-gray-500 hover:text-red-650 transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                  </button>
+                  </div>
                 )
               })
             )}

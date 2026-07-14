@@ -114,7 +114,7 @@ export default function CollectionDetail() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
           {collection.items.map((restaurant, index) => (
             <ScrollReveal key={restaurant.slug} delay={index * 0.1}>
-              <Link to={`/user/restaurants/${restaurant.slug}`}>
+              <Link to={`/user/restaurants/${restaurant.slug}`} state={{ backTo: `/food/user/collections/${id}` }}>
                 <Card className="overflow-hidden h-full p-0 gap-0">
                   <div className="h-48 w-full relative overflow-hidden">
                     <img

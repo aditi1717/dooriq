@@ -818,11 +818,15 @@ export default function Cart() {
           debugLog("? Successfully fetched", data.length, "addons:", data.map(a => a.name))
         }
 
-        setAddons(data.map(addon => ({
-          ...addon,
-          isVeg: addon.isVeg ?? (restaurantData?.pureVegRestaurant === true),
-          foodType: addon.foodType || (restaurantData?.pureVegRestaurant ? "Veg" : "Non-Veg")
-        })))
+        setAddons(data.map(addon => {
+          const isVegResolved = addon.isVeg ?? (addon.foodType === 'Veg') ?? (restaurantData?.pureVegRestaurant === true)
+          const foodTypeResolved = addon.foodType || (isVegResolved ? "Veg" : "Non-Veg")
+          return {
+            ...addon,
+            isVeg: isVegResolved === true,
+            foodType: foodTypeResolved
+          }
+        }))
       } catch (error) {
         // Log error for debugging
         debugError("? Addons fetch error:", {
@@ -2273,8 +2277,8 @@ export default function Cart() {
                                   price: addon.price,
                                   image: addon.image || (addon.images && addon.images[0]) || "",
                                   description: addon.description || "",
-                                  isVeg: addon.isVeg,
-                                  foodType: addon.foodType,
+                                  isVeg: addon.isVeg === true || addon.foodType === 'Veg',
+                                  foodType: addon.foodType || (addon.isVeg === true ? 'Veg' : 'Non-Veg'),
                                   restaurant: cartRestaurantName,
                                   restaurantId: cartRestaurantId
                                 });

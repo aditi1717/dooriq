@@ -4,6 +4,7 @@ import { Button } from "@food/components/ui/button";
 import { Loader2, Upload, ExternalLink, Image as ImageIcon, Info } from "lucide-react";
 import { userAPI } from "@food/api";
 import { toast } from "sonner";
+import { isFlutterBridgeAvailable, openGallery } from "@food/utils/imageUploadUtils";
 
 export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSuccess }) {
   const [loading, setLoading] = useState(false);
@@ -98,7 +99,28 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
   };
 
   const triggerFileInput = () => {
-    fileInputRef.current?.click();
+    if (isFlutterBridgeAvailable()) {
+      openGallery({
+        onSelectFile: (file) => {
+          setScreenshotFile(file);
+        },
+        fileNamePrefix: "review-screenshot",
+      });
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
+
+  const handleGoToStore = (e) => {
+    e.preventDefault();
+    if (isFlutterBridgeAvailable()) {
+      window.flutter_inappwebview.callHandler("openUrl", { url: reviewUrl })
+        .catch(() => {
+          window.open(reviewUrl, "_blank");
+        });
+    } else {
+      window.open(reviewUrl, "_blank");
+    }
   };
 
   const handleSubmit = async () => {
@@ -159,14 +181,13 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
                 <li>Take a screenshot of your review.</li>
                 <li>Upload it below to get wallet money!</li>
               </ol>
-              <a
-                href={reviewUrl}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={handleGoToStore}
                 className="inline-flex items-center gap-1 mt-2 bg-blue-600 text-white px-2.5 py-1 rounded-md font-medium text-xs hover:bg-blue-700 transition-colors"
               >
                 Go to Store <ExternalLink className="h-3 w-3" />
-              </a>
+              </button>
             </div>
           </div>
 

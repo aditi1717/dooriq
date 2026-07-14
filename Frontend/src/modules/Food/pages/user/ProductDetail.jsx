@@ -137,7 +137,9 @@ export default function ProductDetail() {
       for (let i = 0; i < quantity; i++) {
         const result = addToCart(cartItem)
         if (result?.ok === false) {
-          alert(result.error || "Cannot add item from different restaurant. Please clear cart first.")
+          if (result.code !== 'RESTAURANT_MISMATCH_PENDING') {
+            alert(result.error || "Cannot add item from different restaurant. Please clear cart first.")
+          }
           break
         }
       }

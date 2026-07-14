@@ -1,5 +1,6 @@
 // src/context/cart-context.jsx
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
 import { buildCartLineId } from "@food/utils/foodVariants"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -103,7 +104,9 @@ const normalizeCartData = (rawCart) => {
           currentFoodType = "Non-Veg";
         }
         
-        const finalFoodType = currentFoodType || (item.isVeg === true ? "Veg" : "Non-Veg");
+        // Ensure foodType and isVeg are perfectly synchronized
+        const isVegResolved = item.isVeg === true || currentFoodType === "Veg";
+        const finalFoodType = isVegResolved ? "Veg" : "Non-Veg";
 
         return {
           ...item,
@@ -170,6 +173,7 @@ export function CartProvider({ children }) {
   const [lastAddEvent, setLastAddEvent] = useState(null)
   // Track last remove event for animation
   const [lastRemoveEvent, setLastRemoveEvent] = useState(null)
+  const [conflictData, setConflictData] = useState(null)
 
   // Persist to localStorage whenever cart changes
   useEffect(() => {
@@ -186,11 +190,17 @@ export function CartProvider({ children }) {
 
   const addToCart = (item, sourcePosition = null) => {
     const safeCart = normalizeCartData(cart)
+    if (!item) return { ok: false, error: 'Invalid item' }
+
+    // Normalize the incoming item using the same rules as Cart state items
+    const normalizedItem = normalizeCartData([item])[0]
+    if (!normalizedItem) return { ok: false, error: 'Invalid item' }
+
     if (safeCart.length > 0) {
       const firstItemRestaurantId = safeCart[0]?.restaurantId
       const firstItemRestaurantName = safeCart[0]?.restaurant
-      const newItemRestaurantId = item?.restaurantId
-      const newItemRestaurantName = item?.restaurant
+      const newItemRestaurantId = normalizedItem?.restaurantId
+      const newItemRestaurantName = normalizedItem?.restaurant
       const normalizeName = (name) => (name ? String(name).trim().toLowerCase() : '')
 
       const firstRestaurantNameNormalized = normalizeName(firstItemRestaurantName)
@@ -208,12 +218,18 @@ export function CartProvider({ children }) {
         String(firstItemRestaurantId) !== String(newItemRestaurantId)
 
       if (hasNameMismatch || hasIdMismatch) {
+        setConflictData({
+          newItem: item,
+          sourcePosition,
+          existingRestaurantName: firstItemRestaurantName || 'another restaurant',
+          newRestaurantName: newItemRestaurantName || 'new restaurant'
+        })
         const message = `Cart already contains items from "${firstItemRestaurantName || 'another restaurant'}". Please clear cart or complete order first.`
-        return { ok: false, error: message, code: 'RESTAURANT_MISMATCH' }
+        return { ok: false, error: message, code: 'RESTAURANT_MISMATCH_PENDING' }
       }
     }
 
-    if (!item?.restaurantId && !item?.restaurant) {
+    if (!normalizedItem?.restaurantId && !normalizedItem?.restaurant) {
       return {
         ok: false,
         error: 'Item is missing restaurant information. Please refresh the page.',
@@ -228,8 +244,8 @@ export function CartProvider({ children }) {
       if (safePrev.length > 0) {
         const firstItemRestaurantId = safePrev[0]?.restaurantId;
         const firstItemRestaurantName = safePrev[0]?.restaurant;
-        const newItemRestaurantId = item?.restaurantId;
-        const newItemRestaurantName = item?.restaurant;
+        const newItemRestaurantId = normalizedItem?.restaurantId;
+        const newItemRestaurantName = normalizedItem?.restaurant;
         
         // Normalize restaurant names for comparison (trim and case-insensitive)
         const normalizeName = (name) => name ? name.trim().toLowerCase() : '';
@@ -263,15 +279,15 @@ export function CartProvider({ children }) {
         }
       }
       
-      const existing = safePrev.find((i) => i.id === item.id)
+      const existing = safePrev.find((i) => i.id === normalizedItem.id)
       if (existing) {
         // Set last add event for animation when incrementing existing item
         if (sourcePosition) {
           setLastAddEvent({
             product: {
-              id: item.id,
-              name: item.name,
-              imageUrl: item.image || item.imageUrl,
+              id: normalizedItem.id,
+              name: normalizedItem.name,
+              imageUrl: normalizedItem.image || normalizedItem.imageUrl,
             },
             sourcePosition,
           })
@@ -279,25 +295,19 @@ export function CartProvider({ children }) {
           setTimeout(() => setLastAddEvent(null), 1500)
         }
         return safePrev.map((i) =>
-          i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+          i.id === normalizedItem.id ? { ...i, quantity: i.quantity + 1 } : i
         )
       }
       
-      // Validate item has required restaurant info
-      if (!item.restaurantId && !item.restaurant) {
-        debugError('❌ Cannot add item: Missing restaurant information!', item);
-        return safePrev;
-      }
-      
-      const newItem = { ...item, quantity: 1 }
+      const newItem = { ...normalizedItem, quantity: 1 }
       
       // Set last add event for animation if sourcePosition is provided
       if (sourcePosition) {
         setLastAddEvent({
           product: {
-            id: item.id,
-            name: item.name,
-            imageUrl: item.image || item.imageUrl,
+            id: normalizedItem.id,
+            name: normalizedItem.name,
+            imageUrl: normalizedItem.image || normalizedItem.imageUrl,
           },
           sourcePosition,
         })
@@ -554,7 +564,68 @@ export function CartProvider({ children }) {
     [cart, cartForAnimation, lastAddEvent, lastRemoveEvent]
   )
 
-  return <CartContext.Provider value={value}>{children}</CartContext.Provider>
+  const handleConfirmReplaceCart = () => {
+    if (!conflictData) return
+    const { newItem, sourcePosition } = conflictData
+    
+    const normalizedItem = normalizeCartData([newItem])[0]
+    if (normalizedItem) {
+      const itemToAdd = { ...normalizedItem, quantity: 1 }
+      setCart([itemToAdd])
+      
+      if (sourcePosition) {
+        setLastAddEvent({
+          product: {
+            id: normalizedItem.id,
+            name: normalizedItem.name,
+            imageUrl: normalizedItem.image || normalizedItem.imageUrl,
+          },
+          sourcePosition,
+        })
+        setTimeout(() => setLastAddEvent(null), 1500)
+      }
+      toast.success("Cart replaced with new items")
+    }
+    
+    setConflictData(null)
+  }
+
+  return (
+    <CartContext.Provider value={value}>
+      {children}
+      {conflictData && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden border border-gray-100 dark:border-gray-800 animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                Replace cart items?
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
+                Your cart contains items from <span className="font-semibold text-gray-800 dark:text-gray-250">"{conflictData.existingRestaurantName}"</span>. Do you want to discard these items and add items from <span className="font-semibold text-gray-800 dark:text-gray-250">"{conflictData.newRestaurantName}"</span> instead?
+              </p>
+            </div>
+            
+            <div className="flex border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setConflictData(null)}
+                className="flex-1 px-4 py-3.5 text-sm font-semibold text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border-r border-gray-100 dark:border-gray-800 text-center"
+              >
+                No, Keep Existing
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReplaceCart}
+                className="flex-1 px-4 py-3.5 text-sm font-bold text-[#EB590E] hover:bg-orange-50/50 dark:hover:bg-orange-950/20 transition-colors text-center"
+              >
+                Yes, Discard & Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </CartContext.Provider>
+  )
 }
 
 export function useCart() {

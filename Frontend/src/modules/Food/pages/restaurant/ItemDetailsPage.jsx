@@ -266,6 +266,14 @@ export default function ItemDetailsPage() {
             if (nextCategory) {
               setSelectedCategoryId(nextCategory.id)
               setCategory(nextCategory.name)
+              if (isNewItem) {
+                const scope = nextCategory.foodTypeScope || "Both"
+                if (scope === "Non-Veg") {
+                  setFoodType("Non-Veg")
+                } else {
+                  setFoodType("Veg")
+                }
+              }
             }
           }
         } else {
@@ -504,6 +512,14 @@ export default function ItemDetailsPage() {
     setCategory(selectedCategory?.name || "")
     setSubCategory(subCat)
     setIsCategoryPopupOpen(false)
+    if (selectedCategory) {
+      const scope = selectedCategory.foodTypeScope || "Both"
+      if (scope === "Non-Veg") {
+        setFoodType("Non-Veg")
+      } else {
+        setFoodType("Veg")
+      }
+    }
   }
 
   const handleServesSelect = (option) => {
@@ -988,33 +1004,8 @@ export default function ItemDetailsPage() {
                 {descriptionLength} / {maxDescriptionLength}
               </span>
             </div>
-            {/* Dietary Options */}
-            <div className="flex gap-2 mt-3">
-              <button
-                onClick={() => setFoodType("Veg")}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${foodType === "Veg"
-                  ? "border-2"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                style={foodType === "Veg" ? { borderColor: "#16A34A", color: "#16A34A", backgroundColor: "#F0FDF4" } : undefined}
-              >
-                {foodType === "Veg" && <Check className="w-4 h-4" style={{ color: "#16A34A" }} />}
-                <span>Veg</span>
-              </button>
-              {!isPureVegRestaurant && (
-                <button
-                  onClick={() => setFoodType("Non-Veg")}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${foodType === "Non-Veg"
-                    ? "border-red-600 border-2 text-red-600"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                >
-                  {foodType === "Non-Veg" && <Check className="w-4 h-4" />}
-                  <span>Non-Veg</span>
-                </button>
-              )}
-            </div>
           </div>
+
 
           {/* Item Price */}
           <div>
@@ -1225,50 +1216,61 @@ export default function ItemDetailsPage() {
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-2">
-                {loadingCategories ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-6 h-6 animate-spin text-gray-600" />
-                  </div>
-                ) : categories.length === 0 ? (
-                  <div className="text-center py-12 space-y-4">
-                    <p className="text-sm text-gray-500">No categories available</p>
-                    <button
-                      onClick={() => {
-                        setIsCategoryPopupOpen(false)
-                        navigate('/restaurant/menu-categories')
-                      }}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg font-semibold hover:bg-gray-800 transition-colors"
-                    >
-                      <Plus className="w-5 h-5" />
-                      Add Category
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {categories.map((cat) => (
-                      <button
-                        key={cat.id}
-                        onClick={() => handleCategorySelect(cat.id, cat.name)}
-                        className={`w-full rounded-lg px-4 py-3 text-left transition-colors ${String(selectedCategoryId || "") === String(cat.id)
-                          ? "bg-gray-900 text-white"
-                          : "bg-gray-50 text-gray-900 hover:bg-gray-100"
-                          }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-sm font-medium">{cat.name}</span>
-                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${cat.foodTypeScope === "Veg"
-                            ? "border-green-200 bg-green-50 text-green-700"
-                            : cat.foodTypeScope === "Non-Veg"
-                              ? "border-red-200 bg-red-50 text-red-700"
-                              : "border-slate-200 bg-slate-100 text-slate-700"
-                            }`}>
-                            {cat.foodTypeScope || "Both"}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {(() => {
+                  const displayedCategories = categories.filter(
+                    (cat) => !isPureVegRestaurant || cat.foodTypeScope !== "Non-Veg"
+                  )
+                  if (loadingCategories) {
+                    return (
+                      <div className="flex items-center justify-center py-12">
+                        <Loader2 className="w-6 h-6 animate-spin text-gray-600" />
+                      </div>
+                    )
+                  }
+                  if (displayedCategories.length === 0) {
+                    return (
+                      <div className="text-center py-12 space-y-4">
+                        <p className="text-sm text-gray-500">No categories available</p>
+                        <button
+                          onClick={() => {
+                            setIsCategoryPopupOpen(false)
+                            navigate('/restaurant/menu-categories')
+                          }}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg font-semibold hover:bg-gray-800 transition-colors"
+                        >
+                          <Plus className="w-5 h-5" />
+                          Add Category
+                        </button>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="space-y-2">
+                      {displayedCategories.map((cat) => (
+                        <button
+                          key={cat.id}
+                          onClick={() => handleCategorySelect(cat.id, cat.name)}
+                          className={`w-full rounded-lg px-4 py-3 text-left transition-colors ${String(selectedCategoryId || "") === String(cat.id)
+                            ? "bg-gray-900 text-white"
+                            : "bg-gray-50 text-gray-900 hover:bg-gray-100"
+                            }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-sm font-medium">{cat.name}</span>
+                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${cat.foodTypeScope === "Veg"
+                              ? "border-green-200 bg-green-50 text-green-700"
+                              : cat.foodTypeScope === "Non-Veg"
+                                ? "border-red-200 bg-red-50 text-red-700"
+                                : "border-slate-200 bg-slate-100 text-slate-700"
+                              }`}>
+                              {cat.foodTypeScope || "Both"}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()}
               </div>
             </motion.div>
           </>

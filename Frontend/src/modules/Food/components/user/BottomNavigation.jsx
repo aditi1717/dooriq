@@ -1,9 +1,59 @@
 import { Link, useLocation } from "react-router-dom"
 import { Tag, User, Truck, ShoppingCart } from "lucide-react"
+import { useState, useEffect } from "react"
 
 export default function BottomNavigation() {
   const location = useLocation()
   const pathname = location.pathname
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false)
+
+  useEffect(() => {
+    const handleResize = () => {
+      const activeEl = document.activeElement
+      const isInputFocused = activeEl && (
+        activeEl.tagName === "INPUT" ||
+        activeEl.tagName === "TEXTAREA" ||
+        activeEl.hasAttribute("contenteditable")
+      )
+      const isHeightShrunk = (window.screen.height - window.innerHeight) > 150
+      setIsKeyboardOpen(!!(isInputFocused && isHeightShrunk))
+    }
+
+    const handleFocusIn = (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
+        setTimeout(() => {
+          setIsKeyboardOpen(true)
+        }, 100)
+      }
+    }
+
+    const handleFocusOut = (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
+        setTimeout(() => {
+          const activeEl = document.activeElement
+          const stillInput = activeEl && (
+            activeEl.tagName === "INPUT" ||
+            activeEl.tagName === "TEXTAREA"
+          )
+          if (!stillInput) {
+            setIsKeyboardOpen(false)
+          }
+        }, 100)
+      }
+    }
+
+    window.addEventListener("resize", handleResize)
+    window.addEventListener("focusin", handleFocusIn)
+    window.addEventListener("focusout", handleFocusOut)
+    
+    return () => {
+      window.removeEventListener("resize", handleResize)
+      window.removeEventListener("focusin", handleFocusIn)
+      window.removeEventListener("focusout", handleFocusOut)
+    }
+  }, [])
+
+  if (isKeyboardOpen) return null
 
   // Check active routes - support both /user/* and /* paths
   const isCart = pathname === "/food/cart" || pathname.startsWith("/food/user/cart")

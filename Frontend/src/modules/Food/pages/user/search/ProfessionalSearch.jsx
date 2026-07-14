@@ -150,16 +150,9 @@ export default function ProfessionalSearch() {
     setResults({ restaurants: [], dishes: [] })
   }
 
-  const handleCategoryClick = (id) => {
-    const newCat = selectedCategoryId === id ? null : id
-    setSelectedCategoryId(newCat)
-    if (newCat) {
-        setSearchParams({ ...Object.fromEntries(searchParams), cat: newCat })
-    } else {
-        const p = Object.fromEntries(searchParams)
-        delete p.cat
-        setSearchParams(p)
-    }
+  const handleCategoryClick = (cat) => {
+    const slug = cat.slug || cat.name?.toLowerCase().replace(/\s+/g, "-") || cat._id
+    navigate(`/food/user/category/${slug}`)
   }
 
   return (
@@ -204,10 +197,10 @@ export default function ProfessionalSearch() {
               {categories.map((cat) => (
                 <button 
                   key={cat._id} 
-                  onClick={() => handleCategoryClick(cat._id)}
-                  className={`flex flex-col items-center group transition-all ${selectedCategoryId === cat._id ? 'scale-110' : ''}`}
+                  onClick={() => handleCategoryClick(cat)}
+                  className="flex flex-col items-center group transition-all"
                 >
-                  <div className={`w-14 h-14 rounded-2xl mb-2 flex items-center justify-center overflow-hidden border-2 transition-all ${selectedCategoryId === cat._id ? 'border-rose-500 shadow-lg shadow-rose-100' : 'border-transparent bg-white dark:bg-zinc-900'}`}>
+                  <div className="w-14 h-14 rounded-2xl mb-2 flex items-center justify-center overflow-hidden border-2 border-transparent bg-white dark:bg-zinc-900">
                     {cat.image ? (
                       <img 
                         src={getMediaUrl(cat.image)} 
@@ -218,7 +211,7 @@ export default function ProfessionalSearch() {
                       <Utensils className="w-6 h-6 text-slate-300" />
                     )}
                   </div>
-                  <span className={`text-[11px] font-medium text-center line-clamp-1 ${selectedCategoryId === cat._id ? 'text-rose-600' : 'text-slate-600 dark:text-slate-400'}`}>
+                  <span className="text-[11px] font-medium text-center line-clamp-1 text-slate-600 dark:text-slate-400">
                     {cat.name}
                   </span>
                 </button>

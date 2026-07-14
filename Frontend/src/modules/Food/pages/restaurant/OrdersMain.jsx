@@ -1702,7 +1702,8 @@ export default function OrdersMain() {
 
   // Handle PDF download
   const handlePrint = async () => {
-    if (!newOrder) {
+    const orderToPrint = popupOrder || newOrder;
+    if (!orderToPrint) {
       debugWarn("No order data available for PDF generation");
       return;
     }
@@ -1775,8 +1776,8 @@ export default function OrdersMain() {
         const tableData = orderToPrint.items.map((item) => [
           item.name || "Item",
           item.quantity || 1,
-          `₹${(item.price || 0).toFixed(2)}`,
-          `₹${((item.price || 0) * (item.quantity || 1)).toFixed(2)}`,
+          `Rs. ${(item.price || 0).toFixed(2)}`,
+          `Rs. ${((item.price || 0) * (item.quantity || 1)).toFixed(2)}`,
         ]);
 
         autoTable(doc, {
@@ -1804,7 +1805,7 @@ export default function OrdersMain() {
       // Total
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
-      doc.text(`Total: ₹${(orderToPrint.total || 0).toFixed(2)}`, 20, yPos);
+      doc.text(`Total: Rs. ${(orderToPrint.total || 0).toFixed(2)}`, 20, yPos);
 
       // Payment status
       yPos += 10;
@@ -1841,8 +1842,8 @@ export default function OrdersMain() {
       doc.setFont("helvetica", "normal");
       doc.text(
         orderToPrint.sendCutlery === false
-          ? "? Don't send cutlery"
-          : "? Send cutlery requested",
+          ? "Cutlery: Don't send cutlery"
+          : "Cutlery: Send cutlery requested",
         20,
         yPos,
       );

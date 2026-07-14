@@ -2062,124 +2062,6 @@ export default function Inventory() {
         <div className="space-y-4 mb-6">
           {activeTab === "add-ons" && (
             <>
-              {isAddAddonOpen && (
-                <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4 shadow-sm">
-                  <div className="grid grid-cols-1 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Add-on Name *</label>
-                      <input
-                        type="text"
-                        value={addonName}
-                        onChange={(e) => setAddonName(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-black focus:outline-none"
-                        placeholder="e.g., Coke, Chips"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                      <textarea
-                        value={addonDescription}
-                        onChange={(e) => setAddonDescription(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-black focus:outline-none resize-none"
-                        rows={3}
-                        placeholder="Describe the add-on..."
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Price (₹) *</label>
-                      <input
-                        type="number"
-                        value={addonPrice}
-                        onChange={(e) => setAddonPrice(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-black focus:outline-none"
-                        min="0"
-                        step="0.01"
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Type *</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {(isPureVegRestaurant
-                          ? ADDON_TYPE_OPTIONS.filter((option) => option.value === "veg")
-                          : ADDON_TYPE_OPTIONS
-                        ).map((option) => {
-                          const active = addonFoodType === option.value
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => setAddonFoodType(option.value)}
-                              className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                                active
-                                  ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                                  : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                              }`}
-                            >
-                              {option.label}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Image (1 only)</label>
-                      {addonImagePreview && (
-                        <div className="mb-2">
-                          <img
-                            src={addonImagePreview}
-                            alt="Preview"
-                            className="w-24 h-24 object-cover rounded border"
-                            onError={(e) => (e.target.style.display = "none")}
-                          />
-                        </div>
-                      )}
-                      <input
-                        ref={addonImageInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleAddonImageSelect}
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddonGalleryPick}
-                        className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-3 text-left transition-colors hover:bg-gray-100"
-                      >
-                        <span className="flex items-center gap-2 text-sm font-medium text-gray-900">
-                          <Upload className="h-4 w-4 text-gray-500" />
-                          {addonImageFile?.name || "Upload image"}
-                        </span>
-                        <span className="mt-1 block text-xs text-gray-500">
-                          {addonImageFile ? "Image selected successfully" : "Tap to choose 1 image from your device"}
-                        </span>
-                      </button>
-                      <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP, HEIC up to 5MB.</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          resetAddonForm()
-                          setIsAddAddonOpen(false)
-                        }}
-                        className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveAddon}
-                        disabled={savingAddon}
-                        className="px-4 py-2 bg-black text-white rounded-md text-sm font-medium hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      >
-                        {savingAddon && <Loader2 className="h-4 w-4 animate-spin" />}
-                        <span>{savingAddon ? "Saving..." : "Submit for approval"}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
               {loadingAddons ? (
                 <div className="flex items-center justify-center py-20">
                   <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
@@ -2550,7 +2432,7 @@ export default function Inventory() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 z-50"
+              className="fixed inset-0 bg-black/50 z-[70]"
               onClick={() => setFilterOpen(false)}
             />
             <motion.div
@@ -2558,24 +2440,32 @@ export default function Inventory() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50"
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[71] pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-6">
                 <div className="flex items-start justify-between gap-4 mb-6">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Filters</h2>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-bold text-gray-900">Filters</h2>
+                      {selectedFilter !== "all" && (
+                        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                          Active
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-500 mt-1">
                       {activeTab === "add-ons"
                         ? "Refine the add-ons list by availability or approval status."
                         : "Refine your inventory by stock state, recommendation, or food type."}
                     </p>
                   </div>
-                  {selectedFilter !== "all" ? (
-                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                      Active
-                    </span>
-                  ) : null}
+                  <button 
+                    onClick={() => setFilterOpen(false)}
+                    className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
 
                 <div className="space-y-4 mb-6">
@@ -2634,7 +2524,7 @@ export default function Inventory() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 z-50"
+              className="fixed inset-0 bg-black/50 z-[70]"
               onClick={() => setTogglePopupOpen(false)}
             />
             <motion.div
@@ -2642,7 +2532,7 @@ export default function Inventory() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50 max-h-[90vh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom)+6rem)]"
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[71] max-h-[90vh] overflow-y-auto pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-6">
@@ -3218,6 +3108,204 @@ export default function Inventory() {
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Add Add-on Modal */}
+      <AnimatePresence>
+        {isAddAddonOpen && (
+          <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={resetAddonForm}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            {/* Modal Container */}
+            <motion.div
+              initial={{ y: "100%", opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="relative w-full max-w-lg bg-white dark:bg-zinc-900 rounded-t-[32px] sm:rounded-[32px] shadow-2xl z-[71] max-h-[90vh] flex flex-col overflow-hidden pb-safe"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="w-12 h-1 bg-gray-300 dark:bg-zinc-700 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
+              <div className="px-6 py-5 flex items-center justify-between border-b border-slate-100 dark:border-zinc-800">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white">Add New Add-on</h2>
+                  <p className="text-xs text-slate-500 mt-1">Submit a new customization option to admin</p>
+                </div>
+                <button 
+                  onClick={resetAddonForm}
+                  className="p-2 bg-slate-100 dark:bg-zinc-800 rounded-full text-slate-500 dark:text-zinc-400 hover:bg-slate-200 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Scrollable Form Body */}
+              <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+                {/* Add-on Name */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-800 dark:text-zinc-200 mb-1.5">Add-on Name *</label>
+                  <input
+                    type="text"
+                    value={addonName}
+                    onChange={(e) => setAddonName(e.target.value)}
+                    className="w-full h-12 px-4 border border-slate-200 dark:border-zinc-800 rounded-2xl bg-slate-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-900 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 focus:outline-none transition-all"
+                    placeholder="e.g., Coke, Extra Cheese, Chips"
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-800 dark:text-zinc-200 mb-1.5">Description</label>
+                  <textarea
+                    value={addonDescription}
+                    onChange={(e) => setAddonDescription(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 dark:border-zinc-800 rounded-2xl bg-slate-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-900 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 focus:outline-none resize-none transition-all"
+                    rows={3}
+                    placeholder="Provide details about the add-on option..."
+                  />
+                </div>
+
+                {/* Price */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-800 dark:text-zinc-200 mb-1.5">Price (₹) *</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">₹</span>
+                    <input
+                      type="number"
+                      value={addonPrice}
+                      onChange={(e) => setAddonPrice(e.target.value)}
+                      className="w-full h-12 pl-8 pr-4 border border-slate-200 dark:border-zinc-800 rounded-2xl bg-slate-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-900 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 focus:outline-none transition-all"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+
+                {/* Type Selection */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-800 dark:text-zinc-200 mb-2">Food Type *</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(isPureVegRestaurant
+                      ? ADDON_TYPE_OPTIONS.filter((option) => option.value === "veg")
+                      : ADDON_TYPE_OPTIONS
+                    ).map((option) => {
+                      const active = addonFoodType === option.value
+                      const isVeg = option.value === "veg"
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setAddonFoodType(option.value)}
+                          className={`h-12 rounded-2xl border text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                            active
+                              ? isVeg
+                                ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                                : "border-rose-500 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 shadow-sm"
+                              : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${
+                              isVeg ? "bg-emerald-500" : "bg-rose-500"
+                            }`}
+                          />
+                          {option.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Image Upload */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-800 dark:text-zinc-200 mb-2">Upload Image</label>
+                  <input
+                    ref={addonImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAddonImageSelect}
+                    className="hidden"
+                  />
+                  
+                  {addonImagePreview ? (
+                    <div className="relative rounded-2xl overflow-hidden aspect-video border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 mb-3 flex items-center justify-center">
+                      <img
+                        src={addonImagePreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddonImageFile(null)
+                          setAddonImagePreview("")
+                          if (addonImageInputRef.current) {
+                            addonImageInputRef.current.value = ""
+                          }
+                        }}
+                        className="absolute top-3 right-3 p-1.5 bg-black/60 hover:bg-black/80 rounded-full text-white backdrop-blur-sm transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleAddonGalleryPick}
+                      className="w-full h-32 border-2 border-dashed border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 rounded-2xl bg-slate-50 dark:bg-zinc-950 flex flex-col items-center justify-center gap-2 transition-all group"
+                    >
+                      <div className="p-3 bg-white dark:bg-zinc-900 rounded-full shadow-sm group-hover:scale-110 transition-transform">
+                        <Upload className="h-5 w-5 text-slate-500" />
+                      </div>
+                      <div className="text-center">
+                        <span className="block text-sm font-semibold text-slate-700 dark:text-zinc-300">
+                          {addonImageFile?.name || "Upload image"}
+                        </span>
+                        <span className="block text-[11px] text-slate-400 mt-0.5">
+                          PNG, JPG, WEBP, HEIC up to 5MB
+                        </span>
+                      </div>
+                    </button>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="border-t border-slate-100 dark:border-zinc-800 pt-5 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={resetAddonForm}
+                    className="flex-1 h-12 border border-slate-200 dark:border-zinc-800 rounded-2xl text-sm font-bold text-slate-700 dark:text-zinc-300 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveAddon}
+                    disabled={savingAddon}
+                    className="flex-1 h-12 bg-black dark:bg-white text-white dark:text-black rounded-2xl text-sm font-bold hover:bg-slate-900 dark:hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-black/10 transition-all"
+                  >
+                    {savingAddon ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <span>Submit for approval</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

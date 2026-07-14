@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom"
-import { memo, useMemo } from "react"
+import { memo, useMemo, useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import {
   FileText,
@@ -24,6 +24,53 @@ const findActiveTab = (tabs, pathname) =>
 function BottomNavOrders() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false)
+
+  useEffect(() => {
+    const handleResize = () => {
+      const activeEl = document.activeElement
+      const isInputFocused = activeEl && (
+        activeEl.tagName === "INPUT" ||
+        activeEl.tagName === "TEXTAREA" ||
+        activeEl.hasAttribute("contenteditable")
+      )
+      const isHeightShrunk = (window.screen.height - window.innerHeight) > 150
+      setIsKeyboardOpen(!!(isInputFocused && isHeightShrunk))
+    }
+
+    const handleFocusIn = (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
+        setTimeout(() => {
+          setIsKeyboardOpen(true)
+        }, 100)
+      }
+    }
+
+    const handleFocusOut = (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
+        setTimeout(() => {
+          const activeEl = document.activeElement
+          const stillInput = activeEl && (
+            activeEl.tagName === "INPUT" ||
+            activeEl.tagName === "TEXTAREA"
+          )
+          if (!stillInput) {
+            setIsKeyboardOpen(false)
+          }
+        }, 100)
+      }
+    }
+
+    window.addEventListener("resize", handleResize)
+    window.addEventListener("focusin", handleFocusIn)
+    window.addEventListener("focusout", handleFocusOut)
+    
+    return () => {
+      window.removeEventListener("resize", handleResize)
+      window.removeEventListener("focusin", handleFocusIn)
+      window.removeEventListener("focusout", handleFocusOut)
+    }
+  }, [])
 
   const basePath = pathname.startsWith("/food/restaurant")
     ? "/food/restaurant"
@@ -32,11 +79,6 @@ function BottomNavOrders() {
       : "/restaurant"
 
   const tabs = useMemo(() => getOrdersTabs(basePath), [basePath])
-
-  const isInternalPage = pathname.includes("/create-offers")
-  if (isInternalPage) {
-    return null
-  }
 
   const activeTab = useMemo(() => {
     const match = findActiveTab(tabs, pathname)
@@ -47,6 +89,11 @@ function BottomNavOrders() {
     if (tab.route && tab.route !== pathname) {
       navigate(tab.route)
     }
+  }
+
+  const isInternalPage = pathname.includes("/create-offers")
+  if (isInternalPage || isKeyboardOpen) {
+    return null
   }
 
   return (

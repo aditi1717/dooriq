@@ -105,6 +105,7 @@ function RestaurantDetailsContent() {
   const [showItemDetail, setShowItemDetail] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
   const [selectedVariantId, setSelectedVariantId] = useState("")
+  const [modalQuantity, setModalQuantity] = useState(1)
   const [showFilterSheet, setShowFilterSheet] = useState(false)
   const [showLocationSheet, setShowLocationSheet] = useState(false)
   const [showScheduleSheet, setShowScheduleSheet] = useState(false)
@@ -140,6 +141,19 @@ function RestaurantDetailsContent() {
     const lineItemId = getLineItemIdForDish(item, variant)
     return quantities[lineItemId] || 0
   }
+
+  const getDishTotalQuantity = (item) => {
+    const itemId = item?.id || item?._id
+    if (!itemId) return 0
+    let total = 0
+    cart.forEach((cartItem) => {
+      if (String(cartItem.itemId || "") === String(itemId) && cartItem.restaurant === restaurant?.name) {
+        total += cartItem.quantity || 0
+      }
+    })
+    return total
+  }
+
 
   const isVegDish = (item) => {
     if (!item || typeof item !== "object") return false
@@ -1282,7 +1296,9 @@ function RestaurantDetailsContent() {
         if (newQuantity > existingCartItem.quantity && sourcePosition) {
           const result = addToCart(cartItem, sourcePosition)
           if (result?.ok === false) {
-            toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
+            if (result.code !== 'RESTAURANT_MISMATCH_PENDING') {
+              toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
+            }
             return
           }
           if (newQuantity > existingCartItem.quantity + 1) {
@@ -1302,7 +1318,9 @@ function RestaurantDetailsContent() {
         // Pass sourcePosition when adding a new item
         const result = addToCart(cartItem, sourcePosition)
         if (result?.ok === false) {
-          toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
+          if (result.code !== 'RESTAURANT_MISMATCH_PENDING') {
+            toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
+          }
           return
         }
         if (newQuantity > 1) {
@@ -1397,7 +1415,8 @@ function RestaurantDetailsContent() {
   const getActiveFilterCount = () => {
     let count = 0
     if (filters.sortBy) count++
-    if (filters.vegNonVeg) count++
+    // When vegMode is ON, vegNonVeg is redundant — don't count it
+    if (!vegMode && filters.vegNonVeg) count++
     if (filters.highlyReordered) count++
     if (filters.spicy) count++
     return count
@@ -1667,6 +1686,11 @@ function RestaurantDetailsContent() {
   // Handle item card click
   const handleItemClick = (item) => {
     setSelectedItem(item)
+    const defaultVariant = getDefaultFoodVariant(item)
+    const varId = defaultVariant ? defaultVariant.id : ""
+    setSelectedVariantId(varId)
+    const cartQty = getDishQuantity(item, varId)
+    setModalQuantity(cartQty > 0 ? cartQty : 1)
     setShowItemDetail(true)
   }
 
@@ -1878,6 +1902,59 @@ function RestaurantDetailsContent() {
     [restaurant?.menuSections, showOnlyUnder250, searchQuery, vegMode, filters, selectedMenuCategory]
   )
 
+  const flatFilteredItems = useMemo(() => {
+    if (!hasActiveMenuFilters || !restaurant?.menuSections) return []
+    const allItems = []
+    restaurant.menuSections.forEach(section => {
+      if (isRecommendedSection(section)) return
+
+      if (section.items && Array.isArray(section.items)) {
+        section.items.forEach(item => {
+          if (item.isAvailable !== false) {
+            allItems.push(item)
+          }
+        })
+      }
+      if (section.subsections && Array.isArray(section.subsections)) {
+        section.subsections.forEach(subsection => {
+          if (subsection.items && Array.isArray(subsection.items)) {
+            subsection.items.forEach(item => {
+              if (item.isAvailable !== false) {
+                allItems.push(item)
+              }
+            })
+          }
+        })
+      }
+    })
+
+    const seen = new Set()
+    const uniqueItems = allItems.filter(item => {
+      const id = String(item.id || item._id || '')
+      if (seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+
+    let categoryFiltered = uniqueItems
+    if (selectedMenuCategory !== "all") {
+      categoryFiltered = uniqueItems.filter(item => {
+        const parentSection = restaurant.menuSections.find(section => {
+          if (isRecommendedSection(section)) return false
+          const hasDirect = section.items?.some(it => String(it.id) === String(item.id))
+          const hasSub = section.subsections?.some(sub => sub.items?.some(it => String(it.id) === String(item.id)))
+          return hasDirect || hasSub
+        })
+        if (!parentSection) return false
+        const sectionCategoryId = normalizeMenuCategoryId(parentSection.categoryId || getSectionDisplayName(parentSection))
+        return sectionCategoryId === selectedMenuCategory
+      })
+    }
+
+    const filtered = filterMenuItems(categoryFiltered)
+    return sortMenuItems(filtered)
+  }, [restaurant?.menuSections, hasActiveMenuFilters, filters, searchQuery, showOnlyUnder250, selectedMenuCategory])
+
   useEffect(() => {
     if (!hasActiveMenuFilters) return
 
@@ -2054,6 +2131,195 @@ function RestaurantDetailsContent() {
           </div>
         </div>
       </AnimatedPage>
+    )
+  }
+
+  const renderItemCard = (item, prefix = "direct") => {
+    const quantity = getDishTotalQuantity(item)
+    const isVeg = item.foodType === "Veg"
+
+    return (
+      <div
+        key={item.id}
+        ref={(node) => {
+          if (node) {
+            dishCardRefs.current[item.id] = node
+          } else {
+            delete dishCardRefs.current[item.id]
+          }
+        }}
+        className={`flex gap-4 p-4 border-b border-gray-100 last:border-none relative cursor-pointer transition-all duration-500 ${
+          highlightedDishId === item.id 
+            ? "bg-gradient-to-r from-pink-50/80 to-white dark:from-pink-950/20 dark:to-[#1a1a1a] border-l-4 border-l-[#FA0272] shadow-[0_20px_50px_-12px_rgba(250,2,114,0.5)] scale-[1.02] z-20 rounded-3xl" 
+            : ""
+        }`}
+        onClick={() => handleItemClick(item)}
+      >
+        {highlightedDishId === item.id && (
+          <div className="absolute -top-2 left-4 z-30">
+            <span className="bg-[#FA0272] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg animate-bounce uppercase tracking-wider">
+              Selected
+            </span>
+          </div>
+        )}
+        {/* Left Side - Details */}
+        <div className="flex-1 min-w-0">
+          {/* Veg Icon & Spicy Indicator */}
+          <div className="flex items-center gap-2 mb-1">
+            {isVeg ? (
+              <div className="w-4 h-4 border-2 flex items-center justify-center rounded-sm flex-shrink-0" style={{ borderColor: "#16a34a" }}>
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#16a34a" }}></div>
+              </div>
+            ) : (
+              <div className="w-4 h-4 border-2 border-red-600 flex items-center justify-center rounded-sm flex-shrink-0" style={{ borderColor: "#dc2626" }}>
+                <div className="w-2 h-2 bg-red-600 rounded-full" style={{ backgroundColor: "#dc2626" }}></div>
+              </div>
+            )}
+            {item.isSpicy && <span className="text-xs font-semibold text-red-500">Spicy</span>}
+          </div>
+
+          <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight">{item.name}</h3>
+
+          {/* Highly Reordered Progress Bar - Show if recommended */}
+          {isRecommendedItem(item) && (
+            <div className="flex items-center gap-2 mt-1">
+              <div className="h-1.5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div className="h-full bg-[#FA0272] w-3/4"></div>
+              </div>
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Highly reordered</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 mt-1">
+            <p className="font-semibold text-gray-900 dark:text-white">{getFoodPriceLabel(item)}</p>
+            {/* Preparation Time - Show if available */}
+            {item.preparationTime && String(item.preparationTime).trim() && (
+              <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
+                <Clock size={12} className="text-gray-500" />
+                <span>{String(item.preparationTime).trim()}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Description - Show if available */}
+          {item.description && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{item.description}</p>
+          )}
+
+          {/* Mobile-only action buttons */}
+          <div className="flex gap-4 mt-3 md:hidden">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleBookmarkClick(item)
+              }}
+              className={`p-1.5 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                isDishFavorite(item.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)
+                  ? "border-red-500 text-red-500 bg-red-50 dark:bg-red-900/20"
+                  : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400"
+              }`}
+            >
+              <Bookmark
+                size={18}
+                className={isDishFavorite(item.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id) ? "fill-red-500" : ""}
+              />
+            </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleShareClick(item)
+              }}
+              className="p-1.5 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              <Share2 size={18} />
+            </button>
+          </div>
+
+        </div>
+
+        {/* Right Side - Image and Add Button */}
+        <div className={`relative w-32 flex-shrink-0 ${item.image ? "h-32" : "h-auto flex items-end justify-center"}`}>
+          {item.image ? (
+            <img
+              src={item.image}
+              alt={item.name}
+              className="w-full h-full object-cover rounded-2xl shadow-sm"
+              onError={(e) => {
+                if (e.currentTarget.src !== FOOD_IMAGE_FALLBACK) {
+                  e.currentTarget.src = FOOD_IMAGE_FALLBACK
+                }
+              }}
+            />
+          ) : null}
+          {quantity > 0 ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className={`${item.image ? "absolute -bottom-2 left-1/2 -translate-x-1/2" : "relative"} bg-white border font-bold px-4 py-1.5 rounded-lg shadow-md flex items-center gap-1 ${
+                shouldShowGrayscale
+                  ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
+                  : 'border-[#EB590E] text-[#EB590E] hover:bg-orange-50'
+              }`}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (!shouldShowGrayscale) {
+                    updateItemQuantity(item, Math.max(0, quantity - 1), e)
+                  }
+                }}
+                disabled={shouldShowGrayscale}
+                className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-[#EB590E] hover:text-[#D94F0C]'}
+              >
+                <Minus size={14} />
+              </button>
+              <span className={`mx-2 text-sm ${shouldShowGrayscale ? 'text-gray-400' : ''}`}>{quantity}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (!shouldShowGrayscale) {
+                    if (hasFoodVariants(item)) {
+                      setSelectedItem(item)
+                      setShowItemDetail(true)
+                    } else {
+                      updateItemQuantity(item, quantity + 1, e)
+                    }
+                  }
+                }}
+                disabled={shouldShowGrayscale}
+                className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-[#EB590E] hover:text-[#D94F0C]'}
+              >
+                <Plus size={14} className="stroke-[3px]" />
+              </button>
+            </motion.div>
+          ) : (
+            <motion.button
+              layoutId={`add-button-${prefix}-${item.id}`}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (!shouldShowGrayscale) {
+                  setSelectedItem(item)
+                  setShowItemDetail(true)
+                }
+              }}
+              disabled={shouldShowGrayscale}
+              className={`${item.image ? "absolute -bottom-2 left-1/2 -translate-x-1/2" : "relative"} bg-white border font-bold px-6 py-1.5 rounded-lg shadow-md flex items-center gap-1 transition-colors ${
+                shouldShowGrayscale
+                  ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
+                  : 'border-[#EB590E] text-[#EB590E] hover:bg-orange-50'
+              }`}
+            >
+              ADD <Plus size={14} className="stroke-[3px]" />
+            </motion.button>
+          )}
+        </div>
+      </div>
     )
   }
 
@@ -2332,537 +2598,177 @@ function RestaurantDetailsContent() {
         {/* Menu Items Section */}
         {restaurant?.menuSections && Array.isArray(restaurant.menuSections) && restaurant.menuSections.length > 0 && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-6 sm:py-8 md:py-10 lg:py-12 space-y-6 md:space-y-8 lg:space-y-10">
-            {filteredSections.length === 0 && hasActiveMenuFilters && (
-              <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] px-5 py-8 text-center">
-                <p className="text-sm md:text-base font-medium text-gray-700 dark:text-gray-300">
-                  No dishes match the selected filters.
-                </p>
-                <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-2">
-                  Clear filters or try a different combination.
-                </p>
-              </div>
-            )}
-            {filteredSections.length === 0 && (
-              <div className="rounded-3xl border border-dashed border-gray-300 bg-white px-6 py-10 text-center text-sm text-gray-500">
-                No dishes match the current filters.
-              </div>
-            )}
-
-            {filteredSections.map(({ section, originalIndex }, sectionIndex) => {
-              // Handle section name - check for valid non-empty string
-              const isRecommended = isRecommendedSection(section)
-              const sectionId = `menu-section-${originalIndex}`
-              const sectionItems = toRenderableArray(section?.items)
-              const sectionSubsections = toRenderableArray(section?.subsections)
-
-              const isExpanded = expandedSections.has(originalIndex)
-
-              return (
-                <div key={sectionIndex} id={sectionId} className="space-y-1 scroll-mt-20">
-                  {/* Section Header */}
-                  {isRecommended && (
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                        Recommended for you
-                      </h2>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setExpandedSections(prev => {
-                            const newSet = new Set(prev)
-                            if (newSet.has(originalIndex)) {
-                              newSet.delete(originalIndex)
-                            } else {
-                              newSet.add(originalIndex)
-                            }
-                            return newSet
-                          })
-                        }}
-                        className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
-                      >
-                        <ChevronDown
-                          className={`h-5 w-5 text-gray-600 dark:text-gray-400 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'
-                            }`}
-                        />
-                      </button>
-                    </div>
-                  )}
-                  {!isRecommended && (
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                          {(section?.name && typeof section.name === 'string' && section.name.trim())
-                            ? section.name.trim()
-                            : (section?.title && typeof section.title === 'string' && section.title.trim())
-                              ? section.title.trim()
-                              : "Unnamed Section"}
-                        </h2>
-                        {section.subtitle && (
-                          <button className="text-sm text-blue-600 dark:text-blue-400 underline">
-                            {section.subtitle}
-                          </button>
-                        )}
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setExpandedSections(prev => {
-                            const newSet = new Set(prev)
-                            if (newSet.has(originalIndex)) {
-                              newSet.delete(originalIndex)
-                            } else {
-                              newSet.add(originalIndex)
-                            }
-                            return newSet
-                          })
-                        }}
-                        className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
-                      >
-                        <ChevronDown
-                          className={`h-5 w-5 text-gray-600 dark:text-gray-400 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'
-                            }`}
-                        />
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Direct Items */}
-                  {isExpanded && isRecommended && !loadingMenuItems && sectionItems.length === 0 && (
-                    <div className="text-center py-8">
-                      <p className="text-gray-500 dark:text-gray-400 text-sm md:text-base">
-                        No dish recommended
-                      </p>
-                    </div>
-                  )}
-                  {isExpanded && loadingMenuItems && (
-                    <div className="space-y-3 px-1 py-2 animate-pulse">
-                      <div className="h-24 rounded-2xl bg-gray-100 dark:bg-gray-800" />
-                      <div className="h-24 rounded-2xl bg-gray-100 dark:bg-gray-800" />
-                    </div>
-                  )}
-                  {isExpanded && sectionItems.length > 0 && (
-                    <div className="space-y-0">
-                      {sectionItems.map((item) => {
-                        const quantity = getDishQuantity(item)
-                        // Determine veg/non-veg based on foodType
-                        const isVeg = item.foodType === "Veg"
-
-                        // Debug: Log preparationTime for troubleshooting
-                        if (item.preparationTime) {
-                          debugLog(`[FRONTEND] Item "${item.name}" preparationTime:`, item.preparationTime, 'Type:', typeof item.preparationTime)
-                        }
-
-                        return (
-                          <div
-                            key={item.id}
-                            ref={(node) => {
-                              if (node) {
-                                dishCardRefs.current[item.id] = node
-                              } else {
-                                delete dishCardRefs.current[item.id]
-                              }
-                            }}
-                            className={`flex gap-4 p-4 border-b border-gray-100 last:border-none relative cursor-pointer transition-all duration-500 ${highlightedDishId === item.id 
-                                ? "bg-gradient-to-r from-pink-50/80 to-white dark:from-pink-950/20 dark:to-[#1a1a1a] border-l-4 border-l-[#FA0272] shadow-[0_20px_50px_-12px_rgba(250,2,114,0.5)] scale-[1.02] z-20 rounded-3xl" 
-                                : ""
-                            }`}
-                            onClick={() => handleItemClick(item)}
-                          >
-                            {highlightedDishId === item.id && (
-                              <div className="absolute -top-2 left-4 z-30">
-                                <span className="bg-[#FA0272] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg animate-bounce uppercase tracking-wider">
-                                  Selected
-                                </span>
-                              </div>
-                            )}
-                            {/* Left Side - Details */}
-                            <div className="flex-1 min-w-0">
-                              {/* Veg Icon & Spicy Indicator */}
-                              <div className="flex items-center gap-2 mb-1">
-                                {isVeg ? (
-                                  <div className="w-4 h-4 border-2 flex items-center justify-center rounded-sm flex-shrink-0" style={{ borderColor: "#16a34a" }}>
-                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#16a34a" }}></div>
-                                  </div>
-                                ) : (
-                                  <div className="w-4 h-4 border-2 border-red-600 flex items-center justify-center rounded-sm flex-shrink-0" style={{ borderColor: "#dc2626" }}>
-                                    <div className="w-2 h-2 bg-red-600 rounded-full" style={{ backgroundColor: "#dc2626" }}></div>
-                                  </div>
-                                )}
-                                {item.isSpicy && <span className="text-xs font-semibold text-red-500">Spicy</span>}
-                              </div>
-
-                              <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight">{item.name}</h3>
-
-                              {/* Highly Reordered Progress Bar - Show if recommended */}
-                              {isRecommendedItem(item) && (
-                                <div className="flex items-center gap-2 mt-1">
-                                  <div className="h-1.5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-[#FA0272] w-3/4"></div>
-                                  </div>
-                                  <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Highly reordered</span>
-                                </div>
-                              )}
-
-                              <div className="flex items-center gap-3 mt-1">
-                                <p className="font-semibold text-gray-900 dark:text-white">{getFoodPriceLabel(item)}</p>
-                                {/* Preparation Time - Show if available */}
-                                {item.preparationTime && String(item.preparationTime).trim() && (
-                                  <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
-                                    <Clock size={12} className="text-gray-500" />
-                                    <span>{String(item.preparationTime).trim()}</span>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Description - Show if available */}
-                              {item.description && (
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{item.description}</p>
-                              )}
-
-                              {/* Mobile-only action buttons */}
-                              <div className="flex gap-4 mt-3 md:hidden">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    handleBookmarkClick(item)
-                                  }}
-                                  className={`p-1.5 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${isDishFavorite(item.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)
-                                    ? "border-red-500 text-red-500 bg-red-50 dark:bg-red-900/20"
-                                    : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400"
-                                    }`}
-                                >
-                                  <Bookmark
-                                    size={18}
-                                    className={isDishFavorite(item.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id) ? "fill-red-500" : ""}
-                                  />
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    handleShareClick(item)
-                                  }}
-                                  className="p-1.5 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                                >
-                                  <Share2 size={18} />
-                                </button>
-                              </div>
-
-                            </div>
-
-                            {/* Right Side - Image and Add Button */}
-                            <div className={`relative w-32 flex-shrink-0 ${item.image ? "h-32" : "h-auto flex items-end justify-center"}`}>
-                              {item.image ? (
-                                <img
-                                  src={item.image}
-                                  alt={item.name}
-                                  className="w-full h-full object-cover rounded-2xl shadow-sm"
-                                  onError={(e) => {
-                                    if (e.currentTarget.src !== FOOD_IMAGE_FALLBACK) {
-                                      e.currentTarget.src = FOOD_IMAGE_FALLBACK
-                                    }
-                                  }}
-                                />
-                              ) : null}
-                              {quantity > 0 ? (
-                                <motion.div
-                                  initial={{ opacity: 0, scale: 0.8 }}
-                                  animate={{ opacity: 1, scale: 1 }}
-                                  className={`${item.image ? "absolute -bottom-2 left-1/2 -translate-x-1/2" : "relative"} bg-white border font-bold px-4 py-1.5 rounded-lg shadow-md flex items-center gap-1 ${shouldShowGrayscale
-                                    ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
-                                    : 'border-[#EB590E] text-[#EB590E] hover:bg-orange-50'
-                                    }`}
-                                >
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      if (!shouldShowGrayscale) {
-                                        updateItemQuantity(item, Math.max(0, quantity - 1), e)
-                                      }
-                                    }}
-                                    disabled={shouldShowGrayscale}
-                                    className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-[#EB590E] hover:text-[#D94F0C]'}
-                                  >
-                                    <Minus size={14} />
-                                  </button>
-                                  <span className={`mx-2 text-sm ${shouldShowGrayscale ? 'text-gray-400' : ''}`}>{quantity}</span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      if (!shouldShowGrayscale) {
-                                        updateItemQuantity(item, quantity + 1, e)
-                                      }
-                                    }}
-                                    disabled={shouldShowGrayscale}
-                                    className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-[#EB590E] hover:text-[#D94F0C]'}
-                                  >
-                                    <Plus size={14} className="stroke-[3px]" />
-                                  </button>
-                                </motion.div>
-                              ) : (
-                                <motion.button
-                                  layoutId={`add-button-${item.id}`}
-                                  initial={{ opacity: 0, scale: 0.9 }}
-                                  animate={{ opacity: 1, scale: 1 }}
-                                  transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    if (!shouldShowGrayscale) {
-                                      updateItemQuantity(item, 1, e)
-                                    }
-                                  }}
-                                  disabled={shouldShowGrayscale}
-                                  className={`${item.image ? "absolute -bottom-2 left-1/2 -translate-x-1/2" : "relative"} bg-white border font-bold px-6 py-1.5 rounded-lg shadow-md flex items-center gap-1 transition-colors ${shouldShowGrayscale
-                                    ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
-                                    : 'border-[#EB590E] text-[#EB590E] hover:bg-orange-50'
-                                    }`}
-                                >
-                                  ADD <Plus size={14} className="stroke-[3px]" />
-                                </motion.button>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  {/* Subsections */}
-                  {isExpanded && sectionSubsections.length > 0 && (
-                    <div className="space-y-4">
-                      {sectionSubsections.map((subsection, subIndex) => {
-                        const subsectionKey = `${originalIndex}-${subIndex}`
-                        const isSubsectionExpanded = expandedSections.has(subsectionKey)
-                        const subsectionItems = toRenderableArray(subsection?.items)
-
-                        return (
-                          <div key={subIndex} className="space-y-4">
-                            {/* Subsection Header */}
-                            <div className="flex items-center justify-between">
-                              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                                {subsection?.name || subsection?.title || "Subsection"}
-                              </h3>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setExpandedSections(prev => {
-                                    const newSet = new Set(prev)
-                                    if (newSet.has(subsectionKey)) {
-                                      newSet.delete(subsectionKey)
-                                    } else {
-                                      newSet.add(subsectionKey)
-                                    }
-                                    return newSet
-                                  })
-                                }}
-                                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
-                              >
-                                <ChevronDown
-                                  className={`h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${isSubsectionExpanded ? '' : '-rotate-90'
-                                    }`}
-                                />
-                              </button>
-                            </div>
-
-                            {/* Subsection Items */}
-                            {isSubsectionExpanded && subsectionItems.length > 0 && (
-                              <div className="space-y-0">
-                                {subsectionItems.map((item) => {
-                                  const quantity = getDishQuantity(item)
-                                  // Determine veg/non-veg based on foodType
-                                  const isVeg = item.foodType === "Veg"
-
-                                  // Debug: Log preparationTime for troubleshooting
-                                  if (item.preparationTime) {
-                                    debugLog(`[FRONTEND] Subsection item "${item.name}" preparationTime:`, item.preparationTime)
-                                  }
-
-                                  return (
-                                    <div
-                                      key={item.id}
-                                      ref={(node) => {
-                                        if (node) {
-                                          dishCardRefs.current[item.id] = node
-                                        } else {
-                                          delete dishCardRefs.current[item.id]
-                                        }
-                                      }}
-                                      className={`flex gap-4 p-4 border-b border-gray-100 last:border-none relative cursor-pointer transition-all duration-500 ${highlightedDishId === item.id 
-                                        ? "bg-gradient-to-r from-pink-50/80 to-white dark:from-pink-950/20 dark:to-[#1a1a1a] border-l-4 border-l-[#FA0272] shadow-[0_20px_50px_-12px_rgba(250,2,114,0.5)] scale-[1.02] z-20 rounded-3xl" 
-                                        : ""
-                                    }`}
-                                      onClick={() => handleItemClick(item)}
-                                    >
-                                      {highlightedDishId === item.id && (
-                                        <div className="absolute -top-2 left-4 z-30">
-                                          <span className="bg-[#FA0272] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg animate-bounce uppercase tracking-wider">
-                                            Selected
-                                          </span>
-                                        </div>
-                                      )}
-                                      {/* Left Side - Details */}
-                                      <div className="flex-1 min-w-0">
-                                        {/* Veg Icon & Spicy Indicator */}
-                                        <div className="flex items-center gap-2 mb-1">
-                                          {isVeg ? (
-                                            <div className="w-4 h-4 border-2 flex items-center justify-center rounded-sm flex-shrink-0" style={{ borderColor: "#16a34a" }}>
-                                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#16a34a" }}></div>
-                                            </div>
-                                          ) : (
-                                            <div className="w-4 h-4 border-2 border-red-600 flex items-center justify-center rounded-sm flex-shrink-0" style={{ borderColor: "#dc2626" }}>
-                                              <div className="w-2 h-2 bg-red-600 rounded-full" style={{ backgroundColor: "#dc2626" }}></div>
-                                            </div>
-                                          )}
-                                          {item.isSpicy && <span className="text-xs font-semibold text-red-500">Spicy</span>}
-                                        </div>
-
-                                        <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight">{item.name}</h3>
-
-                                        {/* Highly Reordered Progress Bar - Show if recommended */}
-                                        {isRecommendedItem(item) && (
-                                          <div className="flex items-center gap-2 mt-1">
-                                            <div className="h-1.5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                              <div className="h-full bg-[#EB590E] w-3/4"></div>
-                                            </div>
-                                            <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Highly reordered</span>
-                                          </div>
-                                        )}
-
-                                        <div className="flex items-center gap-3 mt-1">
-                                          <p className="font-semibold text-gray-900 dark:text-white">{getFoodPriceLabel(item)}</p>
-                                          {/* Preparation Time - Show if available */}
-                                          {item.preparationTime && String(item.preparationTime).trim() && (
-                                            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
-                                              <Clock size={12} className="text-gray-500" />
-                                              <span>{String(item.preparationTime).trim()}</span>
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* Description - Show if available */}
-                                        {item.description && (
-                                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{item.description}</p>
-                                        )}
-
-                                        {/* Mobile-only action buttons */}
-                                        <div className="flex gap-4 mt-3 md:hidden">
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.preventDefault()
-                                              e.stopPropagation()
-                                              handleBookmarkClick(item)
-                                            }}
-                                            className={`p-1.5 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${isDishFavorite(item.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)
-                                              ? "border-red-500 text-red-500 bg-red-50 dark:bg-red-900/20"
-                                              : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400"
-                                              }`}
-                                          >
-                                            <Bookmark
-                                              size={18}
-                                              className={isDishFavorite(item.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id) ? "fill-red-500" : ""}
-                                            />
-                                          </button>
-                                          <button
-                                            onClick={(e) => {
-                                              e.preventDefault()
-                                              e.stopPropagation()
-                                              handleShareClick(item)
-                                            }}
-                                            className="p-1.5 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                                          >
-                                            <Share2 size={18} />
-                                          </button>
-                                        </div>
-
-                                      </div>
-
-                                      {/* Right Side - Image and Add Button */}
-                                      <div className={`relative w-32 flex-shrink-0 ${item.image ? "h-32" : "h-auto flex items-end justify-center"}`}>
-                                        {item.image ? (
-                                          <img
-                                            src={item.image}
-                                            alt={item.name}
-                                            className="w-full h-full object-cover rounded-2xl shadow-sm"
-                                            onError={(e) => {
-                                              if (e.currentTarget.src !== FOOD_IMAGE_FALLBACK) {
-                                                e.currentTarget.src = FOOD_IMAGE_FALLBACK
-                                              }
-                                            }}
-                                          />
-                                        ) : null}
-                                        {quantity > 0 ? (
-                                          <motion.div
-                                            initial={{ opacity: 0, scale: 0.8 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            className={`${item.image ? "absolute -bottom-2 left-1/2 -translate-x-1/2" : "relative"} bg-white border font-bold px-4 py-1.5 rounded-lg shadow-md flex items-center gap-1 ${shouldShowGrayscale
-                                              ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
-                                              : 'border-[#EB590E] text-[#EB590E] hover:bg-orange-50'
-                                              }`}
-                                          >
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation()
-                                                if (!shouldShowGrayscale) {
-                                                  updateItemQuantity(item, Math.max(0, quantity - 1), e)
-                                                }
-                                              }}
-                                              disabled={shouldShowGrayscale}
-                                              className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-[#EB590E] hover:text-[#D94F0C]'}
-                                            >
-                                              <Minus size={14} />
-                                            </button>
-                                            <span className={`mx-2 text-sm ${shouldShowGrayscale ? 'text-gray-400' : ''}`}>{quantity}</span>
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation()
-                                                if (!shouldShowGrayscale) {
-                                                  updateItemQuantity(item, quantity + 1, e)
-                                                }
-                                              }}
-                                              disabled={shouldShowGrayscale}
-                                              className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-[#EB590E] hover:text-[#D94F0C]'}
-                                            >
-                                              <Plus size={14} className="stroke-[3px]" />
-                                            </button>
-                                          </motion.div>
-                                        ) : (
-                                          <motion.button
-                                            layoutId={`add-button-sub-${item.id}`}
-                                            initial={{ opacity: 0, scale: 0.9 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              if (!shouldShowGrayscale) {
-                                                updateItemQuantity(item, 1, e)
-                                              }
-                                            }}
-                                            disabled={shouldShowGrayscale}
-                                            className={`${item.image ? "absolute -bottom-2 left-1/2 -translate-x-1/2" : "relative"} bg-white border font-bold px-6 py-1.5 rounded-lg shadow-md flex items-center gap-1 transition-colors ${shouldShowGrayscale
-                                              ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
-                                              : 'border-[#EB590E] text-[#EB590E] hover:bg-orange-50'
-                                              }`}
-                                          >
-                                            ADD <Plus size={14} className="stroke-[3px]" />
-                                          </motion.button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+            {hasActiveMenuFilters ? (
+              // Flat View when filters/sorting is active
+              flatFilteredItems.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] px-5 py-8 text-center">
+                  <p className="text-sm md:text-base font-medium text-gray-700 dark:text-gray-300">
+                    No dishes match the selected filters.
+                  </p>
+                  <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-2">
+                    Clear filters or try a different combination.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-0">
+                  {flatFilteredItems.map((item) => renderItemCard(item, "flat"))}
                 </div>
               )
-            })}
+            ) : (
+              // Original grouped categories view
+              <>
+                {filteredSections.length === 0 && (
+                  <div className="rounded-3xl border border-dashed border-gray-300 bg-white px-6 py-10 text-center text-sm text-gray-500">
+                    No dishes match the current filters.
+                  </div>
+                )}
+
+                {filteredSections.map(({ section, originalIndex }, sectionIndex) => {
+                  const isRecommended = isRecommendedSection(section)
+                  const sectionId = `menu-section-${originalIndex}`
+                  const sectionItems = toRenderableArray(section?.items)
+                  const sectionSubsections = toRenderableArray(section?.subsections)
+                  const isExpanded = expandedSections.has(originalIndex)
+
+                  return (
+                    <div key={sectionIndex} id={sectionId} className="space-y-1 scroll-mt-20">
+                      {/* Section Header */}
+                      {isRecommended && (
+                        <div className="flex items-center justify-between">
+                          <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                            Recommended for you
+                          </h2>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setExpandedSections(prev => {
+                                const newSet = new Set(prev)
+                                if (newSet.has(originalIndex)) {
+                                  newSet.delete(originalIndex)
+                                } else {
+                                  newSet.add(originalIndex)
+                                }
+                                return newSet
+                              })
+                            }}
+                            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                          >
+                            <ChevronDown
+                              className={`h-5 w-5 text-gray-600 dark:text-gray-400 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`}
+                            />
+                          </button>
+                        </div>
+                      )}
+                      {!isRecommended && (
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                              {(section?.name && typeof section.name === 'string' && section.name.trim())
+                                ? section.name.trim()
+                                : (section?.title && typeof section.title === 'string' && section.title.trim())
+                                  ? section.title.trim()
+                                  : "Unnamed Section"}
+                            </h2>
+                            {section.subtitle && (
+                              <button className="text-sm text-blue-600 dark:text-blue-400 underline">
+                                {section.subtitle}
+                              </button>
+                            )}
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setExpandedSections(prev => {
+                                const newSet = new Set(prev)
+                                if (newSet.has(originalIndex)) {
+                                  newSet.delete(originalIndex)
+                                } else {
+                                  newSet.add(originalIndex)
+                                }
+                                return newSet
+                              })
+                            }}
+                            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                          >
+                            <ChevronDown
+                              className={`h-5 w-5 text-gray-600 dark:text-gray-400 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`}
+                            />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Direct Items */}
+                      {isExpanded && isRecommended && !loadingMenuItems && sectionItems.length === 0 && (
+                        <div className="text-center py-8">
+                          <p className="text-gray-500 dark:text-gray-400 text-sm md:text-base">
+                            No dish recommended
+                          </p>
+                        </div>
+                      )}
+                      {isExpanded && loadingMenuItems && (
+                        <div className="space-y-3 px-1 py-2 animate-pulse">
+                          <div className="h-24 rounded-2xl bg-gray-100 dark:bg-gray-800" />
+                          <div className="h-24 rounded-2xl bg-gray-100 dark:bg-gray-800" />
+                        </div>
+                      )}
+                      {isExpanded && sectionItems.length > 0 && (
+                        <div className="space-y-0">
+                          {sectionItems.map((item) => renderItemCard(item, "direct"))}
+                        </div>
+                      )}
+
+                      {/* Subsections */}
+                      {isExpanded && sectionSubsections.length > 0 && (
+                        <div className="space-y-4">
+                          {sectionSubsections.map((subsection, subIndex) => {
+                            const subsectionKey = `${originalIndex}-${subIndex}`
+                            const isSubsectionExpanded = expandedSections.has(subsectionKey)
+                            const subsectionItems = toRenderableArray(subsection?.items)
+
+                            return (
+                              <div key={subIndex} className="space-y-4">
+                                {/* Subsection Header */}
+                                <div className="flex items-center justify-between">
+                                  <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                                    {subsection?.name || subsection?.title || "Subsection"}
+                                  </h3>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setExpandedSections(prev => {
+                                        const newSet = new Set(prev)
+                                        if (newSet.has(subsectionKey)) {
+                                          newSet.delete(subsectionKey)
+                                        } else {
+                                          newSet.add(subsectionKey)
+                                        }
+                                        return newSet
+                                      })
+                                    }}
+                                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                                  >
+                                    <ChevronDown
+                                      className={`h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${isSubsectionExpanded ? '' : '-rotate-90'}`}
+                                    />
+                                  </button>
+                                </div>
+
+                                {/* Subsection Items */}
+                                {isSubsectionExpanded && subsectionItems.length > 0 && (
+                                  <div className="space-y-0">
+                                    {subsectionItems.map((item) => renderItemCard(item, "sub"))}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </>
+            )}
           </div>
         )}
       </div>
@@ -3070,31 +2976,31 @@ function RestaurantDetailsContent() {
                       </div>
                     </div>
 
-                    {/* Veg/Non-veg preference */}
-                    <div className="space-y-2">
-                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Veg/Non-veg preference:</h3>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() =>
-                            setFilters((prev) => ({
-                              ...prev,
-                              vegNonVeg: prev.vegNonVeg === "veg" ? null : "veg",
-                            }))
-                          }
-                          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all flex-1 ${filters.vegNonVeg === "veg"
-                            ? ""
-                            : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
-                            }`}
-                          style={filters.vegNonVeg === "veg" ? {
-                            borderColor: "#16a34a",
-                            backgroundColor: "#f0fdf4",
-                            color: "#15803d",
-                          } : undefined}
-                        >
-                          <div className="h-4 w-4 rounded-full" style={{ backgroundColor: "#16a34a" }} />
-                          <span className="font-medium">Veg</span>
-                        </button>
-                        {!vegMode && (
+                    {/* Veg/Non-veg preference — hidden when vegMode is ON (it already filters globally) */}
+                    {!vegMode && (
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Veg/Non-veg preference:</h3>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() =>
+                              setFilters((prev) => ({
+                                ...prev,
+                                vegNonVeg: prev.vegNonVeg === "veg" ? null : "veg",
+                              }))
+                            }
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all flex-1 ${filters.vegNonVeg === "veg"
+                              ? ""
+                              : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
+                              }`}
+                            style={filters.vegNonVeg === "veg" ? {
+                              borderColor: "#16a34a",
+                              backgroundColor: "#f0fdf4",
+                              color: "#15803d",
+                            } : undefined}
+                          >
+                            <div className="h-4 w-4 rounded-full" style={{ backgroundColor: "#16a34a" }} />
+                            <span className="font-medium">Veg</span>
+                          </button>
                           <button
                             onClick={() =>
                               setFilters((prev) => ({
@@ -3115,9 +3021,9 @@ function RestaurantDetailsContent() {
                             <div className="h-4 w-4 rounded-full bg-red-600 dark:bg-red-500" style={{ backgroundColor: "#dc2626" }} />
                             <span className="font-medium">Non-veg</span>
                           </button>
-                        )}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Top picks */}
                     <div className="space-y-2">
@@ -3529,7 +3435,11 @@ function RestaurantDetailsContent() {
                             <button
                               key={variant.id}
                               type="button"
-                              onClick={() => setSelectedVariantId(variant.id)}
+                              onClick={() => {
+                                setSelectedVariantId(variant.id)
+                                const cartQty = getDishQuantity(selectedItem, variant.id)
+                                setModalQuantity(cartQty > 0 ? cartQty : 1)
+                              }}
                               className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
                                 String(selectedVariantId || "") === String(variant.id)
                                   ? "border-red-500 bg-red-50 text-red-600 dark:border-red-400 dark:bg-red-900/30 dark:text-red-200"
@@ -3555,15 +3465,10 @@ function RestaurantDetailsContent() {
                         <button
                           onClick={(e) => {
                             if (!shouldShowGrayscale) {
-                              updateItemQuantity(
-                                selectedItem,
-                                Math.max(0, getDishQuantity(selectedItem, selectedVariantId) - 1),
-                                e,
-                                getVariantForDish(selectedItem, selectedVariantId),
-                              )
+                              setModalQuantity((prev) => Math.max(1, prev - 1))
                             }
                           }}
-                          disabled={getDishQuantity(selectedItem, selectedVariantId) === 0 || shouldShowGrayscale}
+                          disabled={modalQuantity <= 1 || shouldShowGrayscale}
                           className={`${shouldShowGrayscale
                             ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
                             : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed'
@@ -3575,17 +3480,12 @@ function RestaurantDetailsContent() {
                           ? 'text-gray-400 dark:text-gray-600'
                           : 'text-gray-900 dark:text-white'
                           }`}>
-                          {getDishQuantity(selectedItem, selectedVariantId)}
+                          {modalQuantity}
                         </span>
                         <button
                           onClick={(e) => {
                             if (!shouldShowGrayscale) {
-                              updateItemQuantity(
-                                selectedItem,
-                                getDishQuantity(selectedItem, selectedVariantId) + 1,
-                                e,
-                                getVariantForDish(selectedItem, selectedVariantId),
-                              )
+                              setModalQuantity((prev) => prev + 1)
                             }
                           }}
                           disabled={shouldShowGrayscale}
@@ -3608,7 +3508,7 @@ function RestaurantDetailsContent() {
                           if (!shouldShowGrayscale) {
                             updateItemQuantity(
                               selectedItem,
-                              getDishQuantity(selectedItem, selectedVariantId) + 1,
+                              modalQuantity,
                               e,
                               getVariantForDish(selectedItem, selectedVariantId),
                             )
@@ -3626,8 +3526,8 @@ function RestaurantDetailsContent() {
                           )}
                           <span className="text-base font-bold">
                             {hasFoodVariants(selectedItem)
-                              ? `${getVariantForDish(selectedItem, selectedVariantId)?.name || "Default"} · ${RUPEE_SYMBOL}${Math.round(getVariantForDish(selectedItem, selectedVariantId)?.price || selectedItem.price)}`
-                              : `${RUPEE_SYMBOL}${Math.round(selectedItem.price)}`}
+                              ? `${getVariantForDish(selectedItem, selectedVariantId)?.name || "Default"} · ${RUPEE_SYMBOL}${Math.round((getVariantForDish(selectedItem, selectedVariantId)?.price || selectedItem.price) * modalQuantity)}`
+                              : `${RUPEE_SYMBOL}${Math.round(selectedItem.price * modalQuantity)}`}
                           </span>
                         </div>
                       </Button>

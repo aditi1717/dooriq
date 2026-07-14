@@ -3103,7 +3103,7 @@ export async function getFoods(query) {
     const limit = Math.min(Math.max(parseInt(query.limit, 10) || 100, 1), 1000);
     const page = Math.max(parseInt(query.page, 10) || 1, 1);
     const skip = (page - 1) * limit;
-    const filter = {};
+    const filter = { approvalStatus: 'approved' };
 
     if (query.restaurantId && mongoose.Types.ObjectId.isValid(query.restaurantId)) {
         filter.restaurantId = query.restaurantId;

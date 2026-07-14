@@ -34,7 +34,7 @@ const RedirectToFood = () => {
   // We safely replace the exact current pathname with a /food prefixed pathname
   // This effectively catches programmatic navigation to absolute paths like '/restaurant/login'
   // and turns them into '/food/restaurant/login'
-  return <Navigate to={`/food${location.pathname}${location.search}`} replace />;
+  return <Navigate to={`/food${location.pathname}${location.search}`} state={location.state} replace />;
 };
 
 const parseFeatureEnabled = (value, fallback = true) => {

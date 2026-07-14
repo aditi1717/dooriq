@@ -4,6 +4,7 @@ import { ProfileProvider } from "@food/context/ProfileContext"
 import LocationPrompt from "./LocationPrompt"
 import { CartProvider } from "@food/context/CartContext"
 import { OrdersProvider } from "@food/context/OrdersContext"
+import { WifiOff, RefreshCw } from "lucide-react"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -166,6 +167,37 @@ function LocationSelectorProvider({ children }) {
 
 export default function UserLayout() {
   const location = useLocation()
+  const [isOffline, setIsOffline] = useState(!navigator.onLine)
+  const [hasConnectionError, setHasConnectionError] = useState(false)
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false)
+      setHasConnectionError(false)
+    }
+    const handleOffline = () => setIsOffline(true)
+    const handleApiError = () => {
+      if (navigator.onLine) {
+        setHasConnectionError(true)
+      }
+    }
+
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+    window.addEventListener("apiNetworkError", handleApiError)
+
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+      window.removeEventListener("apiNetworkError", handleApiError)
+    }
+  }, [])
+
+  const handleRetry = () => {
+    setHasConnectionError(false)
+    setIsOffline(!navigator.onLine)
+    window.location.reload()
+  }
 
   useEffect(() => {
     // Reset scroll to top whenever location changes (pathname, search, or hash)
@@ -198,6 +230,40 @@ export default function UserLayout() {
     normalizedPath === "" // Handle empty string case for root relative to /food
 
   const isUnder250 = normalizedPath === "/under-250" || normalizedPath === "/user/under-250"
+
+  if (isOffline || hasConnectionError) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] dark:bg-[#09090b] flex flex-col items-center justify-center p-4 text-center font-sans">
+        <div className="relative mb-4">
+          <div className="absolute inset-0 rounded-full bg-rose-500/10 dark:bg-rose-500/5 blur-xl w-20 h-20 -translate-x-2 -translate-y-2" />
+          <div className="relative bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 p-5 rounded-full shadow-lg animate-bounce" style={{ animationDuration: '3s' }}>
+            <WifiOff className="w-10 h-10 text-rose-500 animate-pulse" />
+          </div>
+        </div>
+        
+        <h1 className="text-xl font-extrabold text-slate-800 dark:text-white tracking-tight mb-1.5">
+          {isOffline ? "No Internet Connection" : "Connection Timeout"}
+        </h1>
+        
+        <p className="text-slate-500 dark:text-zinc-400 text-xs max-w-xs mb-6 leading-relaxed">
+          {isOffline 
+            ? "Your device is not connected to the internet. Please check your connection."
+            : "We are having trouble connecting to our servers. Please try again."}
+        </p>
+        
+        <button
+          onClick={handleRetry}
+          className="flex items-center gap-1.5 text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all duration-200"
+          style={{
+            backgroundColor: "var(--module-theme-color, #2563EB)",
+          }}
+        >
+          <RefreshCw className="w-4 h-4" />
+          Try Again
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] transition-colors duration-200">
