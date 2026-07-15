@@ -193,27 +193,38 @@ const RestaurantImageCarousel = React.memo(
       [backendOrigin],
     );
 
+    const { vegMode } = useProfile();
     const images = useMemo(() => {
-      const hasRecommended = Array.isArray(restaurant.recommendedItems) && restaurant.recommendedItems.length > 0;
+      const list = [];
       
-      if (hasRecommended) {
-        return restaurant.recommendedItems
-          .filter(item => item && item.image)
-          .map(item => withCacheBuster(item.image));
+      // 1. Prepend the restaurant profile photo
+      const profilePhoto = restaurant.profileImage || restaurant.image || (Array.isArray(restaurant.images) && restaurant.images[0]);
+      if (profilePhoto && typeof profilePhoto === "string" && profilePhoto.trim()) {
+        list.push(withCacheBuster(profilePhoto.trim()));
       }
 
-      const sourceImages =
-        Array.isArray(restaurant.images) && restaurant.images.length > 0
-          ? restaurant.images
-          : [restaurant.image];
+      // 2. Append recommended dishes' photos
+      const hasRecommended = Array.isArray(restaurant.recommendedItems) && restaurant.recommendedItems.length > 0;
+      if (hasRecommended) {
+        let recItems = restaurant.recommendedItems.filter(item => item && item.image);
+        if (vegMode) {
+          recItems = recItems.filter(item => item.foodType === "Veg" || item.isVeg === true);
+        }
+        recItems.forEach(item => {
+          const resolved = withCacheBuster(item.image);
+          if (resolved && !list.includes(resolved)) {
+            list.push(resolved);
+          }
+        });
+      }
 
-      const validImages = sourceImages
-        .filter((img) => typeof img === "string")
-        .map((img) => img.trim())
-        .filter(Boolean);
+      // Fallback if list is empty
+      if (list.length === 0) {
+        list.push("/placeholder-restaurant.jpg");
+      }
 
-      return validImages.map((img) => withCacheBuster(img));
-    }, [restaurant.recommendedItems, restaurant.images, restaurant.image, withCacheBuster]);
+      return list;
+    }, [restaurant.profileImage, restaurant.image, restaurant.images, restaurant.recommendedItems, vegMode, withCacheBuster]);
     const [internalIndex, setInternalIndex] = useState(0);
     const currentIndex = externalIndex !== null ? externalIndex : internalIndex;
     
@@ -455,11 +466,16 @@ const RestaurantCard = React.memo(({
   BACKEND_ORIGIN,
   restaurantSlug: propRestaurantSlug,
 }) => {
+  const { vegMode } = useProfile();
   const [slideIndex, setSlideIndex] = useState(0);
   const [offerIndex, setOfferIndex] = useState(0);
   const validRecommendedItems = useMemo(() => {
-    return (restaurant.recommendedItems || []).filter(item => item && item.image);
-  }, [restaurant.recommendedItems]);
+    let items = (restaurant.recommendedItems || []).filter(item => item && item.image);
+    if (vegMode) {
+      items = items.filter(item => item.foodType === "Veg" || item.isVeg === true);
+    }
+    return items;
+  }, [restaurant.recommendedItems, vegMode]);
   const rotatingOffers = useMemo(() => {
     const summaries = Array.isArray(restaurant.activeOffers)
       ? restaurant.activeOffers
@@ -478,7 +494,7 @@ const RestaurantCard = React.memo(({
   const hasRecommended = validRecommendedItems.length > 0;
   const currentOffer = rotatingOffers[offerIndex] || null;
   
-  const currentDish = hasRecommended ? validRecommendedItems[slideIndex] : null;
+  const currentDish = (hasRecommended && slideIndex > 0) ? validRecommendedItems[slideIndex - 1] : null;
   const name = currentDish ? currentDish.name : restaurant.featuredDish;
   const price = currentDish ? currentDish.price : restaurant.featuredPrice;
   
@@ -543,7 +559,7 @@ const RestaurantCard = React.memo(({
             />
 
             {/* Recommended Dish Badge - Top Left */}
-            {hasRecommended && (
+            {currentDish && (
               <div className="absolute top-4 left-4 flex items-center z-10 transform transition-transform duration-300 group-hover:scale-105">
                 <div className="bg-black/70 backdrop-blur-lg text-white px-4 py-1.5 rounded-full text-[11px] font-medium tracking-tight flex items-center shadow-2xl border border-white/20 min-h-[28px] min-w-[100px] justify-center overflow-hidden">
                   <AnimatePresence mode="wait">
@@ -642,18 +658,20 @@ const RestaurantCard = React.memo(({
                         )}
                     </div>
                   </div>
-                  <div
-                    className={`flex-shrink-0 ${Number(restaurant.rating) > 0 ? "" : "bg-gray-400"} text-white px-3 py-1.5 rounded-2xl flex items-center gap-1.5 shadow-md transform transition-transform duration-300 group-hover:scale-110`}
-                    style={Number(restaurant.rating) > 0 ? {
-                      backgroundColor: "var(--module-theme-color, #FA0272)",
-                      boxShadow: "0 6px 14px rgba(var(--module-theme-rgb, 250,2,114), 0.30)",
-                    } : undefined}
-                  >
-                    <span className="text-sm lg:text-lg font-medium tracking-tight">
-                      {Number(restaurant.rating) > 0 ? Number(restaurant.rating).toFixed(1) : "NEW"}
-                    </span>
-                    {Number(restaurant.rating) > 0 && <Star className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 fill-white text-white" strokeWidth={0} />}
-                  </div>
+                  {Number(restaurant.totalRatings || restaurant.reviews || 0) > 0 && (
+                    <div
+                      className="flex-shrink-0 text-white px-3 py-1.5 rounded-2xl flex items-center gap-1.5 shadow-md transform transition-transform duration-300 group-hover:scale-110"
+                      style={{
+                        backgroundColor: "var(--module-theme-color, #FA0272)",
+                        boxShadow: "0 6px 14px rgba(var(--module-theme-rgb, 250,2,114), 0.30)",
+                      }}
+                    >
+                      <span className="text-sm lg:text-lg font-medium tracking-tight">
+                        {Number(restaurant.rating || 0).toFixed(1)}
+                      </span>
+                      <Star className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 fill-white text-white" strokeWidth={0} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Delivery Time & Distance */}
@@ -809,7 +827,7 @@ export default function Home() {
   const [loadingRealCategories, setLoadingRealCategories] = useState(true);
   const [menuCategories, setMenuCategories] = useState([]);
   const [loadingMenuCategories, setLoadingMenuCategories] = useState(false);
-  const [, setRestaurantDietMeta] = useState({});
+  const [restaurantDietMeta, setRestaurantDietMeta] = useState({});
   const [showAllCategoriesModal, setShowAllCategoriesModal] = useState(false);
   const [availabilityTick, setAvailabilityTick] = useState(Date.now());
   const RESTAURANTS_BATCH_SIZE = 9;
@@ -2493,10 +2511,18 @@ export default function Home() {
   const matchesVegMode = useCallback(
     (restaurant) => {
       if (!vegMode) return true;
-      if (vegModeOption === "all") return true;
-      return restaurant?.pureVegRestaurant === true;
+      if (vegModeOption === "pure-veg") {
+        return restaurant?.pureVegRestaurant === true;
+      }
+      const restId = restaurant?._id || restaurant?.id;
+      if (!restId) return true;
+      const diet = restaurantDietMeta[String(restId)];
+      if (diet) {
+        return diet.hasVeg === true;
+      }
+      return restaurant?.pureVegRestaurant === true || true;
     },
-    [vegMode, vegModeOption],
+    [vegMode, vegModeOption, restaurantDietMeta],
   );
 
     // Filter restaurants and foods based on active filters
@@ -3068,15 +3094,17 @@ export default function Home() {
                             className="h-24 sm:h-28 md:h-32"
                             roundedClass="rounded-t-[20px]"
                           />
-                          <div
-                            className={`absolute bottom-2 left-2 px-2 py-0.5 rounded-lg ${Number(restaurant.rating) > 0 ? "text-white font-medium" : "bg-gray-200/90 text-gray-600 font-medium"} text-[10px] shadow-lg border border-white/10`}
-                            style={Number(restaurant.rating) > 0 ? {
-                              backgroundColor: "var(--module-theme-color, #FA0272)",
-                              boxShadow: "0 4px 10px rgba(var(--module-theme-rgb, 250,2,114), 0.25)",
-                            } : undefined}
-                          >
-                            {Number(restaurant.rating) > 0 ? Number(restaurant.rating).toFixed(1) : "NEW"}
-                          </div>
+                          {Number(restaurant.totalRatings || restaurant.reviews || 0) > 0 && (
+                            <div
+                              className="absolute bottom-2 left-2 px-2 py-0.5 rounded-lg text-white font-medium text-[10px] shadow-lg border border-white/10"
+                              style={{
+                                backgroundColor: "var(--module-theme-color, #FA0272)",
+                                boxShadow: "0 4px 10px rgba(var(--module-theme-rgb, 250,2,114), 0.25)",
+                              }}
+                            >
+                              {Number(restaurant.rating || 0).toFixed(1)}
+                            </div>
+                          )}
                         </div>
                         <div className="p-2.5">
                           <p className="text-sm font-semibold text-gray-900 dark:text-white truncate tracking-tight">

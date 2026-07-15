@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Phone, User, AlertCircle, Loader2, UtensilsCrossed } from "lucide-react"
 import { restaurantAPI } from "@food/api"
+import { clearRestaurantSessionCache } from "@food/utils/auth"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@food/components/ui/card"
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
@@ -83,6 +84,7 @@ export default function RestaurantSignup() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    clearRestaurantSessionCache()
     setIsLoading(true)
     setApiError("")
 

@@ -770,10 +770,24 @@ export default function ItemDetailsPage() {
     setVariants((prev) => prev.filter((variant) => variant.localId !== localId))
   }
 
-  const handleDelete = () => {
-    // Delete logic here
-    debugLog("Deleting item:", id)
-    goBack()
+  const handleDelete = async () => {
+    if (!window.confirm("Are you sure you want to delete this item? This action cannot be undone.")) {
+      return
+    }
+    const itemId = String(itemData?.id || id || "")
+    if (!itemId) {
+      toast.error("Unable to identify item to delete")
+      return
+    }
+    try {
+      await restaurantAPI.deleteFood(itemId)
+      toast.success("Item deleted successfully")
+      window.dispatchEvent(new CustomEvent("foodsChanged"))
+      navigate("/food/restaurant/inventory", { replace: true })
+    } catch (error) {
+      debugError("Error deleting item:", error)
+      toast.error(error?.response?.data?.message || "Failed to delete item. Please try again.")
+    }
   }
 
   return (

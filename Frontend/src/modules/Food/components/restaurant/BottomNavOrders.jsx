@@ -27,46 +27,31 @@ function BottomNavOrders() {
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false)
 
   useEffect(() => {
-    const handleResize = () => {
-      const activeEl = document.activeElement
-      const isInputFocused = activeEl && (
-        activeEl.tagName === "INPUT" ||
-        activeEl.tagName === "TEXTAREA" ||
-        activeEl.hasAttribute("contenteditable")
-      )
-      const isHeightShrunk = (window.screen.height - window.innerHeight) > 150
-      setIsKeyboardOpen(!!(isInputFocused && isHeightShrunk))
-    }
-
     const handleFocusIn = (e) => {
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
-        setTimeout(() => {
-          setIsKeyboardOpen(true)
-        }, 100)
+      const tag = e.target.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || e.target.hasAttribute("contenteditable")) {
+        setIsKeyboardOpen(true)
       }
     }
 
-    const handleFocusOut = (e) => {
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
-        setTimeout(() => {
-          const activeEl = document.activeElement
-          const stillInput = activeEl && (
-            activeEl.tagName === "INPUT" ||
-            activeEl.tagName === "TEXTAREA"
-          )
-          if (!stillInput) {
-            setIsKeyboardOpen(false)
-          }
-        }, 100)
-      }
+    const handleFocusOut = () => {
+      setTimeout(() => {
+        const activeEl = document.activeElement
+        const isInputFocused = activeEl && (
+          activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.hasAttribute("contenteditable")
+        )
+        if (!isInputFocused) {
+          setIsKeyboardOpen(false)
+        }
+      }, 100)
     }
 
-    window.addEventListener("resize", handleResize)
     window.addEventListener("focusin", handleFocusIn)
     window.addEventListener("focusout", handleFocusOut)
     
     return () => {
-      window.removeEventListener("resize", handleResize)
       window.removeEventListener("focusin", handleFocusIn)
       window.removeEventListener("focusout", handleFocusOut)
     }

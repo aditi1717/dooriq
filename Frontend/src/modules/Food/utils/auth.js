@@ -178,6 +178,15 @@ export function clearRestaurantSessionCache() {
   ];
 
   keys.forEach((key) => localStorage.removeItem(key));
+
+  // Clear IndexedDB onboarding files if in browser to prevent cache leak
+  if (typeof window !== "undefined" && window.indexedDB) {
+    try {
+      window.indexedDB.deleteDatabase("onboarding-files");
+    } catch (e) {
+      console.warn("Failed to delete onboarding-files IndexedDB database:", e);
+    }
+  }
 }
 
 export function setRestaurantPendingPhone(phone) {

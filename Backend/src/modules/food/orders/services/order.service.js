@@ -50,6 +50,7 @@ import {
   buildDeliverySocketPayload,
   notifyRestaurantNewOrder,
   isStatusAdvance,
+  checkRestaurantOpenStatus,
 } from './order.helpers.js';
 
 
@@ -387,6 +388,12 @@ export async function createOrder(userId, dto) {
       throw new ValidationError("Restaurant not accepting orders");
     if (restaurant.isAcceptingOrders === false)
       throw new ValidationError("Restaurant not accepting orders");
+
+    const checkTime = dto.scheduledAt ? new Date(dto.scheduledAt) : new Date();
+    const openStatus = await checkRestaurantOpenStatus(restaurantId, checkTime);
+    if (!openStatus.isOpen) {
+      throw new ValidationError(openStatus.reason || "Restaurant is closed at the selected time");
+    }
 
     const settings = await getDispatchSettings();
     const dispatchMode = settings.dispatchMode;

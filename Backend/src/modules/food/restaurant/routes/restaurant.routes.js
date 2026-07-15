@@ -55,7 +55,8 @@ import {
 } from '../controllers/outletTimings.controller.js';
 import {
     createRestaurantFoodController,
-    updateRestaurantFoodController
+    updateRestaurantFoodController,
+    deleteRestaurantFoodController
 } from '../controllers/restaurantFood.controller.js';
 import {
     listAddonsController,
@@ -210,6 +211,10 @@ router.patch('/foods/:id', authMiddleware, requireRestaurant, async (req, res, n
     await invalidateCache('restaurant_menu:*');
     next();
 }, updateRestaurantFoodController);
+router.delete('/foods/:id', authMiddleware, requireRestaurant, async (req, res, next) => {
+    await invalidateCache('restaurant_menu:*');
+    next();
+}, deleteRestaurantFoodController);
 
 // Bulk Menu Upload
 router.get('/bulk-upload/template', authMiddleware, requireRestaurant, downloadBulkMenuTemplateController);

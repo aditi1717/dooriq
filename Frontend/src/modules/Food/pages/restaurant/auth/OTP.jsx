@@ -6,6 +6,7 @@ import { restaurantAPI } from "@food/api"
 import {
   setAuthData as setRestaurantAuthData,
   setRestaurantPendingPhone,
+  clearRestaurantSessionCache,
 } from "@food/utils/auth"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { motion, AnimatePresence } from "framer-motion"
@@ -170,6 +171,7 @@ export default function RestaurantOTP() {
       const normalizedPhone = data?.phone || phone
 
       if (needsRegistration) {
+        clearRestaurantSessionCache()
         setRestaurantPendingPhone(normalizedPhone)
         sessionStorage.removeItem("restaurantAuthData")
         sessionStorage.removeItem("restaurantLoginPhone")

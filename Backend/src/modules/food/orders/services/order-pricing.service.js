@@ -5,7 +5,7 @@ import { FoodFeeSettings } from '../../admin/models/feeSettings.model.js';
 import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FoodOfferUsage } from '../../admin/models/offerUsage.model.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
-import { haversineKm } from './order.helpers.js';
+import { haversineKm, checkRestaurantOpenStatus } from './order.helpers.js';
 
 export async function calculateOrderPricing(userId, dto) {
   const restaurant = await FoodRestaurant.findById(dto.restaurantId)
@@ -14,6 +14,12 @@ export async function calculateOrderPricing(userId, dto) {
   if (!restaurant) throw new ValidationError("Restaurant not found");
   if (restaurant.status !== "approved")
     throw new ValidationError("Restaurant not available");
+
+  const checkTime = dto.scheduledAt ? new Date(dto.scheduledAt) : new Date();
+  const openStatus = await checkRestaurantOpenStatus(dto.restaurantId, checkTime);
+  if (!openStatus.isOpen) {
+    throw new ValidationError(openStatus.reason || "Restaurant is closed at the selected time");
+  }
 
   const items = Array.isArray(dto.items) ? dto.items : [];
   const subtotal = items.reduce(

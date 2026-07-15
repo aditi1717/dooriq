@@ -3,6 +3,7 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { FoodDiningCategory } from '../models/diningCategory.model.js';
 import { FoodDiningRestaurant } from '../models/diningRestaurant.model.js';
+import { FoodItem } from '../../admin/models/food.model.js';
 
 const slugify = (value) =>
     String(value || '')
@@ -340,10 +341,28 @@ export async function listDiningRestaurantsPublic(query = {}) {
     const categoryValue = String(query.category || '').trim();
     const cityValue = String(query.city || '').trim();
 
+    // Only return restaurants that have at least one approved food item (and veg food if veg filter is active)
+    let activeRestaurantIds;
+    if (query.isVeg === 'true' || query.vegMode === 'true' || query.veg === 'true') {
+        activeRestaurantIds = await FoodItem.distinct('restaurantId', { 
+            approvalStatus: 'approved',
+            foodType: 'Veg',
+            isAvailable: true
+        });
+    } else {
+        activeRestaurantIds = await FoodItem.distinct('restaurantId', { 
+            approvalStatus: 'approved',
+            isAvailable: true
+        });
+    }
+    const activeObjIds = activeRestaurantIds.map(id => new mongoose.Types.ObjectId(id));
+    const activeIdsSet = new Set(activeRestaurantIds.map(id => id.toString()));
+
     // 1. Build the base filter for FoodRestaurant
     const restaurantFilter = {
         'diningSettings.isEnabled': true,
-        status: 'approved'
+        status: 'approved',
+        _id: { $in: activeObjIds }
     };
 
     // 2. Apply city filter if provided
@@ -366,7 +385,10 @@ export async function listDiningRestaurantsPublic(query = {}) {
         if (!category) {
             return [];
         }
-        restaurantFilter._id = { $in: category.restaurantIds || [] };
+        
+        const catRestIds = (category.restaurantIds || []).map(id => String(id));
+        const intersected = catRestIds.filter(id => activeIdsSet.has(id));
+        restaurantFilter._id = { $in: intersected.map(id => new mongoose.Types.ObjectId(id)) };
     }
 
     // 4. Fetch restaurants

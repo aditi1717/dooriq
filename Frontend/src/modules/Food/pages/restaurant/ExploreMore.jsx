@@ -497,6 +497,7 @@ export default function ExploreMore() {
 
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [logoutType, setLogoutType] = useState("single") // "single" or "all"
 
   const handleConfirmDelete = async () => {
     try {
@@ -1015,7 +1016,10 @@ export default function ExploreMore() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5, duration: 0.25 }}
-          onClick={() => setLogoutConfirmOpen(true)}
+          onClick={() => {
+            setLogoutType("single")
+            setLogoutConfirmOpen(true)
+          }}
           className="group relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-[24px] bg-white p-4 shadow-[0_4px_20px_rgb(0,0,0,0.03)] ring-1 ring-black/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(220,38,38,0.12)] hover:ring-red-100 mt-2 mb-6"
         >
           <div className="absolute inset-0 bg-red-50/0 transition-colors group-hover:bg-red-50/50 pointer-events-none" />
@@ -1061,7 +1065,7 @@ export default function ExploreMore() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 z-[60]"
+              className="fixed inset-0 bg-black/50 z-[80]"
               onClick={() => {
                 if (!isLoggingOut) setLogoutConfirmOpen(false)
               }}
@@ -1072,15 +1076,21 @@ export default function ExploreMore() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 24 }}
               transition={{ duration: 0.22 }}
-              className="fixed inset-x-4 bottom-28 z-[61] mx-auto w-auto max-w-md rounded-3xl bg-white p-5 shadow-2xl"
+              className="fixed inset-x-4 bottom-28 z-[85] mx-auto w-auto max-w-md rounded-3xl bg-white p-5 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="text-center">
                 <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
                   <LogOut className="w-5 h-5 text-red-600" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900">Logout?</h3>
-                <p className="mt-1 text-sm text-gray-500">Are you sure you want to logout?</p>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {logoutType === "all" ? "Logout from all devices?" : "Logout?"}
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  {logoutType === "all"
+                    ? "Are you sure you want to logout from all devices?"
+                    : "Are you sure you want to logout?"}
+                </p>
               </div>
 
               <div className="mt-5 grid grid-cols-2 gap-3">
@@ -1095,7 +1105,11 @@ export default function ExploreMore() {
                 <button
                   type="button"
                   onClick={async () => {
-                    await handleLogout()
+                    if (logoutType === "all") {
+                      await handleLogoutAllDevices()
+                    } else {
+                      await handleLogout()
+                    }
                     setLogoutConfirmOpen(false)
                   }}
                   disabled={isLoggingOut}
@@ -1116,7 +1130,7 @@ export default function ExploreMore() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 z-50"
+              className="fixed inset-0 bg-black/50 z-[80]"
               onClick={() => {
                 setSearchOpen(false)
                 setSearchQuery("")
@@ -1133,7 +1147,7 @@ export default function ExploreMore() {
                 damping: 30,
                 stiffness: 300
               }}
-              className="fixed top-0 left-0 right-0 bg-white shadow-lg z-50 h-screen"
+              className="fixed top-0 left-0 right-0 bg-white shadow-lg z-[85] h-screen"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Search Header */}
@@ -1243,7 +1257,7 @@ export default function ExploreMore() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 z-50"
+              className="fixed inset-0 bg-black/50 z-[80]"
               onClick={() => setProfileOpen(false)}
             />
 
@@ -1257,7 +1271,7 @@ export default function ExploreMore() {
                 damping: 30,
                 stiffness: 300
               }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-0 shadow-2xl z-50 max-h-[90vh] overflow-y-auto"
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-0 shadow-2xl z-[85] max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -1317,7 +1331,10 @@ export default function ExploreMore() {
               <div className="px-6 pb-6 space-y-3">
                 {/* Logout Button */}
                 <button
-                  onClick={handleLogout}
+                  onClick={() => {
+                    setLogoutType("single")
+                    setLogoutConfirmOpen(true)
+                  }}
                   disabled={isLoggingOut}
                   className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors"
                 >
@@ -1326,7 +1343,10 @@ export default function ExploreMore() {
 
                 {/* Logout from all devices Button */}
                 <button
-                  onClick={handleLogoutAllDevices}
+                  onClick={() => {
+                    setLogoutType("all")
+                    setLogoutConfirmOpen(true)
+                  }}
                   disabled={isLoggingOut}
                   className="w-full bg-white border-2 border-red-600 text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold py-3 px-4 rounded-lg transition-colors"
                 >
@@ -1406,7 +1426,7 @@ export default function ExploreMore() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 z-50"
+              className="fixed inset-0 bg-black/50 z-[80]"
               onClick={() => setScheduleOffOpen(false)}
             />
 
@@ -1420,7 +1440,7 @@ export default function ExploreMore() {
                 damping: 30,
                 stiffness: 300
               }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50 max-h-[90vh] overflow-y-auto"
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[85] max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -1462,7 +1482,7 @@ export default function ExploreMore() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 z-50"
+              className="fixed inset-0 bg-black/50 z-[80]"
               onClick={() => setDateTimePickerOpen(false)}
             />
 
@@ -1476,7 +1496,7 @@ export default function ExploreMore() {
                 damping: 30,
                 stiffness: 300
               }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50 max-h-[90vh] overflow-y-auto"
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[85] max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -1570,7 +1590,7 @@ export default function ExploreMore() {
 
       {/* Calendar Popup */}
       {showCalendar && (
-        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={() => setShowCalendar(false)}>
+        <div className="fixed inset-0 bg-black/50 z-[85] flex items-center justify-center p-4" onClick={() => setShowCalendar(false)}>
           <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-lg shadow-lg">
             <DateRangeCalendar
               startDate={startDate}
@@ -1664,7 +1684,7 @@ export default function ExploreMore() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 z-50"
+              className="fixed inset-0 bg-black/50 z-[80]"
               onClick={() => setExistingScheduleOpen(false)}
             />
 
@@ -1678,7 +1698,7 @@ export default function ExploreMore() {
                 damping: 30,
                 stiffness: 300
               }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50 max-h-[90vh] overflow-y-auto"
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[85] max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}

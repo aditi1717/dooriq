@@ -18,7 +18,6 @@ import {
   Star,
   SlidersHorizontal,
   Utensils,
-  Flame,
   Bookmark,
   Share2,
   Plus,
@@ -100,6 +99,7 @@ function RestaurantDetailsContent() {
   const { zoneId, zone, loading: loadingZone, isOutOfService } = useZone(userLocation) // Get user's zone for zone-based filtering
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [highlightIndex, setHighlightIndex] = useState(0)
+  const [restaurantOffersList, setRestaurantOffersList] = useState([])
   const [quantities, setQuantities] = useState({})
   const [showManageCollections, setShowManageCollections] = useState(false)
   const [showItemDetail, setShowItemDetail] = useState(false)
@@ -169,7 +169,6 @@ function RestaurantDetailsContent() {
         sortBy: null,
         vegNonVeg: null,
         highlyReordered: false,
-        spicy: false,
       }
     }
     try {
@@ -188,7 +187,6 @@ function RestaurantDetailsContent() {
                 ? savedFilters.vegNonVeg
                 : null,
             highlyReordered: savedFilters.highlyReordered === true,
-            spicy: savedFilters.spicy === true,
           }
         }
       }
@@ -199,7 +197,6 @@ function RestaurantDetailsContent() {
       sortBy: null,
       vegNonVeg: null,
       highlyReordered: false,
-      spicy: false,
     }
   })
 
@@ -233,6 +230,40 @@ function RestaurantDetailsContent() {
   useEffect(() => {
     setSelectedMenuCategory("all")
   }, [slug])
+
+  // Lock body scroll when any overlay/sheet/modal is open
+  useEffect(() => {
+    const isAnySheetOpen =
+      showMenuSheet ||
+      showMenuOptionsSheet ||
+      showFilterSheet ||
+      showLocationSheet ||
+      showScheduleSheet ||
+      showOffersSheet ||
+      showShareModal ||
+      showManageCollections ||
+      showItemDetail
+
+    if (isAnySheetOpen) {
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = ""
+    }
+
+    return () => {
+      document.body.style.overflow = ""
+    }
+  }, [
+    showMenuSheet,
+    showMenuOptionsSheet,
+    showFilterSheet,
+    showLocationSheet,
+    showScheduleSheet,
+    showOffersSheet,
+    showShareModal,
+    showManageCollections,
+    showItemDetail,
+  ])
 
   // Fetch restaurant data from API
   useEffect(() => {
@@ -902,7 +933,7 @@ function RestaurantDetailsContent() {
                 }
 
                 let finalMenuSections = [...menuSections]
-                if (hasPreviousOrderForRestaurant) {
+                if (recommendedItems.length > 0) {
                   finalMenuSections = [{ name: "Recommended for you", items: recommendedItems, subsections: [] }, ...finalMenuSections]
                 }
                 if (searchedDishSection) {
@@ -1051,6 +1082,41 @@ function RestaurantDetailsContent() {
 
     fetchRestaurant()
   }, [slug, zoneId, restaurant])
+
+  useEffect(() => {
+    const restaurantId = restaurant?.id
+    if (!restaurantId) return
+    const fetchOffers = async () => {
+      try {
+        const response = await restaurantAPI.getPublicOffers({ restaurantId })
+        const offers = response?.data?.data?.allOffers || response?.data?.allOffers || []
+        setRestaurantOffersList(offers)
+        
+        setRestaurant(prev => {
+          if (!prev) return prev
+          const existingCoupons = prev.restaurantOffers?.coupons || []
+          if (existingCoupons.length === offers.length) {
+            return prev
+          }
+          return {
+            ...prev,
+            restaurantOffers: {
+              ...prev.restaurantOffers,
+              coupons: offers.map(o => ({
+                id: o.id || o.offerId,
+                title: o.title,
+                code: o.couponCode,
+                description: o.description || ""
+              }))
+            }
+          }
+        })
+      } catch (err) {
+        debugWarn("Failed to fetch public offers for restaurant:", err)
+      }
+    }
+    fetchOffers()
+  }, [restaurant?.id])
 
   // Track previous values to prevent unnecessary recalculations
   const prevCoordsRef = useRef({ userLat: null, userLng: null, restaurantLat: null, restaurantLng: null })
@@ -1418,7 +1484,6 @@ function RestaurantDetailsContent() {
     // When vegMode is ON, vegNonVeg is redundant — don't count it
     if (!vegMode && filters.vegNonVeg) count++
     if (filters.highlyReordered) count++
-    if (filters.spicy) count++
     return count
   }
 
@@ -1746,7 +1811,6 @@ function RestaurantDetailsContent() {
       }
 
       if (filters.highlyReordered && !isRecommendedItem(item)) return false
-      if (filters.spicy && item.isSpicy !== true) return false
 
       return true
     })
@@ -1893,8 +1957,7 @@ function RestaurantDetailsContent() {
     vegMode === true ||
     filters.sortBy ||
     filters.vegNonVeg ||
-    filters.highlyReordered ||
-    filters.spicy
+    filters.highlyReordered
   )
 
   const filteredSections = useMemo(
@@ -2028,11 +2091,36 @@ function RestaurantDetailsContent() {
   }, [restaurant, targetDishId])
 
   // Highlight offers/texts for the blue offer line
-  const highlightOffers = [
-    "Upto 50% OFF",
-    restaurant?.offerText || "",
-    ...(Array.isArray(restaurant?.offers) ? restaurant.offers.map((offer) => offer?.title || "") : []),
-  ]
+  const highlightOffers = useMemo(() => {
+    const list = []
+    
+    // Add real offers from the fetched offers list
+    if (Array.isArray(restaurantOffersList) && restaurantOffersList.length > 0) {
+      restaurantOffersList.forEach((offer) => {
+        if (offer.title) {
+          list.push(offer.title)
+        } else if (offer.couponCode) {
+          list.push(`Use code ${offer.couponCode}`)
+        }
+      })
+    }
+    
+    // Fallback only if there are actual offers/coupons on the restaurant object
+    if (list.length === 0 && Array.isArray(restaurant?.offers) && restaurant.offers.length > 0) {
+      restaurant.offers.forEach((offer) => {
+        if (offer?.title) {
+          list.push(offer.title)
+        }
+      })
+    }
+    
+    // Also include the offerText if it's explicitly set and not the default fallback "FLAT 50% OFF"
+    if (list.length === 0 && restaurant?.offerText && restaurant.offerText !== "FLAT 50% OFF") {
+      list.push(restaurant.offerText)
+    }
+    
+    return list
+  }, [restaurantOffersList, restaurant?.offers, restaurant?.offerText])
 
   // Auto-rotate images every 3 seconds
   useEffect(() => {
@@ -2064,6 +2152,8 @@ function RestaurantDetailsContent() {
 
   // Auto-rotate highlight offer text every 2 seconds
   useEffect(() => {
+    if (highlightOffers.length === 0) return
+
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return
       setHighlightIndex((prev) => (prev + 1) % highlightOffers.length)
@@ -2241,24 +2331,22 @@ function RestaurantDetailsContent() {
         </div>
 
         {/* Right Side - Image and Add Button */}
-        <div className={`relative w-32 flex-shrink-0 ${item.image ? "h-32" : "h-auto flex items-end justify-center"}`}>
-          {item.image ? (
-            <img
-              src={item.image}
-              alt={item.name}
-              className="w-full h-full object-cover rounded-2xl shadow-sm"
-              onError={(e) => {
-                if (e.currentTarget.src !== FOOD_IMAGE_FALLBACK) {
-                  e.currentTarget.src = FOOD_IMAGE_FALLBACK
-                }
-              }}
-            />
-          ) : null}
+        <div className="relative w-32 h-32 flex-shrink-0">
+          <img
+            src={item.image || FOOD_IMAGE_FALLBACK}
+            alt={item.name}
+            className="w-full h-full object-cover rounded-2xl shadow-sm"
+            onError={(e) => {
+              if (e.currentTarget.src !== FOOD_IMAGE_FALLBACK) {
+                e.currentTarget.src = FOOD_IMAGE_FALLBACK
+              }
+            }}
+          />
           {quantity > 0 ? (
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
-              className={`${item.image ? "absolute -bottom-2 left-1/2 -translate-x-1/2" : "relative"} bg-white border font-bold px-4 py-1.5 rounded-lg shadow-md flex items-center gap-1 ${
+              className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border font-bold px-4 py-1.5 rounded-lg shadow-md flex items-center gap-1 ${
                 shouldShowGrayscale
                   ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
                   : 'border-[#EB590E] text-[#EB590E] hover:bg-orange-50'
@@ -2309,7 +2397,7 @@ function RestaurantDetailsContent() {
                 }
               }}
               disabled={shouldShowGrayscale}
-              className={`${item.image ? "absolute -bottom-2 left-1/2 -translate-x-1/2" : "relative"} bg-white border font-bold px-6 py-1.5 rounded-lg shadow-md flex items-center gap-1 transition-colors ${
+              className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border font-bold px-6 py-1.5 rounded-lg shadow-md flex items-center gap-1 transition-colors ${
                 shouldShowGrayscale
                   ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
                   : 'border-[#EB590E] text-[#EB590E] hover:bg-orange-50'
@@ -2408,19 +2496,21 @@ function RestaurantDetailsContent() {
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{restaurant?.name || "Unknown Restaurant"}</h1>
             </div>
-            <div className="flex flex-col items-end">
-              <Badge
-                className="text-white mb-1 flex items-center gap-1 px-2 py-1 border-0"
-                style={{
-                  backgroundColor: "var(--module-theme-color, #FA0272)",
-                  boxShadow: "0 4px 10px rgba(var(--module-theme-rgb, 250,2,114), 0.28)",
-                }}
-              >
-                <Star className="h-3 w-3 fill-white" />
-                {restaurant?.rating || 4.5}
-              </Badge>
-              <span className="text-xs text-gray-500">By {(restaurant.reviews || 0).toLocaleString()}+</span>
-            </div>
+            {restaurant.reviews > 0 && (
+              <div className="flex flex-col items-end">
+                <Badge
+                  className="text-white mb-1 flex items-center gap-1 px-2 py-1 border-0"
+                  style={{
+                    backgroundColor: "var(--module-theme-color, #FA0272)",
+                    boxShadow: "0 4px 10px rgba(var(--module-theme-rgb, 250,2,114), 0.28)",
+                  }}
+                >
+                  <Star className="h-3 w-3 fill-white" />
+                  {restaurant?.rating}
+                </Badge>
+                <span className="text-xs text-gray-500">By {restaurant.reviews.toLocaleString()}+</span>
+              </div>
+            )}
           </div>
 
           {/* Top Category */} 
@@ -2459,25 +2549,30 @@ function RestaurantDetailsContent() {
           )}
 
           {/* Offers */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm overflow-hidden">
-              <Tag className="h-4 w-4 text-[#EB590E]" />
-              <div className="relative h-5 overflow-hidden">
-                <AnimatePresence mode="wait">
-                  <motion.span
-                    key={highlightIndex}
-                    initial={{ y: 16, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: -16, opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="text-[#EB590E] font-medium inline-block"
-                  >
-                    {highlightOffers[highlightIndex]}
-                  </motion.span>
-                </AnimatePresence>
+          {highlightOffers.length > 0 && (
+            <div 
+              className="flex items-center justify-between cursor-pointer hover:opacity-90"
+              onClick={() => setShowOffersSheet(true)}
+            >
+              <div className="flex items-center gap-2 text-sm overflow-hidden">
+                <Tag className="h-4 w-4 text-[#EB590E]" />
+                <div className="relative h-5 overflow-hidden">
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      key={highlightIndex}
+                      initial={{ y: 16, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{ y: -16, opacity: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="text-[#EB590E] font-medium inline-block"
+                    >
+                      {highlightOffers[highlightIndex]}
+                    </motion.span>
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Filter/Category Buttons */}
           <div className="border-y border-gray-200 py-3 -mx-4 px-4 overflow-x-auto scrollbar-hide">
@@ -3044,26 +3139,6 @@ function RestaurantDetailsContent() {
                         <span className="font-medium">Highly reordered</span>
                       </button>
                     </div>
-
-                    {/* Dietary preference */}
-                    <div className="space-y-2">
-                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Dietary preference:</h3>
-                      <button
-                        onClick={() =>
-                          setFilters((prev) => ({
-                            ...prev,
-                            spicy: !prev.spicy,
-                          }))
-                        }
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all w-full ${filters.spicy
-                          ? "border-red-500 dark:border-red-400 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-                          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
-                          }`}
-                      >
-                        <Flame className="h-4 w-4" />
-                        <span className="font-medium">Spicy</span>
-                      </button>
-                    </div>
                   </div>
 
                   {/* Bottom Action Bar */}
@@ -3074,7 +3149,6 @@ function RestaurantDetailsContent() {
                           sortBy: null,
                           vegNonVeg: null,
                           highlyReordered: false,
-                          spicy: false,
                         })
                       }}
                       className="text-red-600 dark:text-red-400 font-medium text-sm hover:text-red-700 dark:hover:text-red-500"
@@ -3162,17 +3236,19 @@ function RestaurantDetailsContent() {
                                   <span>{outlet?.distance || "1.2 km"}</span>
                                 </div>
                               </div>
-                              <div className="flex flex-col items-end gap-0.5">
-                                <div className="flex items-center gap-1">
-                                  <Star className="h-3.5 w-3.5 text-green-600 dark:text-green-500 fill-green-600 dark:fill-green-500" />
-                                  <span className="text-xs font-medium text-gray-900 dark:text-white">
-                                    {outlet?.rating || 4.5}
+                              {outlet?.reviews > 0 && (
+                                <div className="flex flex-col items-end gap-0.5">
+                                  <div className="flex items-center gap-1">
+                                    <Star className="h-3.5 w-3.5 text-green-600 dark:text-green-500 fill-green-600 dark:fill-green-500" />
+                                    <span className="text-xs font-medium text-gray-900 dark:text-white">
+                                      {outlet?.rating}
+                                    </span>
+                                  </div>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    By {outlet.reviews >= 1000 ? `${(outlet.reviews / 1000).toFixed(1)}K+` : `${outlet.reviews}+`}
                                   </span>
                                 </div>
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                  By {(outlet?.reviews || 0) >= 1000 ? `${((outlet.reviews || 0) / 1000).toFixed(1)}K+` : `${outlet?.reviews || 0}+`}
-                                </span>
-                              </div>
+                              )}
                             </div>
                           </div>
                         ))}

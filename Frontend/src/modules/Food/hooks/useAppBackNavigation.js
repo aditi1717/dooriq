@@ -142,6 +142,13 @@ export default function useAppBackNavigation() {
   const location = useLocation()
 
   return useCallback(() => {
-    navigate(resolveBackPath(location))
+    // If there is history within our app (idx > 0), navigate back in history.
+    // This returns the user to their exact previous page (search, collection, home, etc.)
+    // preserving scroll position, search query, and filters.
+    if (window.history.state && typeof window.history.state.idx === "number" && window.history.state.idx > 0) {
+      navigate(-1)
+    } else {
+      navigate(resolveBackPath(location))
+    }
   }, [location, navigate])
 }

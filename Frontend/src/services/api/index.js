@@ -1328,6 +1328,10 @@ export const restaurantAPI = {
     apiClient.patch(`/food/restaurant/foods/${String(id)}`, body ?? {}, {
       contextModule: "restaurant",
     }),
+  deleteFood: (id) =>
+    apiClient.delete(`/food/restaurant/foods/${String(id)}`, {
+      contextModule: "restaurant",
+    }),
   bulkUploadTemplate: () =>
     apiClient.get("/food/restaurant/bulk-upload/template", {
       responseType: 'blob',

@@ -338,3 +338,87 @@ export function isStatusAdvance(current, next) {
 
   return nextPrio > currentPrio;
 }
+
+export async function checkRestaurantOpenStatus(restaurantId, checkDate = new Date()) {
+  const { FoodRestaurant } = await import('../../restaurant/models/restaurant.model.js');
+  const restaurant = await FoodRestaurant.findById(restaurantId)
+    .select('status isAcceptingOrders openingTime closingTime openDays')
+    .lean();
+
+  if (!restaurant) {
+    return { isOpen: false, reason: 'Restaurant not found' };
+  }
+
+  if (restaurant.status !== 'approved') {
+    return { isOpen: false, reason: 'Restaurant not accepting orders' };
+  }
+
+  if (restaurant.isAcceptingOrders === false) {
+    return { isOpen: false, reason: 'Restaurant is currently offline' };
+  }
+
+  // Check outlet timings collection for granular day timing
+  const { FoodRestaurantOutletTimings } = await import('../../restaurant/models/outletTimings.model.js');
+  const timingDoc = await FoodRestaurantOutletTimings.findOne({ restaurantId }).lean();
+
+  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const currentDayName = daysOfWeek[checkDate.getDay()];
+
+  let openingTime = restaurant.openingTime || null;
+  let closingTime = restaurant.closingTime || null;
+
+  if (timingDoc && Array.isArray(timingDoc.timings)) {
+    const timing = timingDoc.timings.find((t) => t && String(t.day).toLowerCase() === currentDayName.toLowerCase());
+    if (timing) {
+      if (timing.isOpen === false) {
+        return { isOpen: false, reason: 'Restaurant is closed today' };
+      }
+      openingTime = timing.openingTime || openingTime;
+      closingTime = timing.closingTime || closingTime;
+    }
+  } else if (Array.isArray(restaurant.openDays) && restaurant.openDays.length > 0) {
+    const openDaysNormalized = restaurant.openDays.map(d => String(d).trim().toLowerCase());
+    if (!openDaysNormalized.includes(currentDayName.toLowerCase())) {
+      return { isOpen: false, reason: 'Restaurant is closed today' };
+    }
+  }
+
+  if (!openingTime || !closingTime) {
+    // Default to open if no timing set
+    return { isOpen: true };
+  }
+
+  const parseTimeToMinutes = (timeStr) => {
+    const parts = String(timeStr || '').trim().split(':');
+    if (parts.length !== 2) return null;
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    return h * 60 + m;
+  };
+
+  const openMin = parseTimeToMinutes(openingTime);
+  const closeMin = parseTimeToMinutes(closingTime);
+
+  if (openMin === null || closeMin === null) {
+    return { isOpen: true };
+  }
+
+  const currentMin = checkDate.getHours() * 60 + checkDate.getMinutes();
+
+  let isWithin = false;
+  if (closeMin < openMin) {
+    // Overnight operational window (e.g., 18:00 to 02:00 next day)
+    isWithin = currentMin >= openMin || currentMin <= closeMin;
+  } else {
+    // Normal same-day window (e.g., 09:00 to 22:00)
+    isWithin = currentMin >= openMin && currentMin <= closeMin;
+  }
+
+  if (!isWithin) {
+    return { isOpen: false, reason: `Restaurant is closed now. Operational hours: ${openingTime} to ${closingTime}` };
+  }
+
+  return { isOpen: true };
+}
+

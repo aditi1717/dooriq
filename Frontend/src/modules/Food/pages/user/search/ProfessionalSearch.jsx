@@ -12,6 +12,7 @@ import { useLocation as useGeoLocation } from "@food/hooks/useLocation"
 import { useZone } from "@food/hooks/useZone"
 import { searchAPI } from "@/services/api"
 import { motion, AnimatePresence } from "framer-motion"
+import { useProfile } from "@food/context/ProfileContext"
 
 // Helper to resolve media URLs consistently
 const getMediaUrl = (url) => {
@@ -39,6 +40,7 @@ const SEARCH_HISTORY_KEY = "professional_search_history_v1"
 
 export default function ProfessionalSearch() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { vegMode } = useProfile()
   const initialQuery = searchParams.get("q") || ""
   const navigate = useNavigate()
   const { location: userCoords } = useGeoLocation()
@@ -98,7 +100,8 @@ export default function ProfessionalSearch() {
         categoryId: catId,
         lat: userCoords?.latitude,
         lng: userCoords?.longitude,
-        zoneId
+        zoneId,
+        isVeg: vegMode ? 'true' : 'false'
       })
       
       if (res.data?.success) {
@@ -114,13 +117,14 @@ export default function ProfessionalSearch() {
     } finally {
       setLoading(false)
     }
-  }, [userCoords, zoneId])
+  }, [userCoords, zoneId, vegMode])
 
   useEffect(() => {
     performSearch(debouncedQuery, selectedCategoryId)
-    if (debouncedQuery) {
-        setSearchParams({ q: debouncedQuery, ...(selectedCategoryId ? { cat: selectedCategoryId } : {}) }, { replace: true })
-    }
+    const nextParams = {}
+    if (debouncedQuery) nextParams.q = debouncedQuery
+    if (selectedCategoryId) nextParams.cat = selectedCategoryId
+    setSearchParams(nextParams, { replace: true })
   }, [debouncedQuery, selectedCategoryId, performSearch, setSearchParams])
 
   // Speech Recognition Implementation
@@ -146,7 +150,7 @@ export default function ProfessionalSearch() {
   const handleClear = () => {
     setQuery("")
     setSelectedCategoryId(null)
-    setSearchParams({})
+    setSearchParams({}, { replace: true })
     setResults({ restaurants: [], dishes: [] })
   }
 
@@ -283,13 +287,17 @@ export default function ProfessionalSearch() {
                              Matched: {r.matchedDish || query}
                           </div>
                           <h3 className="font-bold text-slate-900 dark:text-white line-clamp-1">{r.restaurantName}</h3>
-                          <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-zinc-400 mt-1">
-                             <div className="flex items-center gap-1">
-                                <Star className="w-3 h-3 text-orange-500 fill-orange-500" />
-                                <span className="font-semibold text-slate-700 dark:text-white">{r.rating || "New"}</span>
-                             </div>
-                             <span>•</span>
-                             <span>{r.estimatedDeliveryTime || "30-40 mins"}</span>
+                           <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                              {Number(r.totalRatings || r.reviews || 0) > 0 && (
+                                <>
+                                  <div className="flex items-center gap-1">
+                                     <Star className="w-3 h-3 text-orange-500 fill-orange-500" />
+                                     <span className="font-semibold text-slate-700 dark:text-white">{Number(r.rating || 0).toFixed(1)}</span>
+                                  </div>
+                                  <span>•</span>
+                                </>
+                              )}
+                              <span>{r.estimatedDeliveryTime || "30-40 mins"}</span>
                              <span>•</span>
                              <span className="line-clamp-1">{r.cuisines?.slice(0, 2).join(", ")}</span>
                           </div>
@@ -322,10 +330,12 @@ export default function ProfessionalSearch() {
                               <h3 className="text-xl font-bold text-white mb-1">{r.restaurantName}</h3>
                               <p className="text-white/80 text-xs line-clamp-1">{r.cuisines?.join(", ")}</p>
                            </div>
-                           <div className="bg-white/20 backdrop-blur-md border border-white/30 px-2 py-1 rounded-lg flex items-center gap-1">
-                              <Star className="w-3 h-3 text-white fill-white" />
-                              <span className="text-white text-xs font-bold">{r.rating || "4.0"}</span>
-                           </div>
+                           {Number(r.totalRatings || r.reviews || 0) > 0 && (
+                             <div className="bg-white/20 backdrop-blur-md border border-white/30 px-2 py-1 rounded-lg flex items-center gap-1">
+                                <Star className="w-3 h-3 text-white fill-white" />
+                                <span className="text-white text-xs font-bold">{Number(r.rating || 0).toFixed(1)}</span>
+                             </div>
+                           )}
                         </div>
                         {r.offer && (
                            <div className="absolute top-4 left-0 bg-blue-600 text-white text-[10px] font-black px-3 py-1.5 rounded-r-lg shadow-lg flex items-center gap-1 tracking-tighter">

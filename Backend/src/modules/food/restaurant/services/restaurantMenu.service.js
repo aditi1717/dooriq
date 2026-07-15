@@ -56,6 +56,7 @@ const buildMenuFromFoods = async (foods = []) => {
             image: food.image || '',
             foodType: food.foodType || 'Non-Veg',
             isAvailable: food.isAvailable !== false,
+            isRecommended: food.isRecommended === true,
             approvalStatus: food.approvalStatus || 'approved',
             rejectionReason: food.rejectionReason || '',
             requestedAt: food.requestedAt,
@@ -135,7 +136,7 @@ export async function getPublicApprovedRestaurantMenu(restaurantIdOrSlug) {
     if (!restaurant?._id) {
         return null;
     }
-    const foods = await FoodItem.find({ restaurantId: restaurant._id, approvalStatus: 'approved' })
+    const foods = await FoodItem.find({ restaurantId: restaurant._id, approvalStatus: 'approved', isAvailable: true })
         .sort({ createdAt: -1 })
         .limit(2000)
         .lean();

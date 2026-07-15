@@ -804,6 +804,43 @@ export default function Inventory() {
     }
   })
 
+  // Use a ref so fetchMenuAndAddons doesn't recreate (and re-fetch) every time stockRules changes.
+  // This prevents the "toggle ON → instant toggle OFF" race condition.
+  const stockRulesRef = useRef(stockRules)
+  useEffect(() => { stockRulesRef.current = stockRules }, [stockRules])
+
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false)
+  useEffect(() => {
+    const handleFocusIn = (e) => {
+      const tag = e.target.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || e.target.hasAttribute("contenteditable")) {
+        setIsKeyboardOpen(true)
+      }
+    }
+
+    const handleFocusOut = () => {
+      setTimeout(() => {
+        const activeEl = document.activeElement
+        const isInputFocused = activeEl && (
+          activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.hasAttribute("contenteditable")
+        )
+        if (!isInputFocused) {
+          setIsKeyboardOpen(false)
+        }
+      }, 100)
+    }
+
+    window.addEventListener("focusin", handleFocusIn)
+    window.addEventListener("focusout", handleFocusOut)
+
+    return () => {
+      window.removeEventListener("focusin", handleFocusIn)
+      window.removeEventListener("focusout", handleFocusOut)
+    }
+  }, [])
+
   const categoryRefs = useRef({})
   const addonImageInputRef = useRef(null)
 
@@ -821,7 +858,12 @@ export default function Inventory() {
   const [isAddAddonOpen, setIsAddAddonOpen] = useState(false)
 
   useEffect(() => {
-    if (!filterOpen) return undefined
+    if (!filterOpen) {
+      document.body.style.overflow = ""
+      return undefined
+    }
+
+    document.body.style.overflow = "hidden"
 
     window.history.pushState({ ...(window.history.state || {}), inventoryFilterOpen: true }, "")
     const handlePopState = () => {
@@ -830,6 +872,7 @@ export default function Inventory() {
 
     window.addEventListener("popstate", handlePopState)
     return () => {
+      document.body.style.overflow = ""
       window.removeEventListener("popstate", handlePopState)
     }
   }, [filterOpen])
@@ -1031,7 +1074,7 @@ export default function Inventory() {
           const nowMs = Date.now()
           const withStockRules = convertedCategories.map(category => {
             const ruledItems = (category.items || []).map(item => {
-              const rule = stockRules?.[String(item.id)] || null
+              const rule = stockRulesRef.current?.[String(item.id)] || null
               const isActiveRule = rule && (rule.mode === "manual" || (rule.resumeAt && new Date(rule.resumeAt).getTime() > nowMs))
               if (!isActiveRule) return item
               return { ...item, inStock: false, isAvailable: false, stockRule: rule }
@@ -1062,7 +1105,7 @@ export default function Inventory() {
         setLoadingAddons(false)
       }
     }
-  }, [stockRules])
+  }, [])
 
   useEffect(() => {
     fetchMenuAndAddons()
@@ -1618,11 +1661,12 @@ export default function Inventory() {
               ? { ...item, inStock: true, isAvailable: true, stockRule: null }
               : item
           )
-          // Don't automatically update category inStock when item is toggled
-          // Category toggle should be independent
+          // Recalculate category inStock: if all items are now in stock, mark category in stock
+          const allItemsInStock = updatedItems.every(item => item.inStock)
           return {
             ...category,
             items: updatedItems,
+            inStock: allItemsInStock ? true : category.inStock,
           }
         })
       )
@@ -1709,11 +1753,12 @@ export default function Inventory() {
             ? { ...item, inStock: false, isAvailable: false, stockRule: nextRule }
             : item
         )
-        // Don't automatically update category inStock when item is toggled
-        // Category toggle should be independent
+        // Only set category as out-of-stock if ALL items are now out of stock
+        const allItemsOutOfStock = updatedItems.every(item => !item.inStock)
         return {
           ...category,
           items: updatedItems,
+          inStock: allItemsOutOfStock ? false : category.inStock,
         }
       })
     )
@@ -2790,106 +2835,108 @@ export default function Inventory() {
       </AnimatePresence>
 
       {/* Floating Menu Button & Popup */}
-      <div className="fixed right-4 bottom-24 z-30 flex flex-col items-end gap-2">
-        <motion.button
-          whileTap={{ scale: 0.96 }}
-          onClick={() => {
-            if (activeTab === "add-ons") {
-              setIsAddAddonOpen((v) => !v)
-            } else {
-              setIsAddPopupOpen(true)
-            }
-          }}
-          className="rounded-full px-5 py-3 text-sm font-semibold text-white"
-          style={{
-            background: "linear-gradient(135deg, rgba(var(--module-theme-rgb, 37,99,235), 0.88), var(--module-theme-color, #2563EB))",
-            boxShadow: "0 22px 40px -24px rgba(var(--module-theme-rgb, 37,99,235), 0.75)",
-          }}
-        >
-          {activeTab === "add-ons" ? (isAddAddonOpen ? "Close" : "+ Add add-on") : "+ Add item"}
-        </motion.button>
-        {activeTab !== "add-ons" && (
+      {!isKeyboardOpen && (
+        <div className="fixed right-4 bottom-[108px] z-30 flex flex-col items-end gap-2">
           <motion.button
-            type="button"
             whileTap={{ scale: 0.96 }}
-            onClick={() => setIsMenuOpen((prev) => !prev)}
-            className="flex items-center gap-2 rounded-full border border-white/80 bg-white/95 px-4 py-3 text-sm font-semibold text-slate-800 shadow-[0_18px_36px_-28px_rgba(15,23,42,0.55)]"
+            onClick={() => {
+              if (activeTab === "add-ons") {
+                setIsAddAddonOpen((v) => !v)
+              } else {
+                setIsAddPopupOpen(true)
+              }
+            }}
+            className="rounded-full px-5 py-3 text-sm font-semibold text-white"
+            style={{
+              background: "linear-gradient(135deg, rgba(var(--module-theme-rgb, 37,99,235), 0.88), var(--module-theme-color, #2563EB))",
+              boxShadow: "0 22px 40px -24px rgba(var(--module-theme-rgb, 37,99,235), 0.75)",
+            }}
           >
-            <span className="w-5 h-5 flex items-center justify-center">
-              {isMenuOpen ? (
-                <X className="w-4 h-4 text-slate-900" />
-              ) : (
-                <Utensils className="w-4 h-4 text-slate-900" />
-              )}
-            </span>
-            <span>{isMenuOpen ? "Close" : "Menu"}</span>
+            {activeTab === "add-ons" ? (isAddAddonOpen ? "Close" : "+ Add add-on") : "+ Add item"}
           </motion.button>
-        )}
+          {activeTab !== "add-ons" && (
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              onClick={() => setIsMenuOpen((prev) => !prev)}
+              className="flex items-center gap-2 rounded-full border border-white/80 bg-white/95 px-4 py-3 text-sm font-semibold text-slate-800 shadow-[0_18px_36px_-28px_rgba(15,23,42,0.55)]"
+            >
+              <span className="w-5 h-5 flex items-center justify-center">
+                {isMenuOpen ? (
+                  <X className="w-4 h-4 text-slate-900" />
+                ) : (
+                  <Utensils className="w-4 h-4 text-slate-900" />
+                )}
+              </span>
+              <span>{isMenuOpen ? "Close" : "Menu"}</span>
+            </motion.button>
+          )}
 
-        {activeTab !== "add-ons" && (
-          <AnimatePresence>
-            {isMenuOpen && (
-              <>
-                {/* Backdrop */}
-                <motion.div
-                  className="fixed inset-0 bg-black/40 z-30"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setIsMenuOpen(false)}
-                />
+          {activeTab !== "add-ons" && (
+            <AnimatePresence>
+              {isMenuOpen && (
+                <>
+                  {/* Backdrop */}
+                  <motion.div
+                    className="fixed inset-0 bg-black/40 z-30"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsMenuOpen(false)}
+                  />
 
-                {/* Menu Popup */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 20 }}
-                  transition={{ duration: 0.2 }}
-                  className="fixed right-4 bottom-36 z-30 h-[45vh] w-[60vw] max-w-sm overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_24px_60px_-30px_rgba(15,23,42,0.55)]"
-                >
-                  <div className="h-full flex flex-col">
-                    <div className="bg-[linear-gradient(135deg,#f8fbff_0%,#eef6ff_100%)] px-4 pt-4 pb-3">
-                      <p className="text-sm font-semibold text-slate-950">Jump to category</p>
+                  {/* Menu Popup */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 20 }}
+                    transition={{ duration: 0.2 }}
+                    className="fixed right-4 bottom-[218px] z-30 h-[45vh] w-[60vw] max-w-sm overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_24px_60px_-30px_rgba(15,23,42,0.55)]"
+                  >
+                    <div className="h-full flex flex-col">
+                      <div className="bg-[linear-gradient(135deg,#f8fbff_0%,#eef6ff_100%)] px-4 pt-4 pb-3">
+                        <p className="text-sm font-semibold text-slate-950">Jump to category</p>
+                      </div>
+                      <div className="mx-4 h-px bg-slate-200" />
+                      <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
+                        {categories.map((category, index) => {
+                          const itemCount =
+                            category.itemCount || (category.items?.length || 0)
+                          const isLast = index === categories.length - 1
+
+                          return (
+                            <button
+                              key={category.id}
+                              type="button"
+                              onClick={() => {
+                                setIsMenuOpen(false)
+                                setTimeout(() => scrollToCategory(category.id), 200)
+                              }}
+                              className="w-full text-left py-3 focus:outline-none"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-slate-900">
+                                  {category.name}
+                                </span>
+                                <span className="flex h-7 min-w-[28px] items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700">
+                                  {itemCount}
+                                </span>
+                              </div>
+                              {!isLast && (
+                                <div className="mt-3 border-t border-dashed border-slate-200" />
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
-                    <div className="mx-4 h-px bg-slate-200" />
-                    <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
-                      {categories.map((category, index) => {
-                        const itemCount =
-                          category.itemCount || (category.items?.length || 0)
-                        const isLast = index === categories.length - 1
-
-                        return (
-                          <button
-                            key={category.id}
-                            type="button"
-                            onClick={() => {
-                              setIsMenuOpen(false)
-                              setTimeout(() => scrollToCategory(category.id), 200)
-                            }}
-                            className="w-full text-left py-3 focus:outline-none"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-slate-900">
-                                {category.name}
-                              </span>
-                              <span className="flex h-7 min-w-[28px] items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700">
-                                {itemCount}
-                              </span>
-                            </div>
-                            {!isLast && (
-                              <div className="mt-3 border-t border-dashed border-slate-200" />
-                            )}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        )}
-      </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          )}
+        </div>
+      )}
 
       {/* Bulk Upload Modal */}
       <AnimatePresence>

@@ -2010,7 +2010,26 @@ export const listApprovedRestaurants = async (query = {}) => {
     const page = Math.max(parseInt(query.page, 10) || 1, 1);
     const skip = (page - 1) * limit;
 
-    const filter = { status: 'approved' };
+    // Only return restaurants that have at least one approved food item (and veg food if veg filter is active)
+    let activeRestaurantIds;
+    if (query.isVeg === 'true' || query.vegMode === 'true' || query.veg === 'true') {
+        activeRestaurantIds = await FoodItem.distinct('restaurantId', { 
+            approvalStatus: 'approved',
+            foodType: 'Veg',
+            isAvailable: true
+        });
+    } else {
+        activeRestaurantIds = await FoodItem.distinct('restaurantId', { 
+            approvalStatus: 'approved',
+            isAvailable: true
+        });
+    }
+    const activeObjIds = activeRestaurantIds.map(id => new mongoose.Types.ObjectId(id));
+
+    const filter = { 
+        status: 'approved',
+        _id: { $in: activeObjIds }
+    };
 
     if (query.city && String(query.city).trim()) {
         const city = String(query.city).trim().slice(0, 80);
@@ -2194,7 +2213,8 @@ export const listApprovedRestaurants = async (query = {}) => {
         const recommendedItemsRaw = await FoodItem.find({
             restaurantId: { $in: restaurantIds },
             isRecommended: true,
-            approvalStatus: 'approved'
+            approvalStatus: 'approved',
+            isAvailable: true
         }).sort({ createdAt: -1 }).lean();
 
         const recommendedMap = recommendedItemsRaw.reduce((acc, item) => {
@@ -2205,7 +2225,9 @@ export const listApprovedRestaurants = async (query = {}) => {
                     id: String(item._id),
                     name: item.name,
                     price: item.price,
-                    image: item.image
+                    image: item.image,
+                    foodType: item.foodType || 'Non-Veg',
+                    isVeg: item.foodType === 'Veg'
                 });
             }
             return acc;
@@ -2264,7 +2286,8 @@ export const listApprovedRestaurants = async (query = {}) => {
     const recommendedItemsRaw = await FoodItem.find({
         restaurantId: { $in: restaurantIds },
         isRecommended: true,
-        approvalStatus: 'approved'
+        approvalStatus: 'approved',
+        isAvailable: true
     }).sort({ createdAt: -1 }).lean();
 
     const recommendedMap = recommendedItemsRaw.reduce((acc, item) => {
@@ -2275,7 +2298,9 @@ export const listApprovedRestaurants = async (query = {}) => {
                 id: String(item._id),
                 name: item.name,
                 price: item.price,
-                image: item.image
+                image: item.image,
+                foodType: item.foodType || 'Non-Veg',
+                isVeg: item.foodType === 'Veg'
             });
         }
         return acc;
@@ -2359,20 +2384,6 @@ export const listPublicOffers = async (query = {}) => {
         }
     }
 
-    // If subtotal is provided, filter by minOrderValue
-    if (subtotal !== undefined && subtotal !== null && subtotal !== '' && !isNaN(Number(subtotal))) {
-        const numericSubtotal = Number(subtotal);
-        if (numericSubtotal > 0) {
-            filter.$and.push({
-                $or: [
-                    { minOrderValue: { $exists: false } },
-                    { minOrderValue: null },
-                    { minOrderValue: { $lte: numericSubtotal } }
-                ]
-            });
-        }
-    }
-
     const list = await FoodOffer.find(filter)
         .sort({ createdAt: -1 })
         .populate({ path: 'restaurantId', select: 'restaurantName restaurantNameNormalized profileImage estimatedDeliveryTime rating' })
@@ -2395,7 +2406,7 @@ export const listPublicOffers = async (query = {}) => {
 
         const title =
             o.discountType === 'percentage'
-                ? `${Number(o.discountValue) || 0}% OFF`
+                ? `${Number(o.discountValue) || 0}% OFF${o.maxDiscount ? ` Upto ₹${o.maxDiscount}` : ''}`
                 : `Flat ₹${Number(o.discountValue) || 0} OFF`;
 
         return {

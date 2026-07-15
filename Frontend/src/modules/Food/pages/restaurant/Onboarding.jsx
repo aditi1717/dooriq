@@ -980,147 +980,250 @@ export default function RestaurantOnboarding() {
   }
 
 
-  // Load from localStorage on mount and check URL parameter
+  // Load and merge onboarding details from local storage, IndexedDB, and Backend API on mount
   useEffect(() => {
-    isRestoringOnboardingRef.current = true
-    setVerifiedPhoneNumber(getVerifiedPhoneFromStoredRestaurant())
-
-    // Check if step is specified in URL (from OTP login redirect)
-    const stepParam = searchParams.get("step")
-    if (stepParam) {
-      const stepNum = parseInt(stepParam, 10)
-      if (stepNum >= 1 && stepNum <= 3) {
-        setStep(stepNum)
-      }
-    }
-
-    const loadData = async () => {
+    const initializeOnboarding = async () => {
       try {
-        const currentPhone = getVerifiedPhoneFromStoredRestaurant()
+        setLoading(true)
+        isRestoringOnboardingRef.current = true
+        setVerifiedPhoneNumber(getVerifiedPhoneFromStoredRestaurant())
+
+        // 1. Fetch backend profile data if available
+        let backendData = null
+        try {
+          const res = await restaurantAPI.getCurrentRestaurant()
+          backendData = res?.data?.data?.restaurant || res?.data?.restaurant
+        } catch (err) {
+          debugError("Error fetching backend onboarding data:", err)
+        }
+
+        // 2. Load local storage onboarding data
         const localData = loadOnboardingFromLocalStorage()
-        
-        if (localData) {
-          // SECURITY CHECK: If the saved data's phone number doesn't match current login, clear it.
-          // This prevents data leakage when logging in with a different account on the same device.
-          const savedPhone = normalizePhoneDigits(localData.step1?.ownerPhone || "")
-          const normalizedCurrent = normalizePhoneDigits(currentPhone)
-          
-          if (savedPhone && normalizedCurrent && savedPhone !== normalizedCurrent) {
-             debugLog("? Phone mismatch, data belongs to different user. Clearing.")
-             // Be a bit more lenient: only clear if they are substantially different
-             if (savedPhone.slice(-10) !== normalizedCurrent.slice(-10)) {
+        const currentPhone = getVerifiedPhoneFromStoredRestaurant()
+
+        // 3. Hydrate state
+        if (backendData) {
+          setHasExistingRestaurantProfile(true)
+          setIsEditing(true)
+        } else {
+          setHasExistingRestaurantProfile(false)
+          setIsEditing(true)
+        }
+
+        const onboardingData = backendData?.onboarding || {}
+        const step1Data = onboardingData.step1 || {}
+        const step2Data = onboardingData.step2 || {}
+        const step3Data = onboardingData.step3 || {}
+        const panData = step3Data.pan || {}
+        const gstData = step3Data.gst || {}
+        const fssaiData = step3Data.fssai || {}
+        const bankData = step3Data.bank || {}
+        const locationData = step1Data.location || backendData?.location || {}
+        const deliveryTimings = step2Data.deliveryTimings || backendData?.deliveryTimings || {}
+
+        // Hydrate Step 1
+        setStep1((prev) => {
+          const merged = {
+            restaurantName: localData?.step1?.restaurantName || step1Data.restaurantName || backendData?.name || backendData?.restaurantName || "",
+            pureVegRestaurant:
+              localData?.step1 && typeof localData.step1.pureVegRestaurant === "boolean"
+                ? localData.step1.pureVegRestaurant
+                : typeof step1Data.pureVegRestaurant === "boolean"
+                ? step1Data.pureVegRestaurant
+                : typeof backendData?.pureVegRestaurant === "boolean"
+                ? backendData.pureVegRestaurant
+                : null,
+            ownerName: localData?.step1?.ownerName || step1Data.ownerName || backendData?.ownerName || "",
+            ownerEmail: localData?.step1?.ownerEmail || step1Data.ownerEmail || backendData?.ownerEmail || backendData?.email || "",
+            ownerPhone: localData?.step1?.ownerPhone || step1Data.ownerPhone || backendData?.ownerPhone || backendData?.phone || "",
+            zoneId: localData?.step1?.zoneId || step1Data.zoneId || backendData?.zoneId || "",
+            primaryContactNumber:
+              localData?.step1?.primaryContactNumber ||
+              step1Data.primaryContactNumber ||
+              backendData?.primaryContactNumber ||
+              backendData?.ownerPhone ||
+              backendData?.phone ||
+              "",
+            location: {
+              formattedAddress:
+                localData?.step1?.location?.formattedAddress ||
+                locationData.formattedAddress ||
+                locationData.address ||
+                backendData?.address ||
+                "",
+              addressLine1: localData?.step1?.location?.addressLine1 || locationData.addressLine1 || backendData?.addressLine1 || "",
+              addressLine2: localData?.step1?.location?.addressLine2 || locationData.addressLine2 || backendData?.addressLine2 || "",
+              area: localData?.step1?.location?.area || locationData.area || backendData?.area || "",
+              city: localData?.step1?.location?.city || locationData.city || backendData?.city || "",
+              state: localData?.step1?.location?.state || locationData.state || backendData?.state || "",
+              pincode: localData?.step1?.location?.pincode || locationData.pincode || backendData?.pincode || "",
+              landmark: localData?.step1?.location?.landmark || locationData.landmark || backendData?.landmark || "",
+              latitude: localData?.step1?.location?.latitude ?? locationData.latitude ?? "",
+              longitude: localData?.step1?.location?.longitude ?? locationData.longitude ?? "",
+            }
+          }
+
+          // SECURITY CHECK: If there is saved local data but it belongs to a different phone number,
+          // clear local storage and indexedDB to prevent data leakage.
+          if (localData?.step1?.ownerPhone && currentPhone) {
+            const savedPhone = normalizePhoneDigits(localData.step1.ownerPhone)
+            const normalizedCurrent = normalizePhoneDigits(currentPhone)
+            if (savedPhone && normalizedCurrent && savedPhone.slice(-10) !== normalizedCurrent.slice(-10)) {
+               debugLog("? Phone mismatch, clearing stale local data.")
                clearOnboardingFromLocalStorage()
-               await clearAllFilesFromDB()
-               return
-             }
+               clearAllFilesFromDB()
+               // Use only backendData for hydration
+               merged.restaurantName = step1Data.restaurantName || backendData?.name || backendData?.restaurantName || ""
+               merged.pureVegRestaurant = typeof step1Data.pureVegRestaurant === "boolean" ? step1Data.pureVegRestaurant : (typeof backendData?.pureVegRestaurant === "boolean" ? backendData.pureVegRestaurant : null)
+               merged.ownerName = step1Data.ownerName || backendData?.ownerName || ""
+               merged.ownerEmail = step1Data.ownerEmail || backendData?.ownerEmail || backendData?.email || ""
+               merged.ownerPhone = step1Data.ownerPhone || backendData?.ownerPhone || backendData?.phone || ""
+               merged.zoneId = step1Data.zoneId || backendData?.zoneId || ""
+               merged.primaryContactNumber = step1Data.primaryContactNumber || backendData?.primaryContactNumber || backendData?.ownerPhone || backendData?.phone || ""
+               merged.location = {
+                 formattedAddress: locationData.formattedAddress || locationData.address || backendData?.address || "",
+                 addressLine1: locationData.addressLine1 || backendData?.addressLine1 || "",
+                 addressLine2: locationData.addressLine2 || backendData?.addressLine2 || "",
+                 area: locationData.area || backendData?.area || "",
+                 city: locationData.city || backendData?.city || "",
+                 state: locationData.state || backendData?.state || "",
+                 pincode: locationData.pincode || backendData?.pincode || "",
+                 landmark: locationData.landmark || backendData?.landmark || "",
+                 latitude: locationData.latitude ?? "",
+                 longitude: locationData.longitude ?? "",
+               }
+            }
           }
+          return merged
+        })
 
-          if (localData.step1) {
-            setStep1((prev) => ({
-              ...prev,
-              restaurantName: localData.step1.restaurantName || "",
-              pureVegRestaurant:
-                typeof localData.step1.pureVegRestaurant === "boolean"
-                  ? localData.step1.pureVegRestaurant
-                  : null,
-              ownerName: localData.step1.ownerName || "",
-              ownerEmail: localData.step1.ownerEmail || "",
-              ownerPhone: localData.step1.ownerPhone || "",
-              primaryContactNumber: localData.step1.primaryContactNumber || "",
-              zoneId: localData.step1.zoneId || "",
-              location: {
-                formattedAddress: localData.step1.location?.formattedAddress || "",
-                addressLine1: localData.step1.location?.addressLine1 || "",
-                addressLine2: localData.step1.location?.addressLine2 || "",
-                area: localData.step1.location?.area || "",
-                city: localData.step1.location?.city || "",
-                state: localData.step1.location?.state || "",
-                pincode: localData.step1.location?.pincode || "",
-                landmark: localData.step1.location?.landmark || "",
-                latitude: localData.step1.location?.latitude ?? "",
-                longitude: localData.step1.location?.longitude ?? "",
-              },
-            }))
-          }
+        // Restore files from IndexedDB
+        let restoredProfileImage = null
+        let restoredPanImage = null
+        let restoredGstImage = null
+        let restoredFssaiImage = null
+        const restoredMenuImages = []
 
-          // Restore Images from IndexedDB
-          const restoredProfileImage = await getFileFromDB("profileImage")
-          const restoredPanImage = await getFileFromDB("panImage")
-          const restoredGstImage = await getFileFromDB("gstImage")
-          const restoredFssaiImage = await getFileFromDB("fssaiImage")
-          
-          const restoredMenuImages = []
+        // If phone matched (meaning we didn't clear IndexedDB above), restore files
+        const shouldRestoreFiles = !(localData?.step1?.ownerPhone && currentPhone && 
+          normalizePhoneDigits(localData.step1.ownerPhone).slice(-10) !== normalizePhoneDigits(currentPhone).slice(-10))
+
+        if (shouldRestoreFiles) {
+          restoredProfileImage = await getFileFromDB("profileImage")
+          restoredPanImage = await getFileFromDB("panImage")
+          restoredGstImage = await getFileFromDB("gstImage")
+          restoredFssaiImage = await getFileFromDB("fssaiImage")
           for (let i = 0; i < 10; i++) {
             const img = await getFileFromDB(`menuImage_${i}`)
             if (img) restoredMenuImages.push(img)
           }
+        }
 
-          if (localData.step2) {
-            const urlMenuImages = (localData.step2.menuImages || []).filter(
-              (img) => img?.url || typeof img === "string"
-            )
-            
-            setStep2((prev) => ({
-              ...prev,
-              menuImages: [...urlMenuImages, ...restoredMenuImages],
-              profileImage:
-                restoredProfileImage ||
-                (typeof localData.step2.profileImage === "string" || localData.step2.profileImage?.url
-                  ? localData.step2.profileImage
-                  : null),
-              cuisines: localData.step2.cuisines || [],
-              estimatedDeliveryTime: localData.step2.estimatedDeliveryTime || "",
-              openingTime: normalizeTimeValue(localData.step2.openingTime),
-              closingTime: normalizeTimeValue(localData.step2.closingTime),
-              openDays: localData.step2.openDays || [],
-            }))
+        // Hydrate Step 2
+        setStep2((prev) => {
+          const urlMenuImages = (localData?.step2?.menuImages || []).filter((img) => img?.url || typeof img === "string")
+          const backendMenuImages = (step2Data.menuImageUrls && step2Data.menuImageUrls.length > 0)
+            ? step2Data.menuImageUrls
+            : (backendData?.menuImages && backendData.menuImages.length > 0)
+            ? backendData.menuImages
+            : []
+          
+          return {
+            ...prev,
+            menuImages: urlMenuImages.length > 0 
+              ? [...urlMenuImages, ...restoredMenuImages]
+              : [...backendMenuImages, ...restoredMenuImages],
+            profileImage: restoredProfileImage || 
+              (localData?.step2?.profileImage && (typeof localData.step2.profileImage === "string" || localData.step2.profileImage?.url)
+                ? localData.step2.profileImage 
+                : (step2Data.profileImageUrl || backendData?.profileImage || null)),
+            cuisines: (localData?.step2?.cuisines && localData.step2.cuisines.length > 0)
+              ? localData.step2.cuisines
+              : (step2Data.cuisines && step2Data.cuisines.length > 0)
+              ? step2Data.cuisines
+              : (backendData?.cuisines && backendData.cuisines.length > 0)
+              ? backendData.cuisines
+              : [],
+            estimatedDeliveryTime: localData?.step2?.estimatedDeliveryTime || step2Data.estimatedDeliveryTime || backendData?.estimatedDeliveryTime || "",
+            openingTime: normalizeTimeValue(localData?.step2?.openingTime || deliveryTimings.openingTime || backendData?.openingTime),
+            closingTime: normalizeTimeValue(localData?.step2?.closingTime || deliveryTimings.closingTime || backendData?.closingTime),
+            openDays: (localData?.step2?.openDays && localData.step2.openDays.length > 0)
+              ? localData.step2.openDays
+              : (step2Data.openDays && step2Data.openDays.length > 0)
+              ? step2Data.openDays
+              : (backendData?.openDays && backendData.openDays.length > 0)
+              ? backendData.openDays
+              : [],
           }
+        })
 
-          if (localData.step3) {
-            setStep3((prev) => ({
-              ...prev,
-              panNumber: localData.step3.panNumber || "",
-              nameOnPan: localData.step3.nameOnPan || "",
-              panImage: restoredPanImage || localData.step3.panImage || null,
-              gstRegistered: localData.step3.gstRegistered || false,
-              gstNumber: localData.step3.gstNumber || "",
-              gstLegalName: localData.step3.gstLegalName || "",
-              gstAddress: localData.step3.gstAddress || "",
-              gstImage: restoredGstImage || localData.step3.gstImage || null,
-              fssaiNumber: localData.step3.fssaiNumber || "",
-              fssaiExpiry: localData.step3.fssaiExpiry || "",
-              fssaiImage: restoredFssaiImage || localData.step3.fssaiImage || null,
-              accountNumber: localData.step3.accountNumber || "",
-              confirmAccountNumber: localData.step3.confirmAccountNumber || "",
-              ifscCode: (localData.step3.ifscCode || "").toUpperCase(),
-              accountHolderName: localData.step3.accountHolderName || "",
-              accountType: normalizeAccountTypeValue(localData.step3.accountType || ""),
-            }))
+        // Hydrate Step 3
+        setStep3((prev) => ({
+          ...prev,
+          panNumber: localData?.step3?.panNumber || panData.panNumber || backendData?.panNumber || "",
+          nameOnPan: localData?.step3?.nameOnPan || panData.nameOnPan || backendData?.nameOnPan || "",
+          panImage: restoredPanImage || 
+            (localData?.step3?.panImage ? localData.step3.panImage : (panData.image || backendData?.panImage || null)),
+          gstRegistered: localData?.step3
+            ? localData.step3.gstRegistered
+            : typeof gstData.isRegistered === "boolean"
+            ? gstData.isRegistered
+            : typeof backendData?.gstRegistered === "boolean"
+            ? backendData.gstRegistered
+            : false,
+          gstNumber: localData?.step3?.gstNumber || gstData.gstNumber || backendData?.gstNumber || "",
+          gstLegalName: localData?.step3?.gstLegalName || gstData.legalName || backendData?.gstLegalName || "",
+          gstAddress: localData?.step3?.gstAddress || gstData.address || backendData?.gstAddress || "",
+          gstImage: restoredGstImage || 
+            (localData?.step3?.gstImage ? localData.step3.gstImage : (gstData.image || backendData?.gstImage || null)),
+          fssaiNumber: localData?.step3?.fssaiNumber || fssaiData.registrationNumber || backendData?.fssaiNumber || "",
+          fssaiExpiry: localData?.step3?.fssaiExpiry || 
+            (fssaiData.expiryDate ? String(fssaiData.expiryDate).split("T")[0] : (backendData?.fssaiExpiry ? String(backendData.fssaiExpiry).split("T")[0] : "")),
+          fssaiImage: restoredFssaiImage || 
+            (localData?.step3?.fssaiImage ? localData.step3.fssaiImage : (fssaiData.image || backendData?.fssaiImage || null)),
+          accountNumber: localData?.step3?.accountNumber || bankData.accountNumber || backendData?.accountNumber || "",
+          confirmAccountNumber: localData?.step3?.confirmAccountNumber || bankData.accountNumber || backendData?.accountNumber || "",
+          ifscCode: (localData?.step3?.ifscCode || bankData.ifscCode || backendData?.ifscCode || "").toUpperCase(),
+          accountHolderName: localData?.step3?.accountHolderName || bankData.accountHolderName || backendData?.accountHolderName || "",
+          accountType: normalizeAccountTypeValue(localData?.step3?.accountType || bankData.accountType || backendData?.accountType || ""),
+        }))
+
+        // Hydrate Step 4
+        if (localData?.step4) {
+          setStep4State((prev) => ({
+            ...prev,
+            ...localData.step4,
+            errors: []
+          }))
+        }
+
+        // Set Step
+        const stepParam = searchParams.get("step")
+        if (stepParam) {
+          const stepNum = parseInt(stepParam, 10)
+          if (stepNum >= 1 && stepNum <= 3) {
+            setStep(stepNum)
           }
-
-          if (localData.step4) {
-            setStep4State((prev) => ({
-              ...prev,
-              ...localData.step4,
-              errors: [] // Clear previous errors
-            }))
-          }
-
-          // Only set step from localStorage if URL doesn't have a step parameter
-          if (localData.currentStep && !stepParam) {
-            const restoredStep = Number(localData.currentStep) || 1
-            setStep(Math.min(3, Math.max(1, restoredStep)))
+        } else if (localData?.currentStep) {
+          const restoredStep = Number(localData.currentStep) || 1
+          setStep(Math.min(3, Math.max(1, restoredStep)))
+        } else if (backendData) {
+          if (backendData.status === "approved" || backendData.status === "pending") {
+            setStep(1)
+          } else {
+            const stepToShow = determineStepToShow({ step1: backendData, step2: backendData, step3: backendData })
+            setStep(stepToShow === null ? 3 : stepToShow)
           }
         }
       } finally {
-        // Prevent save effect from writing default/empty state before restored data settles.
         isRestoringOnboardingRef.current = false
         setIsOnboardingHydrated(true)
+        setLoading(false)
       }
     }
 
-    loadData()
-  }, [searchParams])
+    initializeOnboarding()
+  }, [])
 
   useEffect(() => {
     if (!verifiedPhoneNumber) return
@@ -1193,175 +1296,7 @@ export default function RestaurantOnboarding() {
     }
   }, [])
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true)
-        // Use restaurantAPI.getCurrentRestaurant() to fetch real data
-        const res = await restaurantAPI.getCurrentRestaurant()
-        const data = res?.data?.data?.restaurant || res?.data?.restaurant
-        
-          if (data) {
-            setHasExistingRestaurantProfile(true)
-            const onboardingData = data.onboarding || {}
-            const step1Data = onboardingData.step1 || {}
-            const step2Data = onboardingData.step2 || {}
-            const step3Data = onboardingData.step3 || {}
-            const panData = step3Data.pan || {}
-            const gstData = step3Data.gst || {}
-            const fssaiData = step3Data.fssai || {}
-            const bankData = step3Data.bank || {}
-            const locationData = step1Data.location || data.location || {}
-            const deliveryTimings = step2Data.deliveryTimings || data.deliveryTimings || {}
 
-            setIsEditing(true)
-            // Map Step 1 (Merging with local state - prioritize local edits)
-            setStep1((prev) => ({
-              ...prev,
-              restaurantName: prev.restaurantName || step1Data.restaurantName || data.name || data.restaurantName || "",
-              pureVegRestaurant:
-                typeof prev.pureVegRestaurant === "boolean"
-                  ? prev.pureVegRestaurant
-                  : typeof step1Data.pureVegRestaurant === "boolean"
-                  ? step1Data.pureVegRestaurant
-                  : typeof data.pureVegRestaurant === "boolean"
-                  ? data.pureVegRestaurant
-                  : null,
-              ownerName: prev.ownerName || step1Data.ownerName || data.ownerName || "",
-              ownerEmail: prev.ownerEmail || step1Data.ownerEmail || data.ownerEmail || data.email || "",
-              ownerPhone: prev.ownerPhone || step1Data.ownerPhone || data.ownerPhone || data.phone || "",
-              zoneId: prev.zoneId || step1Data.zoneId || data.zoneId || "",
-              primaryContactNumber:
-                prev.primaryContactNumber ||
-                step1Data.primaryContactNumber ||
-                data.primaryContactNumber ||
-                data.ownerPhone ||
-                data.phone ||
-                "",
-              location: {
-                ...prev.location,
-                formattedAddress:
-                  locationData.formattedAddress ||
-                  locationData.address ||
-                  data.address ||
-                  prev.location?.formattedAddress ||
-                  "",
-                addressLine1: locationData.addressLine1 || data.addressLine1 || prev.location?.addressLine1 || "",
-                addressLine2: locationData.addressLine2 || data.addressLine2 || prev.location?.addressLine2 || "",
-                area: locationData.area || data.area || prev.location?.area || "",
-                city: locationData.city || data.city || prev.location?.city || "",
-                state: locationData.state || data.state || prev.location?.state || "",
-                pincode: locationData.pincode || data.pincode || prev.location?.pincode || "",
-                landmark: locationData.landmark || data.landmark || prev.location?.landmark || "",
-                latitude: locationData.latitude ?? prev.location?.latitude ?? "",
-                longitude: locationData.longitude ?? prev.location?.longitude ?? "",
-              },
-            }))
-
-            // Map Step 2
-            setStep2((prev) => ({
-              ...prev,
-              menuImages:
-                (step2Data.menuImageUrls && step2Data.menuImageUrls.length > 0)
-                  ? step2Data.menuImageUrls
-                  : (data.menuImages && data.menuImages.length > 0)
-                  ? data.menuImages
-                  : prev.menuImages,
-              profileImage: step2Data.profileImageUrl || data.profileImage || prev.profileImage,
-              cuisines:
-                (step2Data.cuisines && step2Data.cuisines.length > 0)
-                  ? step2Data.cuisines
-                  : (data.cuisines && data.cuisines.length > 0)
-                  ? data.cuisines
-                  : prev.cuisines,
-              estimatedDeliveryTime:
-                step2Data.estimatedDeliveryTime ||
-                data.estimatedDeliveryTime ||
-                prev.estimatedDeliveryTime ||
-                "",
-              openingTime: normalizeTimeValue(deliveryTimings.openingTime || data.openingTime) || prev.openingTime,
-              closingTime: normalizeTimeValue(deliveryTimings.closingTime || data.closingTime) || prev.closingTime,
-              openDays:
-                (step2Data.openDays && step2Data.openDays.length > 0)
-                  ? step2Data.openDays
-                  : (data.openDays && data.openDays.length > 0)
-                  ? data.openDays
-                  : prev.openDays,
-            }))
-
-            // Map Step 3
-            setStep3((prev) => ({
-              ...prev,
-              panNumber: panData.panNumber || data.panNumber || prev.panNumber || "",
-              nameOnPan: panData.nameOnPan || data.nameOnPan || prev.nameOnPan || "",
-              panImage: panData.image || data.panImage || prev.panImage || null,
-              gstRegistered:
-                typeof gstData.isRegistered === "boolean"
-                  ? gstData.isRegistered
-                  : typeof data.gstRegistered === "boolean"
-                  ? data.gstRegistered
-                  : (prev.gstRegistered || false),
-              gstNumber: gstData.gstNumber || data.gstNumber || prev.gstNumber || "",
-              gstLegalName: gstData.legalName || data.gstLegalName || prev.gstLegalName || "",
-              gstAddress: gstData.address || data.gstAddress || prev.gstAddress || "",
-              gstImage: gstData.image || data.gstImage || prev.gstImage || null,
-              fssaiNumber: fssaiData.registrationNumber || data.fssaiNumber || prev.fssaiNumber || "",
-              fssaiExpiry:
-                fssaiData.expiryDate
-                  ? String(fssaiData.expiryDate).split("T")[0]
-                  : data.fssaiExpiry
-                  ? String(data.fssaiExpiry).split("T")[0]
-                  : prev.fssaiExpiry,
-              fssaiImage: fssaiData.image || data.fssaiImage || prev.fssaiImage || null,
-              accountNumber: bankData.accountNumber || data.accountNumber || prev.accountNumber || "",
-              confirmAccountNumber:
-                bankData.accountNumber || data.accountNumber || prev.confirmAccountNumber || "",
-              ifscCode: (bankData.ifscCode || data.ifscCode || prev.ifscCode || "").toUpperCase(),
-              accountHolderName:
-                bankData.accountHolderName || data.accountHolderName || prev.accountHolderName || "",
-              accountType: normalizeAccountTypeValue(bankData.accountType || data.accountType || prev.accountType || ""),
-            }))
-
-          // Only determine step automatically if not specified in URL
-          const stepParam = searchParams.get("step")
-          if (!stepParam) {
-            // If already registered/pending, stay on step 1 for editing
-            if (data.status === "approved" || data.status === "pending") {
-               setStep(1)
-            } else {
-               const stepToShow = determineStepToShow({ step1: data, step2: data, step3: data })
-               // Map null (all steps complete) to final step for this flow
-               const targetStep = stepToShow === null ? 3 : stepToShow
-               
-               // Only update if backend says we are further along than current local step
-               // This prevents "downgrading" the step on reload if backend is out of sync
-               setStep(prevStep => {
-                 if (targetStep > prevStep) {
-                   return targetStep
-                 }
-                 return prevStep
-               })
-            }
-          }
-        } else {
-          setIsEditing(true)
-          setHasExistingRestaurantProfile(false)
-        }
-      } catch (err) {
-        setIsEditing(true)
-        setHasExistingRestaurantProfile(false)
-        if (err?.response?.status === 401) {
-          debugError("Authentication error fetching onboarding:", err)
-        } else {
-          debugError("Error fetching onboarding data:", err)
-        }
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [searchParams])
 
   const handleUpload = async (file, folder) => {
     try {

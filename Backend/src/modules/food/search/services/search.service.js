@@ -27,8 +27,28 @@ export const searchUnified = async (query = {}, options = {}) => {
     const term = String(q || '').trim();
     const regex = term ? new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : null;
 
+    // Only return restaurants that have at least one approved food item (and veg food if veg filter is active)
+    let activeRestaurantIds;
+    if (isVeg === 'true') {
+        activeRestaurantIds = await FoodItem.distinct('restaurantId', { 
+            approvalStatus: 'approved',
+            foodType: 'Veg',
+            isAvailable: true
+        });
+    } else {
+        activeRestaurantIds = await FoodItem.distinct('restaurantId', { 
+            approvalStatus: 'approved',
+            isAvailable: true
+        });
+    }
+    const activeIdsSet = new Set(activeRestaurantIds.map(id => id.toString()));
+    const activeObjIds = Array.from(activeIdsSet).map(id => new mongoose.Types.ObjectId(id));
+
     // 1. Initial Filter (approved status and basic conditions)
-    const restaurantFilter = { status: 'approved' };
+    const restaurantFilter = { 
+        status: 'approved',
+        _id: { $in: activeObjIds }
+    };
     
     console.log(`[Search-Service] Querying with term: "${term}", categoryId: "${categoryId}", zoneId: "${zoneId}"`);
 
@@ -55,14 +75,20 @@ export const searchUnified = async (query = {}, options = {}) => {
 
     // 2. Handle Category Filtering (Restaurants don't have categoryId, FoodItems do)
     if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
-        const catFoodItems = await FoodItem.find({ 
+        const catFoodFilters = {
             categoryId: new mongoose.Types.ObjectId(categoryId),
             approvalStatus: 'approved' 
-        }).select('restaurantId').lean();
+        };
+        if (isVeg === 'true') {
+            catFoodFilters.foodType = 'Veg';
+        }
+        const catFoodItems = await FoodItem.find(catFoodFilters).select('restaurantId').lean();
         
         const catRestaurantIds = [...new Set(catFoodItems.map(f => f.restaurantId.toString()))];
-        if (catRestaurantIds.length > 0) {
-            restaurantFilter._id = { $in: catRestaurantIds.map(id => new mongoose.Types.ObjectId(id)) };
+        const intersected = catRestaurantIds.filter(id => activeIdsSet.has(id));
+        
+        if (intersected.length > 0) {
+            restaurantFilter._id = { $in: intersected.map(id => new mongoose.Types.ObjectId(id)) };
         } else {
             // No food items in this category -> No restaurants
             return {
@@ -89,7 +115,7 @@ export const searchUnified = async (query = {}, options = {}) => {
         });
 
         // B. Search by Food Item Name
-        const foodFilters = { approvalStatus: 'approved' };
+        const foodFilters = { approvalStatus: 'approved', isAvailable: true };
         if (isVeg === 'true') foodFilters.foodType = 'Veg';
         
         const matchedFoods = await FoodItem.find({

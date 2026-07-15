@@ -237,6 +237,21 @@ export default function Cart() {
   const [pricing, setPricing] = useState(null)
   const [loadingPricing, setLoadingPricing] = useState(false)
 
+  const isRestaurantClosed = useMemo(() => {
+    if (!restaurantData) return false
+    
+    if (isScheduled) {
+      if (!scheduledDate || !scheduledTime) return false
+      const scheduleString = `${scheduledDate}T${scheduledTime}:00`
+      const scheduleDateObj = new Date(scheduleString)
+      const availability = getRestaurantAvailabilityStatus(restaurantData, scheduleDateObj)
+      return !availability.isOpen
+    } else {
+      const availability = getRestaurantAvailabilityStatus(restaurantData)
+      return !availability.isOpen
+    }
+  }, [restaurantData, isScheduled, scheduledDate, scheduledTime])
+
   // Addons state
   const [addons, setAddons] = useState([])
   const [loadingAddons, setLoadingAddons] = useState(false)
@@ -923,11 +938,11 @@ export default function Cart() {
                   discount: coupon.originalPrice - coupon.discountedPrice,
                   discountPercentage: coupon.discountPercentage,
                   discountDisplay: coupon.discountType === "percentage"
-                    ? `${coupon.discountPercentage}% OFF`
+                    ? `${coupon.discountPercentage}% OFF${coupon.maxDiscount ? ` Upto ${RUPEE_SYMBOL}${coupon.maxDiscount}` : ''}`
                     : `${RUPEE_SYMBOL}${Math.max(0, (coupon.originalPrice || 0) - (coupon.discountedPrice || 0))} OFF`,
                   minOrder: coupon.minOrderValue || 0,
                   description: coupon.discountType === "percentage"
-                    ? `${coupon.discountPercentage}% OFF with '${coupon.couponCode}'`
+                    ? `${coupon.discountPercentage}% OFF${coupon.maxDiscount ? ` Upto ${RUPEE_SYMBOL}${coupon.maxDiscount}` : ''} with '${coupon.couponCode}'`
                     : `Save ${RUPEE_SYMBOL}${Math.max(0, (coupon.originalPrice || 0) - (coupon.discountedPrice || 0))} with '${coupon.couponCode}'`,
                   originalPrice: coupon.originalPrice,
                   discountedPrice: coupon.discountedPrice,
@@ -1526,6 +1541,11 @@ export default function Cart() {
 
 
   const handlePlaceOrder = async () => {
+    if (isRestaurantClosed) {
+      toast.error("This restaurant is currently closed. You cannot place orders at this time.")
+      return
+    }
+
     if (!hasSavedAddress) {
       toast.error("Please choose a delivery location to continue")
       openLocationSelector()
@@ -2087,7 +2107,7 @@ export default function Cart() {
       </div>
 
       {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-44 md:pb-52">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-[250px] md:pb-[300px]">
         {/* Savings Banner */}
         {savings > 0 && (
           <div className="bg-blue-100 dark:bg-blue-900/20 px-4 md:px-6 py-2 md:py-3 flex-shrink-0">
@@ -2726,14 +2746,33 @@ export default function Cart() {
               </div>
             </div>
 
+            {/* Closed warning banner */}
+            {isRestaurantClosed && (
+              <div className="mb-3 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-2xl flex items-start gap-2.5">
+                <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-white text-xs font-bold">!</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-xs font-bold text-red-900 dark:text-red-200">Restaurant is Closed</h4>
+                  <p className="text-[11px] text-red-700 dark:text-red-300 mt-0.5">
+                    This restaurant is currently closed or not accepting orders. You cannot place this order right now.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Place Order Button */}
             <button
               onClick={handlePlaceOrder}
-              disabled={isPlacingOrder || (selectedPaymentMethod === "wallet" && walletBalance < total)}
+              disabled={isPlacingOrder || isRestaurantClosed || (selectedPaymentMethod === "wallet" && walletBalance < total)}
               className="w-full text-white px-6 h-12 md:h-14 rounded-2xl font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between transition-transform active:scale-[0.98]"
               style={{
-                background: "linear-gradient(135deg, rgba(var(--module-theme-rgb,250,2,114),0.92), var(--module-theme-color,#FA0272))",
-                boxShadow: "0 12px 24px rgba(var(--module-theme-rgb,250,2,114),0.28)",
+                background: isRestaurantClosed
+                  ? "linear-gradient(135deg, #9ca3af, #6b7280)"
+                  : "linear-gradient(135deg, rgba(var(--module-theme-rgb,250,2,114),0.92), var(--module-theme-color,#FA0272))",
+                boxShadow: isRestaurantClosed
+                  ? "none"
+                  : "0 12px 24px rgba(var(--module-theme-rgb,250,2,114),0.28)",
               }}
             >
               {(selectedPaymentMethod === "razorpay" || selectedPaymentMethod === "wallet" || selectedPaymentMethod === "cash") && (
@@ -2745,9 +2784,11 @@ export default function Cart() {
               <div className="flex items-center gap-1 mx-auto text-sm md:text-lg tracking-wide">
                 {isPlacingOrder
                   ? "Processing..."
-                  : !hasSavedAddress
-                    ? "Select Address"
-                    : "Place Order"}
+                  : isRestaurantClosed
+                    ? "Restaurant Closed"
+                    : !hasSavedAddress
+                      ? "Select Address"
+                      : "Place Order"}
                 <div className="flex align-center h-full">
                   <ChevronRight className="h-4 w-4 md:h-5 md:w-5" />
                 </div>
