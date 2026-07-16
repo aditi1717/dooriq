@@ -14,8 +14,6 @@ const debugError = (...args) => {}
 export default function TaxReport() {
   const [filters, setFilters] = useState({
     dateRangeType: "All Time",
-    calculateTax: "Percentage",
-    taxRate: "Select Tax Rate",
   })
   const [reports, setReports] = useState([])
   const [stats, setStats] = useState({
@@ -88,8 +86,6 @@ export default function TaxReport() {
   const handleReset = () => {
     setFilters({
       dateRangeType: "All Time",
-      calculateTax: "Percentage",
-      taxRate: "Select Tax Rate",
     })
   }
 
@@ -200,41 +196,6 @@ export default function TaxReport() {
                 <option value="This Week">This Week</option>
                 <option value="This Month">This Month</option>
                 <option value="This Year">This Year</option>
-              </select>
-              <ChevronDown className="absolute right-2 bottom-2.5 w-4 h-4 text-slate-500 pointer-events-none" />
-            </div>
-
-            <div className="relative">
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Select How to calculate tax
-              </label>
-              <select
-                value={filters.calculateTax}
-                onChange={(e) => setFilters(prev => ({ ...prev, calculateTax: e.target.value }))}
-                className="w-full px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Percentage">Percentage</option>
-                <option value="Fixed Amount">Fixed Amount</option>
-                <option value="Tiered">Tiered</option>
-              </select>
-              <ChevronDown className="absolute right-2 bottom-2.5 w-4 h-4 text-slate-500 pointer-events-none" />
-            </div>
-
-            <div className="relative">
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Select Tax Rates
-              </label>
-              <select
-                value={filters.taxRate}
-                onChange={(e) => setFilters(prev => ({ ...prev, taxRate: e.target.value }))}
-                className="w-full px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Select Tax Rate">Select Tax Rate</option>
-                <option value="5%">5%</option>
-                <option value="10%">10%</option>
-                <option value="15%">15%</option>
-                <option value="18%">18%</option>
-                <option value="20%">20%</option>
               </select>
               <ChevronDown className="absolute right-2 bottom-2.5 w-4 h-4 text-slate-500 pointer-events-none" />
             </div>
