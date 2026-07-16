@@ -11,7 +11,36 @@ import { getHaversineDistance, calculateETA } from '@/modules/DeliveryV2/utils/g
  */
 export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
   const { riderLocation } = useDeliveryStore();
-  const [timeLeft, setTimeLeft] = useState(30);
+
+  const getStoredDeliveryPartnerId = () => {
+    if (typeof localStorage === 'undefined') return '';
+    const directId =
+      localStorage.getItem('deliveryPartnerId') ||
+      localStorage.getItem('deliveryPartnerMongoId') ||
+      localStorage.getItem('deliveryBoyId') ||
+      '';
+    if (directId) return directId;
+
+    try {
+      const user = JSON.parse(localStorage.getItem('delivery_user') || '{}');
+      return String(user?._id || user?.id || user?.userId || user?.deliveryPartnerId || '');
+    } catch (_) {
+      return '';
+    }
+  };
+
+  const [timeLeft, setTimeLeft] = useState(() => {
+    const partnerId = getStoredDeliveryPartnerId();
+    if (!partnerId || !order?.dispatch?.offeredTo) return 30;
+    
+    const offer = order.dispatch.offeredTo.find(
+      (o) => String(o.partnerId?._id || o.partnerId) === String(partnerId)
+    );
+    if (!offer || !offer.at) return 30;
+
+    const elapsed = Math.floor((Date.now() - new Date(offer.at).getTime()) / 1000);
+    return Math.max(0, 30 - elapsed);
+  });
 
   useEffect(() => {
     if (timeLeft <= 0) {
