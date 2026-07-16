@@ -26,7 +26,7 @@ export default function SettingsDialog({ isOpen, onOpenChange, visibleColumns, t
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md bg-white p-0 opacity-0 data-[state=open]:opacity-100 data-[state=closed]:opacity-0 transition-opacity duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:scale-100 data-[state=closed]:scale-100">
+      <DialogContent className="max-w-2xl bg-white p-0 opacity-0 data-[state=open]:opacity-100 data-[state=closed]:opacity-0 transition-opacity duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:scale-100 data-[state=closed]:scale-100">
         <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <Settings className="w-5 h-5" />
@@ -39,7 +39,7 @@ export default function SettingsDialog({ isOpen, onOpenChange, visibleColumns, t
               <Columns className="w-4 h-4" />
               Visible Columns
             </h3>
-            <div className="space-y-2">
+            <div className="grid grid-cols-3 gap-2">
               {Object.entries(columnLabels).map(([key, label]) => (
                 <label
                   key={key}
