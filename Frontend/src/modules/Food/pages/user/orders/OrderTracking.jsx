@@ -1671,9 +1671,18 @@ export default function OrderTracking() {
               <div key={i} className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-2 min-w-0">
                   <div
-                    className={`w-3.5 h-3.5 mt-0.5 border flex items-center justify-center p-[1px] shrink-0 ${resolvedIsVeg ? "border-[#16a34a] bg-green-50/40 dark:bg-green-900/25" : "border-[#dc2626] bg-red-50/40 dark:bg-red-900/25"}`}
+                    className="w-3.5 h-3.5 mt-0.5 border flex items-center justify-center p-[1px] shrink-0"
+                    style={{
+                      borderColor: resolvedIsVeg ? "#16a34a" : "#dc2626",
+                      backgroundColor: resolvedIsVeg ? "rgba(22, 163, 74, 0.05)" : "rgba(220, 38, 38, 0.05)"
+                    }}
                   >
-                    <div className={`w-full h-full rounded-full ${resolvedIsVeg ? "bg-[#16a34a]" : "bg-[#dc2626]"}`} />
+                    <div
+                      className="w-full h-full rounded-full"
+                      style={{
+                        backgroundColor: resolvedIsVeg ? "#16a34a" : "#dc2626"
+                      }}
+                    />
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm text-gray-700 dark:text-gray-300 font-medium truncate">
