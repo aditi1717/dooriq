@@ -48,7 +48,7 @@ export default function PromoRow({ handleVegModeChange, navigate, isVegMode, tog
           onClick={() => {
             if (promo.id === 'gourmet') navigate('/food/user/gourmet');
             else if (promo.id === 'offers') navigate('/food/user/offers');
-            else if (promo.id === 'under-250') navigate('/food/user/under-250');
+            else if (promo.id === 'under-250') navigate('/food/user/switch-99');
             else if (promo.id === 'collections') navigate('/food/user/profile/favorites');
           }}
         >

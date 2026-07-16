@@ -1597,6 +1597,7 @@ export default function Home() {
     };
   }, [zoneId]);
   const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("Added to collection");
   const [showManageCollections, setShowManageCollections] = useState(false);
   const [selectedRestaurantSlug, setSelectedRestaurantSlug] = useState(null);
 
@@ -1780,6 +1781,21 @@ export default function Home() {
       if (newSet.has(filterId)) {
         newSet.delete(filterId);
       } else {
+        const distanceFilters = ['distance-under-1km', 'distance-under-2km']
+        const ratingFilters = ['rating-35-plus', 'rating-4-plus', 'rating-45-plus']
+        const timeFilters = ['delivery-under-30', 'delivery-under-45']
+        const priceFilters = ['price-under-200', 'price-under-500']
+
+        if (distanceFilters.includes(filterId)) {
+          distanceFilters.forEach(f => newSet.delete(f))
+        } else if (ratingFilters.includes(filterId)) {
+          ratingFilters.forEach(f => newSet.delete(f))
+        } else if (timeFilters.includes(filterId)) {
+          timeFilters.forEach(f => newSet.delete(f))
+        } else if (priceFilters.includes(filterId)) {
+          priceFilters.forEach(f => newSet.delete(f))
+        }
+
         newSet.add(filterId);
       }
       return newSet;
@@ -2049,6 +2065,8 @@ export default function Home() {
                   ? restaurant.cuisines
                   : [],
                 rating: Number(restaurant.rating) || 0,
+                totalRatings: Number(restaurant.totalRatings || restaurant.reviews || restaurant.ratingCount || 0),
+                reviews: Number(restaurant.totalRatings || restaurant.reviews || restaurant.ratingCount || 0),
                 deliveryTime:
                   restaurant.deliveryTime ||
                   restaurant.estimatedDeliveryTime ||
@@ -2622,6 +2640,8 @@ export default function Home() {
         name: getRestaurantDisplayName(restaurant),
         cuisine,
         rating: Number(restaurant?.rating) || 0,
+        totalRatings: Number(restaurant?.totalRatings || restaurant?.reviews || restaurant?.ratingCount || 0),
+        reviews: Number(restaurant?.totalRatings || restaurant?.reviews || restaurant?.ratingCount || 0),
         distance: "",
         deliveryTime: "",
         image: normalizeImageUrl(image) || foodImages[0],
@@ -3190,8 +3210,12 @@ export default function Home() {
 
                   const handleToggleFavorite = (slug, res) => {
                     if (favorite) {
-                      setSelectedRestaurantSlug(slug);
-                      setShowManageCollections(true);
+                      removeFavorite(slug);
+                      setToastMessage("Removed from collection");
+                      setShowToast(true);
+                      setTimeout(() => {
+                        setShowToast(false);
+                      }, 3000);
                     } else {
                       addFavorite({
                         slug: slug,
@@ -3203,6 +3227,7 @@ export default function Home() {
                         priceRange: res.priceRange,
                         image: res.image,
                       });
+                      setToastMessage("Added to collection");
                       setShowToast(true);
                       setTimeout(() => {
                         setShowToast(false);
@@ -3297,7 +3322,6 @@ export default function Home() {
                       { id: "rating", label: "Rating", icon: Star },
                       { id: "distance", label: "Distance", icon: MapPin },
                       { id: "price", label: "Dish Price", icon: IndianRupee },
-                      { id: "offers", label: "Offers", icon: BadgePercent },
                       { id: "trust", label: "Trust", icon: ShieldCheck },
                     ].map((tab) => {
                       const Icon = tab.icon;
@@ -3552,9 +3576,7 @@ export default function Home() {
                       </div>
                     </div>
 
-                    
-
-                    {/* Trust Markers Tab */}
+                               {/* Trust Markers Tab */}
                     <div
                       ref={(el) => (filterSectionRefs.current["trust"] = el)}
                       data-section-id="trust"
@@ -3563,18 +3585,6 @@ export default function Home() {
                         Trust Markers
                       </h3>
                       <div className="flex flex-col gap-3">
-                        <button
-                          onClick={() => toggleFilter("top-rated")}
-                          className={`px-4 py-3 rounded-xl border text-left transition-colors ${
-                            activeFilters.has("top-rated")
-                              ? "border-[#EB590E] bg-[#FFF2EB] dark:bg-green-900/20"
-                              : "border-gray-200 dark:border-gray-800 hover:border-[#EB590E]"
-                          }`}>
-                          <span
-                            className={`text-sm font-medium ${activeFilters.has("top-rated") ? "text-[#EB590E]" : "text-gray-700 dark:text-gray-300"}`}>
-                            Top Rated
-                          </span>
-                        </button>
                         <button
                           onClick={() => toggleFilter("trusted")}
                           className={`px-4 py-3 rounded-xl border text-left transition-colors ${
@@ -3585,30 +3595,6 @@ export default function Home() {
                           <span
                             className={`text-sm font-medium ${activeFilters.has("trusted") ? "text-[#EB590E]" : "text-gray-700 dark:text-gray-300"}`}>
                             Trusted by 1000+ users
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Offers Tab */}
-                    <div
-                      ref={(el) => (filterSectionRefs.current["offers"] = el)}
-                      data-section-id="offers"
-                      className="space-y-4 mb-8">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                        Offers
-                      </h3>
-                      <div className="flex flex-col gap-3">
-                        <button
-                          onClick={() => toggleFilter("has-offers")}
-                          className={`px-4 py-3 rounded-xl border text-left transition-colors ${
-                            activeFilters.has("has-offers")
-                              ? "border-[#EB590E] bg-[#FFF2EB] dark:bg-green-900/20"
-                              : "border-gray-200 dark:border-gray-800 hover:border-[#EB590E]"
-                          }`}>
-                          <span
-                            className={`text-sm font-medium ${activeFilters.has("has-offers") ? "text-[#EB590E]" : "text-gray-700 dark:text-gray-300"}`}>
-                            Restaurants with offers
                           </span>
                         </button>
                       </div>
@@ -4222,7 +4208,7 @@ export default function Home() {
                 exit={{ y: 100, opacity: 0 }}
                 transition={{ duration: 0.3, type: "spring", damping: 25 }}
                 className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[10001] bg-black text-white px-6 py-3 rounded-lg shadow-2xl">
-                <p className="text-sm font-medium">Added to bookmark</p>
+                <p className="text-sm font-medium">{toastMessage}</p>
               </motion.div>
             )}
           </AnimatePresence>,

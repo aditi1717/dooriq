@@ -548,8 +548,9 @@ export default function HubMenu() {
       toast.error("Please enter add-on name")
       return
     }
-    if (!addonPrice || parseFloat(addonPrice) < 0) {
-      toast.error("Please enter a valid price")
+    const parsedPrice = parseFloat(addonPrice)
+    if (Number.isNaN(parsedPrice) || parsedPrice <= 0) {
+      toast.error("Please enter a valid price greater than 0")
       return
     }
 
@@ -609,7 +610,7 @@ export default function HubMenu() {
         name: addonName.trim(),
         description: addonDescription.trim(),
         foodType: addonFoodType === "non-veg" ? "non-veg" : "veg",
-        price: parseFloat(addonPrice) || 0,
+        price: parsedPrice,
         image: allImageUrls.length > 0 ? allImageUrls[0] : '',
         images: allImageUrls
       }

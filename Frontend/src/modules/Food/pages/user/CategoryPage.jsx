@@ -902,7 +902,8 @@ export default function CategoryPage() {
                 image: image,
                 images: allImages,
                 cuisine: Array.isArray(restaurant.cuisines) && restaurant.cuisines.length > 0 ? restaurant.cuisines[0] : "Multi-cuisine",
-                rating: Number(restaurant.rating || restaurant.avgRating || 0) || 4.5,
+                rating: Number(restaurant.rating || restaurant.avgRating || 0),
+                totalRatings: Number(restaurant.totalRatings || restaurant.reviews || restaurant.ratingCount || 0),
                 deliveryTime: deliveryTime || (restaurant.estimatedDeliveryTimeMinutes ? `${restaurant.estimatedDeliveryTimeMinutes} mins` : "25-30 mins"),
                 distance: distance || (restaurant.distance ? (typeof restaurant.distance === 'number' ? `${restaurant.distance.toFixed(1)} km` : restaurant.distance) : "1.2 km"),
                 priceRange: restaurant.priceRange || "$$",
@@ -1122,6 +1123,21 @@ export default function CategoryPage() {
       if (newSet.has(filterId)) {
         newSet.delete(filterId)
       } else {
+        const distanceFilters = ['distance-under-1km', 'distance-under-2km']
+        const ratingFilters = ['rating-35-plus', 'rating-4-plus', 'rating-45-plus']
+        const timeFilters = ['under-30-mins', 'delivery-under-45']
+        const priceFilters = ['price-under-200', 'under-250', 'price-under-500']
+
+        if (distanceFilters.includes(filterId)) {
+          distanceFilters.forEach(f => newSet.delete(f))
+        } else if (ratingFilters.includes(filterId)) {
+          ratingFilters.forEach(f => newSet.delete(f))
+        } else if (timeFilters.includes(filterId)) {
+          timeFilters.forEach(f => newSet.delete(f))
+        } else if (priceFilters.includes(filterId)) {
+          priceFilters.forEach(f => newSet.delete(f))
+        }
+
         newSet.add(filterId)
       }
       return newSet
@@ -1512,7 +1528,7 @@ export default function CategoryPage() {
                   return (
                     <Link
                       key={restaurant.id}
-                      to={`/user/restaurants/${restaurant.name.toLowerCase().replace(/\s+/g, '-')}`}
+                      to={`/user/restaurants/${restaurant.name.toLowerCase().replace(/\s+/g, '-')}${restaurant.dishId ? `?dish=${restaurant.dishId}` : ''}`}
                       className="block"
                     >
                       <div className={`group ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
@@ -1566,16 +1582,18 @@ export default function CategoryPage() {
                           )}
 
                           {/* Rating Badge (NOW ON IMAGE, bottom-left with white border) */}
-                          <div
-                            className="absolute bottom-0 left-0 border-[4px] rounded-md border-white text-white text-[11px] md:text-xs font-bold px-1.5 py-0.5 flex items-center gap-0.5"
-                            style={{
-                              backgroundColor: "var(--module-theme-color, #FA0272)",
-                              boxShadow: "0 6px 14px rgba(var(--module-theme-rgb,250,2,114),0.35)",
-                            }}
-                          >
-                            {restaurant.rating}
-                            <Star className="h-2.5 w-2.5 md:h-3 md:w-3 fill-white" />
-                          </div>
+                          {restaurant.totalRatings > 0 && restaurant.rating > 0 && (
+                            <div
+                              className="absolute bottom-0 left-0 border-[4px] rounded-md border-white text-white text-[11px] md:text-xs font-bold px-1.5 py-0.5 flex items-center gap-0.5"
+                              style={{
+                                backgroundColor: "var(--module-theme-color, #FA0272)",
+                                boxShadow: "0 6px 14px rgba(var(--module-theme-rgb,250,2,114),0.35)",
+                              }}
+                            >
+                              {restaurant.rating.toFixed(1)}
+                              <Star className="h-2.5 w-2.5 md:h-3 md:w-3 fill-white" />
+                            </div>
+                          )}
                         </div>
 
                         <h3 className="font-semibold text-gray-900 dark:text-white text-xs md:text-sm line-clamp-1">
@@ -1622,7 +1640,7 @@ export default function CategoryPage() {
                 const isFavorite = favorites.has(restaurant.id)
 
                 return (
-                  <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`} className="h-full flex">
+                  <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}${restaurant.dishId ? `?dish=${restaurant.dishId}` : ''}`} className="h-full flex">
                     <Card className={`overflow-hidden cursor-pointer gap-0 border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-md h-full flex flex-col w-full ${shouldShowGrayscale ? 'grayscale opacity-75' : ''
                       }`}>
                       {/* Image Section */}
@@ -1714,16 +1732,18 @@ export default function CategoryPage() {
                               </p>
                             )}
                           </div>
-                          <div
-                            className="flex-shrink-0 text-white px-2 md:px-3 lg:px-4 py-1 lg:py-1.5 rounded-lg flex items-center gap-1"
-                            style={{
-                              backgroundColor: "var(--module-theme-color, #FA0272)",
-                              boxShadow: "0 8px 16px rgba(var(--module-theme-rgb,250,2,114),0.28)",
-                            }}
-                          >
-                            <span className="text-sm md:text-base lg:text-lg font-bold">{restaurant.rating}</span>
-                            <Star className="h-3 w-3 md:h-4 md:w-4 lg:h-5 lg:w-5 fill-white text-white" />
-                          </div>
+                          {restaurant.totalRatings > 0 && restaurant.rating > 0 && (
+                            <div
+                              className="flex-shrink-0 text-white px-2 md:px-3 lg:px-4 py-1 lg:py-1.5 rounded-lg flex items-center gap-1"
+                              style={{
+                                backgroundColor: "var(--module-theme-color, #FA0272)",
+                                boxShadow: "0 8px 16px rgba(var(--module-theme-rgb,250,2,114),0.28)",
+                              }}
+                            >
+                              <span className="text-sm md:text-base lg:text-lg font-bold">{restaurant.rating.toFixed(1)}</span>
+                              <Star className="h-3 w-3 md:h-4 md:w-4 lg:h-5 lg:w-5 fill-white text-white" />
+                            </div>
+                          )}
                         </div>
 
                         {/* Delivery Time & Distance */}
@@ -1826,7 +1846,6 @@ export default function CategoryPage() {
                         { id: 'rating', label: 'Rating', icon: Star },
                         { id: 'distance', label: 'Distance', icon: MapPin },
                         { id: 'price', label: 'Dish Price', icon: IndianRupee },
-                        { id: 'offers', label: 'Offers', icon: BadgePercent },
                         { id: 'trust', label: 'Trust', icon: ShieldCheck },
                       ].map((tab) => {
                         const Icon = tab.icon
@@ -2028,45 +2047,13 @@ export default function CategoryPage() {
                         </div>
                       </div>
 
-                      {/* Offers Tab */}
-                      <div
-                        ref={el => filterSectionRefs.current['offers'] = el}
-                        data-section-id="offers"
-                        className="space-y-4 mb-8"
-                      >
-                        <h3 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-white mb-4">Offers</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                          <button
-                            onClick={() => toggleFilter('flat-50-off')}
-                            className={`flex flex-col items-center gap-2 p-4 md:p-5 rounded-xl border transition-colors ${activeFilters.has('flat-50-off')
-                              ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
-                              : 'border-gray-200 dark:border-gray-700 hover:border-green-600'
-                              }`}
-                          >
-                            <BadgePercent className={`h-6 w-6 md:h-7 md:w-7 ${activeFilters.has('flat-50-off') ? 'text-[#EB590E]' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
-                            <span className={`text-sm md:text-base font-medium ${activeFilters.has('flat-50-off') ? 'text-[#EB590E]' : 'text-gray-700 dark:text-gray-300'}`}>Flat 50% OFF</span>
-                          </button>
-                          <button
-                            onClick={() => toggleFilter('price-match')}
-                            className={`flex flex-col items-center gap-2 p-4 md:p-5 rounded-xl border transition-colors ${activeFilters.has('price-match')
-                              ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
-                              : 'border-gray-200 dark:border-gray-700 hover:border-green-600'
-                              }`}
-                          >
-                            <BadgePercent className={`h-6 w-6 md:h-7 md:w-7 ${activeFilters.has('price-match') ? 'text-[#EB590E]' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
-                            <span className={`text-sm md:text-base font-medium ${activeFilters.has('price-match') ? 'text-[#EB590E]' : 'text-gray-700 dark:text-gray-300'}`}>Price Match</span>
-                          </button>
-                        </div>
-                      </div>
+
 
                       {/* Trust Markers Tab */}
                       {activeFilterTab === 'trust' && (
                         <div className="space-y-4">
                           <h3 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-white">Trust Markers</h3>
                           <div className="flex flex-col gap-3 md:gap-4">
-                            <button className="px-4 md:px-5 py-3 md:py-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-[#EB590E] text-left transition-colors">
-                              <span className="text-sm md:text-base font-medium text-gray-700 dark:text-gray-300">Top Rated</span>
-                            </button>
                             <button className="px-4 md:px-5 py-3 md:py-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-[#EB590E] text-left transition-colors">
                               <span className="text-sm md:text-base font-medium text-gray-700 dark:text-gray-300">Trusted by 1000+ users</span>
                             </button>

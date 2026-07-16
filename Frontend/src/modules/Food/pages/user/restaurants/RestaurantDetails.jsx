@@ -575,7 +575,7 @@ function RestaurantDetailsContent() {
               "Unknown Restaurant",
             cuisine: resolvedTopCategory,
             topCategory: resolvedTopCategory,
-            rating: actualRestaurant?.rating || apiRestaurant?.rating || actualRestaurant?.averageRating || apiRestaurant?.averageRating || 4.5,
+            rating: actualRestaurant?.rating || apiRestaurant?.rating || actualRestaurant?.averageRating || apiRestaurant?.averageRating || 0,
             reviews: actualRestaurant?.totalRatings || apiRestaurant?.totalRatings || actualRestaurant?.reviewCount || apiRestaurant?.reviewCount || actualRestaurant?.reviews?.length || apiRestaurant?.reviews?.length || 0,
             deliveryTime: actualRestaurant?.estimatedDeliveryTime || apiRestaurant?.estimatedDeliveryTime || actualRestaurant?.deliveryTime || apiRestaurant?.deliveryTime || actualRestaurant?.avgDeliveryTime || apiRestaurant?.avgDeliveryTime || "25-30 mins",
             distance: stableListingDistance || calculatedDistance || actualRestaurant?.distance || apiRestaurant?.distance || actualRestaurant?.distanceFromUser || apiRestaurant?.distanceFromUser || "1.2 km",
@@ -2496,7 +2496,7 @@ function RestaurantDetailsContent() {
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{restaurant?.name || "Unknown Restaurant"}</h1>
             </div>
-            {restaurant.reviews > 0 && (
+            {restaurant.reviews > 0 && restaurant.rating > 0 && (
               <div className="flex flex-col items-end">
                 <Badge
                   className="text-white mb-1 flex items-center gap-1 px-2 py-1 border-0"
@@ -2692,7 +2692,7 @@ function RestaurantDetailsContent() {
 
         {/* Menu Items Section */}
         {restaurant?.menuSections && Array.isArray(restaurant.menuSections) && restaurant.menuSections.length > 0 && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-6 sm:py-8 md:py-10 lg:py-12 space-y-6 md:space-y-8 lg:space-y-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-6 sm:pt-8 md:pt-10 lg:pt-12 pb-32 sm:pb-36 md:pb-40 lg:pb-44 space-y-6 md:space-y-8 lg:space-y-10">
             {hasActiveMenuFilters ? (
               // Flat View when filters/sorting is active
               flatFilteredItems.length === 0 ? (
@@ -2729,64 +2729,68 @@ function RestaurantDetailsContent() {
                     <div key={sectionIndex} id={sectionId} className="space-y-1 scroll-mt-20">
                       {/* Section Header */}
                       {isRecommended && (
-                        <div className="flex items-center justify-between">
+                        <div
+                          className="flex items-center justify-between cursor-pointer py-2 hover:bg-gray-50 dark:hover:bg-gray-800/30 px-2 rounded-xl transition-all"
+                          onClick={() => {
+                            setExpandedSections((prev) => {
+                              const newSet = new Set(prev)
+                              if (newSet.has(originalIndex)) {
+                                newSet.delete(originalIndex)
+                              } else {
+                                newSet.add(originalIndex)
+                              }
+                              return newSet
+                            })
+                          }}
+                        >
                           <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                             Recommended for you
                           </h2>
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setExpandedSections(prev => {
-                                const newSet = new Set(prev)
-                                if (newSet.has(originalIndex)) {
-                                  newSet.delete(originalIndex)
-                                } else {
-                                  newSet.add(originalIndex)
-                                }
-                                return newSet
-                              })
-                            }}
-                            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                            type="button"
+                            className="p-1 rounded transition-colors"
                           >
                             <ChevronDown
-                              className={`h-5 w-5 text-gray-600 dark:text-gray-400 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`}
+                              className={`h-5 w-5 text-gray-600 dark:text-gray-400 transition-transform duration-200 ${isExpanded ? "" : "-rotate-90"}`}
                             />
                           </button>
                         </div>
                       )}
                       {!isRecommended && (
-                        <div className="flex items-center justify-between">
+                        <div
+                          className="flex items-center justify-between cursor-pointer py-2 hover:bg-gray-50 dark:hover:bg-gray-800/30 px-2 rounded-xl transition-all"
+                          onClick={() => {
+                            setExpandedSections((prev) => {
+                              const newSet = new Set(prev)
+                              if (newSet.has(originalIndex)) {
+                                newSet.delete(originalIndex)
+                              } else {
+                                newSet.add(originalIndex)
+                              }
+                              return newSet
+                            })
+                          }}
+                        >
                           <div className="space-y-1">
                             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                              {(section?.name && typeof section.name === 'string' && section.name.trim())
+                              {section?.name && typeof section.name === "string" && section.name.trim()
                                 ? section.name.trim()
-                                : (section?.title && typeof section.title === 'string' && section.title.trim())
+                                : section?.title && typeof section.title === "string" && section.title.trim()
                                   ? section.title.trim()
                                   : "Unnamed Section"}
                             </h2>
                             {section.subtitle && (
-                              <button className="text-sm text-blue-600 dark:text-blue-400 underline">
+                              <span className="text-sm text-blue-600 dark:text-blue-400 underline block">
                                 {section.subtitle}
-                              </button>
+                              </span>
                             )}
                           </div>
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setExpandedSections(prev => {
-                                const newSet = new Set(prev)
-                                if (newSet.has(originalIndex)) {
-                                  newSet.delete(originalIndex)
-                                } else {
-                                  newSet.add(originalIndex)
-                                }
-                                return newSet
-                              })
-                            }}
-                            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                            type="button"
+                            className="p-1 rounded transition-colors"
                           >
                             <ChevronDown
-                              className={`h-5 w-5 text-gray-600 dark:text-gray-400 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`}
+                              className={`h-5 w-5 text-gray-600 dark:text-gray-400 transition-transform duration-200 ${isExpanded ? "" : "-rotate-90"}`}
                             />
                           </button>
                         </div>
@@ -2823,27 +2827,29 @@ function RestaurantDetailsContent() {
                             return (
                               <div key={subIndex} className="space-y-4">
                                 {/* Subsection Header */}
-                                <div className="flex items-center justify-between">
+                                <div
+                                  className="flex items-center justify-between cursor-pointer py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800/30 px-2 rounded-lg transition-all"
+                                  onClick={() => {
+                                    setExpandedSections((prev) => {
+                                      const newSet = new Set(prev)
+                                      if (newSet.has(subsectionKey)) {
+                                        newSet.delete(subsectionKey)
+                                      } else {
+                                        newSet.add(subsectionKey)
+                                      }
+                                      return newSet
+                                    })
+                                  }}
+                                >
                                   <h3 className="text-base font-semibold text-gray-900 dark:text-white">
                                     {subsection?.name || subsection?.title || "Subsection"}
                                   </h3>
                                   <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setExpandedSections(prev => {
-                                        const newSet = new Set(prev)
-                                        if (newSet.has(subsectionKey)) {
-                                          newSet.delete(subsectionKey)
-                                        } else {
-                                          newSet.add(subsectionKey)
-                                        }
-                                        return newSet
-                                      })
-                                    }}
-                                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                                    type="button"
+                                    className="p-1 rounded transition-colors"
                                   >
                                     <ChevronDown
-                                      className={`h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${isSubsectionExpanded ? '' : '-rotate-90'}`}
+                                      className={`h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${isSubsectionExpanded ? "" : "-rotate-90"}`}
                                     />
                                   </button>
                                 </div>

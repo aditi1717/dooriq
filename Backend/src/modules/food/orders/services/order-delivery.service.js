@@ -40,6 +40,7 @@ function emitOrderUpdate(order, deliveryPartnerId) {
       const payload = {
         orderMongoId: order._id?.toString?.(),
         orderId: order._id.toString(),
+        orderFriendlyId: order.order_id || order._id.toString(),
         orderStatus: order.orderStatus,
         deliveryState: order.deliveryState,
         deliveryVerification: dv,

@@ -466,27 +466,35 @@ export default function UserOrderDetails() {
           <div className="border-t border-dashed border-gray-200 dark:border-zinc-800 my-3" />
 
           {/* Items */}
-          {items.map((item, idx) => (
-            <div key={idx} className="flex justify-between items-start mt-2">
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-3 h-3 border ${item.isVeg ? "border-green-600" : "border-red-600"
-                    } flex items-center justify-center p-[1px]`}
-                >
+          {items.map((item, idx) => {
+            const isVeg = typeof item.isVeg === 'boolean'
+              ? item.isVeg
+              : (typeof item.isVeg === 'string'
+                  ? ['veg', 'vegetarian'].includes(item.isVeg.toLowerCase().trim())
+                  : ['veg', 'vegetarian'].includes(String(item.foodType || item.category || item.type || '').toLowerCase().trim()))
+
+            return (
+              <div key={idx} className="flex justify-between items-start mt-2">
+                <div className="flex items-center gap-2">
                   <div
-                    className={`w-full h-full rounded-full ${item.isVeg ? "bg-green-600" : "bg-red-600"
-                      }`}
-                  />
+                    className="w-3.5 h-3.5 border flex items-center justify-center p-[1px] shrink-0 mt-0.5 rounded-[2px]"
+                    style={{ borderColor: isVeg ? "#16a34a" : "#dc2626", backgroundColor: isVeg ? "rgba(22, 163, 74, 0.05)" : "rgba(220, 38, 38, 0.05)" }}
+                  >
+                    <div
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{ backgroundColor: isVeg ? "#16a34a" : "#dc2626" }}
+                    />
+                  </div>
+                  <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">
+                    {item.quantity || item.qty || 1} x {item.name}{item.variantName ? ` (${item.variantName})` : ""}
+                  </span>
                 </div>
-                <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">
-                  {item.quantity || item.qty || 1} x {item.name}{item.variantName ? ` (${item.variantName})` : ""}
+                <span className="text-sm text-gray-800 dark:text-gray-200 font-medium">
+                  ₹{(item.price || 0).toFixed(2)}
                 </span>
               </div>
-              <span className="text-sm text-gray-800 dark:text-gray-200 font-medium">
-                ₹{(item.price || 0).toFixed(2)}
-              </span>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* Bill Summary Card */}

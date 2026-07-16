@@ -1222,8 +1222,8 @@ export default function Inventory() {
       return
     }
     const parsedPrice = parseFloat(addonPrice)
-    if (Number.isNaN(parsedPrice) || parsedPrice < 0) {
-      toast.error("Please enter a valid price")
+    if (Number.isNaN(parsedPrice) || parsedPrice <= 0) {
+      toast.error("Please enter a valid price greater than 0")
       return
     }
     setSavingAddon(true)

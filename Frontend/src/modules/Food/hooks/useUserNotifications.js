@@ -82,12 +82,19 @@ export const useUserNotifications = () => {
     socketRef.current.on('order_status_update', (data) => {
       debugLog('🔔 Order status update received:', data);
       
-      const title = data.title || `Order #${data.orderId || 'Update'}`;
+      const isMongoId = (id) => /^[a-f0-9]{24}$/i.test(String(id || ''));
+      const friendlyId = data.orderFriendlyId || (data.orderId && !isMongoId(data.orderId) ? data.orderId : null);
+      const title = data.title || (friendlyId ? `Order #${friendlyId}` : 'Order Update');
       const message = data.message || `Your order status is now ${String(data.orderStatus || '').replace(/_/g, ' ')}`;
+
+      // Check if user is currently viewing this order's tracking page
+      const isViewingThisOrder = typeof window !== 'undefined' && 
+        (window.location.pathname.includes(`/orders/${data.orderId}`) || 
+         window.location.pathname.includes(`/orders/${data.orderMongoId}`));
 
       // Optional: Show toast for important updates (Cancel, Ready, etc.)
       const isImportant = String(data.orderStatus).includes('cancel') || ['ready_for_pickup', 'ready', 'confirmed'].includes(data.orderStatus);
-      if (isImportant) {
+      if (isImportant && !isViewingThisOrder) {
         toast.message(title, {
           description: message,
           duration: 10000

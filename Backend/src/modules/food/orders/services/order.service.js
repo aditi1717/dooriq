@@ -232,18 +232,59 @@ async function expireUnacceptedOrders(filter = {}) {
     try {
       const io = getIO();
       if (io) {
+        const finalPaymentMethod = String(updated.payment?.method || "cash").toLowerCase();
+        const finalPaymentStatus = String(updated.payment?.status || "cod_pending").toLowerCase();
+        const isOnlinePaid =
+          finalPaymentMethod === "razorpay" &&
+          (finalPaymentStatus === "paid" || finalPaymentStatus === "refunded");
+        const refundDetail = isOnlinePaid
+          ? ` Your refund of ₹${updated.pricing?.total || 0} is being processed and will be credited to your original payment method within 5-7 working days.`
+          : (finalPaymentMethod === "wallet"
+            ? ` Refund of ₹${updated.pricing?.total || 0} has been credited back to your wallet.`
+            : "");
+
         const payload = {
           orderMongoId: updated._id?.toString?.(),
           orderId: updated._id.toString(),
+          orderFriendlyId: updated.order_id || updated._id.toString(),
           orderStatus: updated.orderStatus,
           note: "Not accepted by restaurant",
-          message: "Order was not accepted by restaurant in time.",
+          title: "Order Cancelled ❌",
+          message: `Order was not accepted by restaurant in time.${refundDetail}`,
         };
         io.to(rooms.user(updated.userId)).emit("order_status_update", payload);
         io.to(rooms.restaurant(updated.restaurantId)).emit("order_status_update", payload);
       }
+      
+      // Also send push/persistent notification so user knows their wallet was refunded
+      const finalPaymentMethod = String(updated.payment?.method || "cash").toLowerCase();
+      const finalPaymentStatus = String(updated.payment?.status || "cod_pending").toLowerCase();
+      const isOnlinePaid =
+        finalPaymentMethod === "razorpay" &&
+        (finalPaymentStatus === "paid" || finalPaymentStatus === "refunded");
+      const refundDetail = isOnlinePaid
+        ? ` Your refund of ₹${updated.pricing?.total || 0} is being processed and will be credited to your original payment method within 5-7 working days.`
+        : (finalPaymentMethod === "wallet"
+          ? ` Refund of ₹${updated.pricing?.total || 0} has been credited back to your wallet.`
+          : "");
+      await notifyOwnersSafely(
+        [
+          { ownerType: "USER", ownerId: updated.userId },
+          { ownerType: "RESTAURANT", ownerId: updated.restaurantId },
+        ],
+        {
+          title: "Order Cancelled ❌",
+          body: `Order #${updated.order_id || updated._id} was not accepted by restaurant in time.${refundDetail}`,
+          image: "https://i.ibb.co/5GzXz7r/Switcheats-Brand-Image.png",
+          data: {
+            type: "order_cancelled",
+            orderId: String(updated._id.toString()),
+            orderMongoId: String(updated._id),
+          },
+        },
+      );
     } catch (err) {
-      logger.warn(`expireUnacceptedOrders socket emit failed: ${err?.message || err}`);
+      logger.warn(`expireUnacceptedOrders notification sync failed: ${err?.message || err}`);
     }
   }
 
@@ -1058,13 +1099,16 @@ export async function cancelOrder(orderId, userId, reason) {
     logger.warn(`cancelOrder transaction sync failed: ${err?.message || err}`);
   }
 
-  // Notify User and Restaurant about the cancellation
   const finalPaymentMethod = String(order.payment?.method || paymentMethod || "cash").toLowerCase();
   const finalPaymentStatus = String(order.payment?.status || paymentStatus || "cod_pending").toLowerCase();
   const isOnlinePaid =
     finalPaymentMethod === "razorpay" &&
     (finalPaymentStatus === "paid" || finalPaymentStatus === "refunded");
-  const refundDetail = isOnlinePaid ? ` Your refund of ₹${order.pricing.total} is being processed and will be credited to your original payment method within 5-7 working days.` : "";
+  const refundDetail = isOnlinePaid
+    ? ` Your refund of ₹${order.pricing.total} is being processed and will be credited to your original payment method within 5-7 working days.`
+    : (finalPaymentMethod === "wallet"
+      ? ` Refund of ₹${order.pricing.total} has been credited back to your wallet.`
+      : "");
   
   await notifyOwnersSafely(
     [
@@ -1090,7 +1134,9 @@ export async function cancelOrder(orderId, userId, reason) {
       const payload = {
         orderMongoId: order._id?.toString?.(),
         orderId: order._id.toString(),
+        orderFriendlyId: order.order_id || order._id.toString(),
         orderStatus: order.orderStatus,
+        title: "Order Cancelled ❌",
         message: `Order #${order.order_id || order._id} has been cancelled successfully.${refundDetail}`
       };
       io.to(rooms.user(userId)).emit("order_status_update", payload);
@@ -1308,7 +1354,12 @@ export async function updateOrderStatusRestaurant(
     body = "Your order is ready and waiting to be picked up.";
   } else if (String(orderStatus).includes("cancel")) {
     const isOnlinePaid = order.payment.method === "razorpay" && (order.payment.status === "paid" || order.payment.status === "refunded");
-    const refundDetail = isOnlinePaid ? ` Your refund of ₹${order.pricing.total} is being processed and will be credited to your original payment method within 5-7 working days.` : "";
+    const finalPaymentMethod = String(order.payment?.method || "cash").toLowerCase();
+    const refundDetail = isOnlinePaid
+      ? ` Your refund of ₹${order.pricing.total} is being processed and will be credited to your original payment method within 5-7 working days.`
+      : (finalPaymentMethod === "wallet"
+        ? ` Refund of ₹${order.pricing.total} has been credited back to your wallet.`
+        : "");
     
     title = "Order Cancelled ❌";
     body = (note && String(note).trim()) ? note : `Unfortunately, your order has been cancelled by the restaurant.${refundDetail}`;
@@ -1845,8 +1896,19 @@ export async function updateOrderStatusAdmin(orderId, orderStatus, note = "", ad
         title = "Food is ready! 🛍️";
         body = "Your order is ready and waiting to be picked up.";
     } else if (String(orderStatus).includes("cancel")) {
+        const finalPaymentMethod = String(order.payment?.method || "cash").toLowerCase();
+        const finalPaymentStatus = String(order.payment?.status || "cod_pending").toLowerCase();
+        const isOnlinePaid =
+          finalPaymentMethod === "razorpay" &&
+          (finalPaymentStatus === "paid" || finalPaymentStatus === "refunded");
+        const refundDetail = isOnlinePaid
+          ? ` Your refund of ₹${order.pricing?.total || 0} is being processed and will be credited to your original payment method within 5-7 working days.`
+          : (finalPaymentMethod === "wallet"
+            ? ` Refund of ₹${order.pricing?.total || 0} has been credited back to your wallet.`
+            : "");
+
         title = "Order Cancelled ❌";
-        body = (note && String(note).trim()) ? note : `Unfortunately, your order has been cancelled by support.`;
+        body = (note && String(note).trim()) ? note : `Unfortunately, your order has been cancelled by support.${refundDetail}`;
     }
 
     await notifyOwnersSafely(notifyList, {
@@ -1866,6 +1928,7 @@ export async function updateOrderStatusAdmin(orderId, orderStatus, note = "", ad
             const payload = {
                 orderMongoId: order._id.toString(),
                 orderId: order._id.toString(),
+                orderFriendlyId: order.order_id || order._id.toString(),
                 orderStatus: order.orderStatus,
                 message: body,
                 title: title,

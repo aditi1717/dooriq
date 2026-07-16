@@ -523,6 +523,7 @@ export default function OrderTracking() {
   const lookupIdsRef = useRef([])
   const isInitialPollRequestedRef = useRef(null)
   const lastPollExecutionRef = useRef(0) // New: Hard throttle for extreme cases
+  const hasShownCancelToastRef = useRef(false)
 
   // Delivery handover OTP received via socket event.
   // Kept separately so UI still renders even if the event arrives
@@ -1067,22 +1068,38 @@ export default function OrderTracking() {
           lastRealtimeRefreshRef.current = now;
           handleRefresh();
         }
-      }
 
-      // Show notification toast
-      if (message) {
-        toast.success(message, {
-          duration: 5000,
-          icon: '???',
-          position: 'top-center',
-          description: estimatedDeliveryTime
-            ? `Estimated delivery in ${Math.round(estimatedDeliveryTime / 60)} minutes`
-            : undefined
-        });
+        // Show notification toast
+        if (message) {
+          const isStatusCancelled = next === 'cancelled' || isFoodOrderCancelledStatus(status);
+          if (isStatusCancelled) {
+            const wasAlreadyCancelled = orderStatus === 'cancelled' || isFoodOrderCancelledStatus(order?.status);
+            if (!wasAlreadyCancelled && !hasShownCancelToastRef.current) {
+              toast.success(message, {
+                duration: 5000,
+                position: 'top-center',
+                description: estimatedDeliveryTime
+                  ? `Estimated delivery in ${Math.round(estimatedDeliveryTime / 60)} minutes`
+                  : undefined
+              });
+              hasShownCancelToastRef.current = true;
+            } else {
+              debugLog('Suppressing duplicate cancel notification.');
+            }
+          } else {
+            toast.success(message, {
+              duration: 5000,
+              position: 'top-center',
+              description: estimatedDeliveryTime
+                ? `Estimated delivery in ${Math.round(estimatedDeliveryTime / 60)} minutes`
+                : undefined
+            });
+          }
 
-        // Optional: Vibrate device if supported
-        if (navigator.vibrate) {
-          navigator.vibrate([200, 100, 200]);
+          // Optional: Vibrate device if supported
+          if (navigator.vibrate) {
+            navigator.vibrate([200, 100, 200]);
+          }
         }
       }
     };
@@ -1093,7 +1110,7 @@ export default function OrderTracking() {
     return () => {
       window.removeEventListener('orderStatusNotification', handleOrderStatusNotification);
     };
-  }, [orderId])
+  }, [orderId, orderStatus, order])
 
   const handleCancelOrder = () => {
     // Check if order can be cancelled (only Razorpay orders that aren't delivered/cancelled)
@@ -1129,7 +1146,11 @@ export default function OrderTracking() {
             : paymentMethod === 'wallet'
               ? 'Order cancelled successfully. Refund has been credited to your wallet.'
               : 'Order cancelled successfully. Refund has been initiated to your original payment method.');
-        toast.success(successMessage);
+        
+        if (!hasShownCancelToastRef.current) {
+          toast.success(successMessage);
+          hasShownCancelToastRef.current = true;
+        }
         setShowCancelDialog(false);
         setCancellationReason("");
         // Refresh order data
@@ -1673,13 +1694,13 @@ export default function OrderTracking() {
 
       {/* Cancel Order Dialog */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-        <DialogContent className="sm:max-w-xl w-[95%] max-w-[600px] bg-white dark:bg-zinc-900 border-none rounded-3xl">
+        <DialogContent className="sm:max-w-xl w-[95%] max-w-[600px] bg-white dark:bg-zinc-900 border-none rounded-3xl p-6">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold text-gray-900 dark:text-white">
               Cancel Order
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-5 py-6 px-2">
+          <div className="space-y-5 pt-4">
             <div className="space-y-2 w-full">
               <Textarea
                 value={cancellationReason}

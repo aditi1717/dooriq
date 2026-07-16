@@ -2645,13 +2645,13 @@ export default function OrdersMain() {
       <AnimatePresence>
         {isSheetOpen && selectedOrder && (
           <motion.div
-            className="fixed inset-0 z-50 bg-black/40 flex items-end justify-center"
+            className="fixed inset-0 z-[100] bg-black/40 flex items-end justify-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setIsSheetOpen(false)}>
             <motion.div
-              className="w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto bg-white rounded-t-3xl p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom)+6rem)] shadow-lg"
+              className="w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto bg-white rounded-t-3xl p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-lg"
               initial={{ y: 80 }}
               animate={{ y: 0 }}
               exit={{ y: 80 }}

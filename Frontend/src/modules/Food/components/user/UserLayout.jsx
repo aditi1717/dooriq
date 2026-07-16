@@ -224,12 +224,12 @@ export default function UserLayout() {
     normalizedPath === "/user" ||
     normalizedPath === "/dining" ||
     normalizedPath === "/user/dining" ||
-    normalizedPath === "/under-250" ||
-    normalizedPath === "/user/under-250" ||
+    normalizedPath === "/switch-99" ||
+    normalizedPath === "/user/switch-99" ||
     isProfileRoot ||
     normalizedPath === "" // Handle empty string case for root relative to /food
 
-  const isUnder250 = normalizedPath === "/under-250" || normalizedPath === "/user/under-250"
+  const isUnder250 = normalizedPath === "/switch-99" || normalizedPath === "/user/switch-99"
 
   if (isOffline || hasConnectionError) {
     return (

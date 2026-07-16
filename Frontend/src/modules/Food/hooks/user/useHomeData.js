@@ -71,7 +71,7 @@ export const useHomeData = (location, zoneId) => {
             distanceInKm: distInKm,
             image: allImgs[0] || "",
             images: allImgs,
-            rating: r.rating || 4.5,
+            rating: r.rating || 0,
             cuisine: r.cuisines?.[0] || "Multi-cuisine"
           };
         });

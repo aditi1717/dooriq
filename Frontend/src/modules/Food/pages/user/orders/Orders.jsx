@@ -862,7 +862,11 @@ Order again from this restaurant in the ${companyName} app.`
                 <div className="px-4 py-2 space-y-2">
                   {order.items && order.items.length > 0 ? (
                     order.items.map((item, idx) => {
-                      const isVeg = item.isVeg !== undefined ? item.isVeg : (item.category === 'veg' || item.type === 'veg')
+                      const isVeg = typeof item.isVeg === 'boolean'
+                        ? item.isVeg
+                        : (typeof item.isVeg === 'string'
+                            ? ['veg', 'vegetarian'].includes(item.isVeg.toLowerCase().trim())
+                            : ['veg', 'vegetarian'].includes(String(item.foodType || item.category || item.type || '').toLowerCase().trim()))
                       const itemName = item.name || item.foodName || 'Item'
                       const itemQuantity = item.quantity || 1
                       const itemPrice = item.price || 0
@@ -888,8 +892,14 @@ Order again from this restaurant in the ${companyName} app.`
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start gap-2">
                               {/* Veg/Non-Veg Icon */}
-                              <div className={`w-4 h-4 border ${isVeg ? 'border-green-600' : 'border-red-600'} flex items-center justify-center p-[2px] flex-shrink-0 mt-0.5`}>
-                                <div className={`w-full h-full rounded-full ${isVeg ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                              <div 
+                                className="w-3.5 h-3.5 border flex items-center justify-center p-[1px] flex-shrink-0 mt-0.5 rounded-[2px]"
+                                style={{ borderColor: isVeg ? "#16a34a" : "#dc2626", backgroundColor: isVeg ? "rgba(22, 163, 74, 0.05)" : "rgba(220, 38, 38, 0.05)" }}
+                              >
+                                <div 
+                                  className="w-1.5 h-1.5 rounded-full"
+                                  style={{ backgroundColor: isVeg ? "#16a34a" : "#dc2626" }}
+                                />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <span className="text-sm text-gray-800 dark:text-gray-200 font-medium block">

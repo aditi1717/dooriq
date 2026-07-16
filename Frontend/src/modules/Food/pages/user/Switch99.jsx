@@ -151,6 +151,7 @@ export default function Under250() {
   }, [heroSearch, openSearch, setSearchValue])
   const [quantities, setQuantities] = useState({})
   const [bookmarkedItems, setBookmarkedItems] = useState(new Set())
+  const [restaurantSearchQuery, setRestaurantSearchQuery] = useState("")
 
   const formatSavedAddress = useCallback((address) => {
     if (!address) return "";
@@ -329,6 +330,14 @@ export default function Under250() {
       })
       .map(r => ({ ...r, menuItems: [...(r.menuItems || [])] }))
 
+    // Apply local restaurant search query
+    if (restaurantSearchQuery.trim()) {
+      const query = restaurantSearchQuery.toLowerCase().trim()
+      filtered = filtered.filter(restaurant =>
+        restaurant.name?.toLowerCase().includes(query)
+      )
+    }
+
     // Apply category filter
     if (activeCategory) {
       const selectedCat = categories.find(cat => cat.id === activeCategory)
@@ -397,7 +406,7 @@ export default function Under250() {
     }
 
     return filtered
-  }, [under250Restaurants, selectedSort, under30MinsFilter, activeCategory, categories, availabilityTick])
+  }, [under250Restaurants, selectedSort, under30MinsFilter, activeCategory, categories, availabilityTick, restaurantSearchQuery])
 
   // Fetch under-250 banner from public API
   const displayBanners = useMemo(() => {
@@ -1260,6 +1269,30 @@ export default function Under250() {
           </div>
         </section>
 
+        {/* Local Restaurant Search Bar */}
+        <section className="pt-4 pb-2">
+          <div className="relative w-full max-w-md bg-gray-50 dark:bg-[#1a1a1a] rounded-xl transition-all duration-300 focus-within:ring-2 focus-within:ring-[#FA0272]/50 focus-within:bg-white dark:focus-within:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 shadow-sm">
+            <div className="flex items-center px-3.5 py-2.5">
+              <Search className="h-4 w-4 text-gray-500 flex-shrink-0 mr-3" />
+              <input
+                type="text"
+                value={restaurantSearchQuery}
+                onChange={(e) => setRestaurantSearchQuery(e.target.value)}
+                className="w-full p-0 border-0 bg-transparent text-sm font-medium placeholder:text-gray-500 focus:outline-none focus:ring-0 text-gray-900 dark:text-white"
+                placeholder="Search restaurants..."
+              />
+              {restaurantSearchQuery && (
+                <button
+                  onClick={() => setRestaurantSearchQuery("")}
+                  className="h-5 w-5 p-0 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full flex items-center justify-center text-gray-500 transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+
         <section className="py-2 sm:py-3 md:py-4">
           <div className="flex items-center gap-2 md:gap-3">
             <Button
@@ -1317,26 +1350,28 @@ export default function Under250() {
                       <span className="font-medium">{restaurant.deliveryTime}</span>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end">
-                    <div
-                      className="flex items-center gap-1 text-white px-1 py-1 md:px-2 md:py-1.5 lg:px-3 lg:py-2 rounded-full"
-                      style={{
-                        backgroundColor: "var(--module-theme-color, #FA0272)",
-                        boxShadow: "0 6px 14px rgba(var(--module-theme-rgb, 250,2,114), 0.30)",
-                      }}
-                    >
+                  {restaurant.totalRatings > 0 && restaurant.rating > 0 && (
+                    <div className="flex flex-col items-end">
                       <div
-                        className="bg-white px-1 py-1 md:px-1.5 md:py-1.5 lg:px-2 lg:py-2 rounded-full"
-                        style={{ color: "var(--module-theme-color, #FA0272)" }}
+                        className="flex items-center gap-1 text-white px-1 py-1 md:px-2 md:py-1.5 lg:px-3 lg:py-2 rounded-full"
+                        style={{
+                          backgroundColor: "var(--module-theme-color, #FA0272)",
+                          boxShadow: "0 6px 14px rgba(var(--module-theme-rgb, 250,2,114), 0.30)",
+                        }}
                       >
-                        <Star className="h-3.5 w-3.5 md:h-4 md:w-4 lg:h-5 lg:w-5 fill-current text-current" />
+                        <div
+                          className="bg-white px-1 py-1 md:px-1.5 md:py-1.5 lg:px-2 lg:py-2 rounded-full"
+                          style={{ color: "var(--module-theme-color, #FA0272)" }}
+                        >
+                          <Star className="h-3.5 w-3.5 md:h-4 md:w-4 lg:h-5 lg:w-5 fill-current text-current" />
+                        </div>
+                        <span className="text-xs md:text-sm lg:text-base font-bold">{restaurant.rating.toFixed(1)}</span>
                       </div>
-                      <span className="text-xs md:text-sm lg:text-base font-bold">{restaurant.rating}</span>
+                      <span className="text-xs md:text-sm lg:text-base text-gray-400 dark:text-gray-500 mt-0.5">
+                        {restaurant.totalRatings > 0 ? `By ${restaurant.totalRatings >= 1000 ? `${(restaurant.totalRatings / 1000).toFixed(1)}K+` : `${restaurant.totalRatings}+`}` : ''}
+                      </span>
                     </div>
-                    <span className="text-xs md:text-sm lg:text-base text-gray-400 dark:text-gray-500 mt-0.5">
-                      {restaurant.totalRatings > 0 ? `By ${restaurant.totalRatings >= 1000 ? `${(restaurant.totalRatings / 1000).toFixed(1)}K+` : `${restaurant.totalRatings}+`}` : ''}
-                    </span>
-                  </div>
+                  )}
                 </div>
 
                 {/* Menu Items Horizontal Scroll */}

@@ -52,14 +52,14 @@ export default function DesktopNavbar({ showLogo = true }) {
 
     // Check active routes - support both /user/* and /* paths
     const isDining = location.pathname === "/food/user/dining" || location.pathname === "/food/dining"
-    const isUnder250 = location.pathname === "/food/user/under-250" || location.pathname === "/food/under-250"
+    const isUnder250 = location.pathname === "/food/user/switch-99" || location.pathname === "/food/switch-99"
     const isProfile = location.pathname.startsWith("/food/user/profile") || location.pathname.startsWith("/food/profile")
-    const isDelivery = !isDining && !isUnder250 && !isProfile && (location.pathname === "/food/user" || location.pathname === "/food" || (location.pathname.startsWith("/food/user") && !location.pathname.includes("/dining") && !location.pathname.includes("/under-250") && !location.pathname.includes("/profile")))
+    const isDelivery = !isDining && !isUnder250 && !isProfile && (location.pathname === "/food/user" || location.pathname === "/food" || (location.pathname.startsWith("/food/user") && !location.pathname.includes("/dining") && !location.pathname.includes("/switch-99") && !location.pathname.includes("/profile")))
     const isBannerRoute =
         location.pathname === "/food/user" ||
         location.pathname === "/food" ||
-        location.pathname === "/food/user/under-250" ||
-        location.pathname === "/food/under-250"
+        location.pathname === "/food/user/switch-99" ||
+        location.pathname === "/food/switch-99"
 
     // Load business settings logo
     useEffect(() => {
@@ -321,7 +321,7 @@ export default function DesktopNavbar({ showLogo = true }) {
 
                             {/* Under 250 Tab */}
                             <Link
-                                to="/food/user/under-250"
+                                to="/food/user/switch-99"
                                 className={`flex flex-col items-center gap-1 px-2 py-1 transition-colors relative group ${isUnder250
                                     ? "text-orange-600 dark:text-orange-500"
                                     : "text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-500"

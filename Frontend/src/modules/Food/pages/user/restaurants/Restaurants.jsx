@@ -81,7 +81,8 @@ export default function Restaurants() {
             slug,
             name: restaurant?.name || "Unknown Restaurant",
             cuisine,
-            rating: Number(restaurant?.rating || 0) || 4.5,
+            rating: Number(restaurant?.rating || restaurant?.avgRating || 0),
+            totalRatings: Number(restaurant?.totalRatings || restaurant?.ratingCount || restaurant?.reviews?.length || restaurant?.reviews || 0),
             deliveryTime: restaurant?.estimatedDeliveryTime || (restaurant?.estimatedDeliveryTimeMinutes ? `${restaurant.estimatedDeliveryTimeMinutes} mins` : "25-30 mins"),
             distance: restaurant?.distance ? (typeof restaurant.distance === 'number' ? `${restaurant.distance.toFixed(1)} km` : restaurant.distance) : "1.2 km",
             priceRange: restaurant?.priceRange || "$$",
@@ -172,10 +173,12 @@ export default function Restaurants() {
                                     {restaurant.cuisine}
                                   </p>
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <div className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/30 px-1.5 py-0.5 rounded-full">
-                                      <Star className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-yellow-400 text-yellow-400" />
-                                      <span className="font-bold text-xs sm:text-sm text-yellow-700 dark:text-yellow-400">{restaurant.rating.toFixed(1)}</span>
-                                    </div>
+                                    {restaurant.totalRatings > 0 && restaurant.rating > 0 && (
+                                      <div className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/30 px-1.5 py-0.5 rounded-full">
+                                        <Star className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-yellow-400 text-yellow-400" />
+                                        <span className="font-bold text-xs sm:text-sm text-yellow-700 dark:text-yellow-400">{restaurant.rating.toFixed(1)}</span>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                                 <Button

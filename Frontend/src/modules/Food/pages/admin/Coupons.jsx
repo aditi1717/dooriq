@@ -199,6 +199,8 @@ function RestaurantMultiSelect({ restaurants, value, onChange, error }) {
 
 export default function Coupons() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
   const [offers, setOffers] = useState([])
   const [restaurants, setRestaurants] = useState([])
   const [loading, setLoading] = useState(true)
@@ -294,6 +296,14 @@ export default function Coupons() {
     if (f.minOrderValue !== "" && Number(f.minOrderValue) < 0) e.minOrderValue = "Min order cannot be negative"
     if (f.usageLimit !== "" && Number(f.usageLimit) < 1) e.usageLimit = "Usage limit must be at least 1"
     if (f.perUserLimit !== "" && Number(f.perUserLimit) < 1) e.perUserLimit = "Per user limit must be at least 1"
+    const usageLimitVal = f.usageLimit !== "" ? Number(f.usageLimit) : null
+    const perUserLimitVal = f.perUserLimit !== "" ? Number(f.perUserLimit) : null
+    if (f.isFirstOrderOnly && perUserLimitVal !== null && perUserLimitVal > 1) {
+      e.perUserLimit = "Per user limit cannot be more than 1 when first order only is selected"
+    }
+    if (usageLimitVal !== null && perUserLimitVal !== null && perUserLimitVal > usageLimitVal) {
+      e.perUserLimit = "Per user limit cannot be greater than usage limit"
+    }
     const adminBear = Number(f.adminBearPercentage)
     const restaurantBear = Number(f.restaurantBearPercentage)
     if (!Number.isFinite(adminBear) || adminBear < 0 || adminBear > 100) e.adminBearPercentage = "Enter 0 to 100"
@@ -323,6 +333,20 @@ export default function Coupons() {
     let value = rawValue
     if (field === "couponCode") {
       value = String(value || "").toUpperCase()
+    }
+    if (field === "isFirstOrderOnly") {
+      setFormData((prev) => {
+        const next = {
+          ...prev,
+          isFirstOrderOnly: value,
+          perUserLimit: value ? "1" : prev.perUserLimit,
+        }
+        validateForm(next)
+        return next
+      })
+      if (submitError) setSubmitError("")
+      if (submitSuccess) setSubmitSuccess("")
+      return
     }
     if (field === "discountType") {
       // When switching to flat-price, clear and disable maxDiscount
@@ -514,6 +538,18 @@ export default function Coupons() {
     )
   }, [offers, searchQuery])
 
+  // Reset page when query changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery])
+
+  // Calculate paginated subset
+  const totalPages = Math.ceil(filteredOffers.length / itemsPerPage) || 1
+  const paginatedOffers = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return filteredOffers.slice(start, start + itemsPerPage)
+  }, [filteredOffers, currentPage])
+
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
@@ -524,7 +560,14 @@ export default function Coupons() {
             <button
               type="button"
               onClick={() => {
-                setIsAddOpen((prev) => !prev)
+                setIsAddOpen((prev) => {
+                  const next = !prev
+                  if (!next) {
+                    resetForm()
+                    setErrors({})
+                  }
+                  return next
+                })
                 setSubmitError("")
                 setSubmitSuccess("")
               }}
@@ -711,10 +754,11 @@ export default function Coupons() {
                   type="number"
                   min="0"
                   step="1"
-                  value={formData.perUserLimit}
+                  value={formData.isFirstOrderOnly ? "1" : formData.perUserLimit}
                   onChange={(e) => handleFormChange("perUserLimit", e.target.value)}
                   placeholder="e.g. 1"
-                  className={`w-full px-3 py-2.5 text-sm rounded-lg border ${errors.perUserLimit ? "border-red-500" : "border-slate-300"} bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                  disabled={formData.isFirstOrderOnly}
+                  className={`w-full px-3 py-2.5 text-sm rounded-lg border ${errors.perUserLimit ? "border-red-500" : "border-slate-300"} bg-white disabled:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                 />
                 {errors.perUserLimit && <p className="mt-1 text-xs text-red-600">{errors.perUserLimit}</p>}
               </div>
@@ -804,7 +848,8 @@ export default function Coupons() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
@@ -825,7 +870,7 @@ export default function Coupons() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
-                  {filteredOffers.map((offer) => (
+                  {paginatedOffers.map((offer) => (
                     <tr key={`${offer.offerId}-${offer.dishId}`} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-sm font-medium text-slate-700">{offer.sl}</span>
@@ -952,7 +997,66 @@ export default function Coupons() {
                 </tbody>
               </table>
             </div>
-          )}
+
+            {/* Pagination Controls */}
+            {filteredOffers.length > 0 && (
+              <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-200 pt-6">
+                <p className="text-sm text-slate-600 font-medium">
+                  Showing{" "}
+                  <span className="font-semibold text-slate-900">
+                    {Math.min(filteredOffers.length, (currentPage - 1) * itemsPerPage + 1)}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-semibold text-slate-900">
+                    {Math.min(filteredOffers.length, currentPage * itemsPerPage)}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-semibold text-slate-900">
+                    {filteredOffers.length}
+                  </span>{" "}
+                  offers
+                </p>
+                
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Previous
+                  </button>
+                  
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        type="button"
+                        onClick={() => setCurrentPage(page)}
+                        className={`min-w-9 h-9 flex items-center justify-center rounded-lg text-sm font-semibold transition-colors ${
+                          currentPage === page
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
         </div>
       </div>
     </div>

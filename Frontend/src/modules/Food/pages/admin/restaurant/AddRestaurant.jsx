@@ -162,6 +162,11 @@ export default function AddRestaurant() {
   const [formErrors, setFormErrors] = useState({})
   const [zones, setZones] = useState([])
   const [zonesLoading, setZonesLoading] = useState(false)
+  const [zoneDetectionState, setZoneDetectionState] = useState({
+    status: "idle", // idle | detecting | matched | out_of_zone | failed
+    message: "",
+    zoneName: "",
+  })
   const [isHydrated, setIsHydrated] = useState(false)
 
   // Step 1: Basic Info
@@ -436,6 +441,11 @@ export default function AddRestaurant() {
     if (!step1.zoneId?.trim()) errors.push("Service zone is required")
     if (!step1.location?.area?.trim()) errors.push("Area/Sector/Locality is required")
     if (!step1.location?.city?.trim()) errors.push("City is required")
+    if (!step1.location?.addressLine1?.trim()) errors.push("Shop no. / building no. is required")
+    if (!step1.location?.addressLine2?.trim()) errors.push("Floor / tower is required")
+    if (!step1.location?.state?.trim()) errors.push("State is required")
+    if (!step1.location?.pincode?.trim()) errors.push("Pincode is required")
+    if (!step1.location?.landmark?.trim()) errors.push("Nearby landmark is required")
     return errors
   }
 
@@ -517,6 +527,92 @@ export default function AddRestaurant() {
     if (!step3.accountType?.trim()) errors.push("Account type is required")
     if (step3.accountType?.trim() && !["Saving", "Current"].includes(step3.accountType.trim())) errors.push("Account type must be either Saving or Current")
     return errors
+  }
+
+  const fetchPincodeFromLatLng = async (lat, lng) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+        { headers: { "Accept-Language": "en" } }
+      )
+      const data = await res.json()
+      return data?.address?.postcode || ""
+    } catch {
+      return ""
+    }
+  }
+
+  const detectAndSetZoneForLocation = async (lat, lng) => {
+    const latitude = Number(lat)
+    const longitude = Number(lng)
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      setZoneDetectionState({
+        status: "failed",
+        message: "Unable to detect zone because location coordinates are missing.",
+        zoneName: "",
+      })
+      return
+    }
+
+    try {
+      setZoneDetectionState({
+        status: "detecting",
+        message: "Detecting service zone for this location...",
+        zoneName: "",
+      })
+      const res = await zoneAPI.detectZone(latitude, longitude)
+      const payload = res?.data?.data
+      const isInService = payload?.status === "IN_SERVICE" && !!payload?.zoneId
+      const detectedZoneId = String(payload?.zoneId || "")
+      const detectedZone =
+        zones.find((z) => String(z?._id || z?.id || "") === detectedZoneId) || payload?.zone
+      const detectedZoneName =
+        detectedZone?.name || detectedZone?.zoneName || detectedZone?.serviceLocation || ""
+
+      if (isInService) {
+        setStep1((prev) => ({ ...prev, zoneId: detectedZoneId }))
+        setZoneDetectionState({
+          status: "matched",
+          message: detectedZoneName
+            ? `Zone auto-detected: ${detectedZoneName}`
+            : "Zone auto-detected for this location.",
+          zoneName: detectedZoneName,
+        })
+        return
+      }
+
+      // Out of zone — erase selected location and do not fill fields
+      setStep1((prev) => ({
+        ...prev,
+        zoneId: "",
+        location: {
+          formattedAddress: "",
+          addressLine1: "",
+          addressLine2: prev.location?.addressLine2 || "",
+          area: "",
+          city: "",
+          state: "",
+          pincode: "",
+          landmark: prev.location?.landmark || "",
+          latitude: "",
+          longitude: "",
+        },
+      }))
+      setLocationSearchValue("")
+      setLocationSuggestions([])
+      setZoneDetectionState({
+        status: "out_of_zone",
+        message: "No active zone found at this location. Please search for a different address.",
+        zoneName: "",
+      })
+    } catch (err) {
+      debugError("Failed to detect zone for location:", err)
+      setZoneDetectionState({
+        status: "failed",
+        message: "Could not verify zone right now. Please reselect the location.",
+        zoneName: "",
+      })
+    }
   }
 
   const handleNext = async () => {
@@ -804,28 +900,40 @@ export default function AddRestaurant() {
         inputElement.setAttribute('data-google-places-initialized', 'true')
         placesAutocompleteRef.current = autocomplete
 
-        autocomplete.addListener("place_changed", () => {
+        autocomplete.addListener("place_changed", async () => {
           const place = autocomplete.getPlace()
           if (!place?.geometry) return
           
           const parsed = parsePlace(place)
+          const lat = parsed.latitude
+          const lng = parsed.longitude
+          const resolvedPincode = parsed.pincode || (
+            lat !== "" && lng !== ""
+              ? await fetchPincodeFromLatLng(lat, lng)
+              : ""
+          )
+          
           setStep1((prev) => ({
             ...prev,
             location: {
               ...prev.location,
               formattedAddress: parsed.formattedAddress || prev.location.formattedAddress,
-              addressLine1: parsed.formattedAddress || prev.location.addressLine1 || "",
+              addressLine1: prev.location.addressLine1 || "",
               area: parsed.area || prev.location.area,
               city: parsed.city || prev.location.city,
               state: parsed.state || prev.location.state,
-              pincode: parsed.pincode || prev.location.pincode,
-              latitude: parsed.latitude !== "" ? parsed.latitude : prev.location.latitude,
-              longitude: parsed.longitude !== "" ? parsed.longitude : prev.location.longitude,
+              pincode: resolvedPincode || prev.location.pincode,
+              latitude: lat !== "" ? lat : prev.location.latitude,
+              longitude: lng !== "" ? lng : prev.location.longitude,
             },
           }))
           
           setLocationSearchValue(parsed.formattedAddress)
           inputElement.blur()
+
+          if (lat && lng) {
+            void detectAndSetZoneForLocation(lat, lng)
+          }
         })
         
         const pacContainerFix = () => {
@@ -1005,7 +1113,34 @@ export default function AddRestaurant() {
             <Input
               ref={locationSearchInputRef}
               value={locationSearchValue}
-              onChange={(e) => setLocationSearchValue(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value
+                setLocationSearchValue(val)
+                if (!val.trim()) {
+                  setStep1((prev) => ({
+                    ...prev,
+                    zoneId: "",
+                    location: {
+                      formattedAddress: "",
+                      addressLine1: "",
+                      addressLine2: prev.location?.addressLine2 || "",
+                      area: "",
+                      city: "",
+                      state: "",
+                      pincode: "",
+                      landmark: prev.location?.landmark || "",
+                      latitude: "",
+                      longitude: "",
+                    },
+                  }))
+                  setLocationSuggestions([])
+                  setZoneDetectionState({ status: "idle", message: "", zoneName: "" })
+                } else {
+                  setZoneDetectionState((prev) =>
+                    prev.status === "idle" ? prev : { status: "idle", message: "", zoneName: "" }
+                  )
+                }
+              }}
               className="mt-1 bg-white text-sm"
               placeholder="Search and select restaurant address..."
             />
@@ -1022,29 +1157,38 @@ export default function AddRestaurant() {
                 <button
                   key={s.id}
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     const { lat, lng, display, addr } = s
                     const area = addr.suburb || addr.neighbourhood || addr.city_district || addr.locality || ""
                     const city = addr.city || addr.town || addr.village || ""
                     const state = addr.state || ""
                     const pincode = addr.postcode || ""
 
+                    const resolvedPincode = pincode || (
+                      lat !== "" && lng !== ""
+                        ? await fetchPincodeFromLatLng(lat, lng)
+                        : ""
+                    )
+
                     setStep1((prev) => ({
                       ...prev,
                       location: {
                         ...prev.location,
                         formattedAddress: display,
-                        addressLine1: display,
+                        addressLine1: prev.location.addressLine1 || "",
                         area: area || prev.location.area,
                         city: city || prev.location.city,
                         state: state || prev.location.state,
-                        pincode: pincode || prev.location.pincode,
+                        pincode: resolvedPincode || prev.location.pincode,
                         latitude: lat,
                         longitude: lng,
                       },
                     }))
                     setLocationSearchValue(display)
                     setLocationSuggestions([])
+                    if (lat && lng) {
+                      void detectAndSetZoneForLocation(lat, lng)
+                    }
                   }}
                   className="w-full px-4 py-2 text-left text-[13px] font-medium text-gray-700 hover:bg-orange-50 border-b border-gray-100 last:border-none"
                 >
@@ -1058,29 +1202,26 @@ export default function AddRestaurant() {
             Search to auto-fill Area, City, State, Pincode and coordinates.
           </p>
         </div>
-        <div>
-          <Label className="text-xs text-gray-700">Service zone*</Label>
-          <select
-            value={step1.zoneId || ""}
-            onChange={(e) => setStep1({ ...step1, zoneId: e.target.value })}
-            className="mt-1 w-full h-9 rounded-md border border-input bg-white px-3 text-sm"
-            disabled={zonesLoading}
-          >
-            <option value="">{zonesLoading ? "Loading zones..." : "Select a zone"}</option>
-            {zones.map((z) => {
-              const id = String(z?._id || z?.id || "")
-              const label = z?.name || z?.zoneName || z?.serviceLocation || id
-              return (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              )
-            })}
-          </select>
-          <p className="text-[11px] text-gray-500 mt-1">
-            Choose the service zone where your restaurant will be available.
+        {zoneDetectionState.status === "detecting" && (
+          <p className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
+            Detecting service zone...
           </p>
-        </div>
+        )}
+        {zoneDetectionState.status === "matched" && (
+          <p className="mt-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs font-semibold text-green-700">
+            {zoneDetectionState.message}
+          </p>
+        )}
+        {zoneDetectionState.status === "out_of_zone" && (
+          <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+            No active zone found at this location.
+          </p>
+        )}
+        {zoneDetectionState.status === "failed" && (
+          <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+            {zoneDetectionState.message}
+          </p>
+        )}
         <div>
           <Label className="text-xs text-gray-700">Primary contact number*</Label>
           <Input
@@ -1094,46 +1235,49 @@ export default function AddRestaurant() {
         </div>
         <div className="space-y-3">
           <Input
-            value={step1.location?.area || ""}
-            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, area: e.target.value } })}
-            className="bg-white text-sm"
-            placeholder="Area / Sector / Locality*"
-          />
-          <Input
-            value={step1.location?.city || ""}
-            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, city: e.target.value } })}
-            className="bg-white text-sm"
-            placeholder="City*"
-          />
-          <Input
             value={step1.location?.addressLine1 || ""}
             onChange={(e) => setStep1({ ...step1, location: { ...step1.location, addressLine1: e.target.value } })}
             className="bg-white text-sm"
-            placeholder="Shop no. / building no. (optional)"
+            placeholder="Shop no. / building no.*"
           />
           <Input
             value={step1.location?.addressLine2 || ""}
             onChange={(e) => setStep1({ ...step1, location: { ...step1.location, addressLine2: e.target.value } })}
             className="bg-white text-sm"
-            placeholder="Floor / tower (optional)"
-          />
-          <Input
-            value={step1.location?.state || ""}
-            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, state: e.target.value } })}
-            className="bg-white text-sm"
-            placeholder="State (optional)"
-          />
-          <Input
-            value={step1.location?.pincode || ""}
-            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, pincode: e.target.value } })}
-            className="bg-white text-sm"
-            placeholder="Pin code (optional)"
+            placeholder="Floor / tower*"
           />
           <Input
             value={step1.location?.landmark || ""}
             onChange={(e) => setStep1({ ...step1, location: { ...step1.location, landmark: e.target.value } })}
             className="bg-white text-sm"
-            placeholder="Nearby landmark (optional)"
+            placeholder="Nearby landmark*"
+          />
+          <Input
+            value={step1.location?.area || ""}
+            readOnly
+            disabled
+            className="bg-gray-50 text-sm cursor-not-allowed"
+            placeholder="Area / Sector / Locality*"
+          />
+          <Input
+            value={step1.location?.city || ""}
+            readOnly
+            disabled
+            className="bg-gray-50 text-sm cursor-not-allowed"
+            placeholder="City*"
+          />
+          <Input
+            value={step1.location?.state || ""}
+            readOnly
+            disabled
+            className="bg-gray-50 text-sm cursor-not-allowed"
+            placeholder="State*"
+          />
+          <Input
+            value={step1.location?.pincode || ""}
+            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, pincode: e.target.value } })}
+            className="bg-white text-sm"
+            placeholder="Pin code*"
           />
         </div>
       </section>

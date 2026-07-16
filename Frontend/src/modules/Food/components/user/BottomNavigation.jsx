@@ -57,18 +57,18 @@ export default function BottomNavigation() {
 
   // Check active routes - support both /user/* and /* paths
   const isCart = pathname === "/food/cart" || pathname.startsWith("/food/user/cart")
-  const isUnder250 = pathname === "/food/under-250" || pathname.startsWith("/food/user/under-250")
+  const isSwitch99 = pathname === "/food/switch-99" || pathname.startsWith("/food/user/switch-99")
   const isProfile = pathname.startsWith("/food/profile") || pathname.startsWith("/food/user/profile")
   const isDelivery =
     !isCart &&
-    !isUnder250 &&
+    !isSwitch99 &&
     !isProfile &&
     (pathname === "/food" ||
       pathname === "/food/" ||
       pathname === "/food/user" ||
       (pathname.startsWith("/food/user") &&
         !pathname.includes("/cart") &&
-        !pathname.includes("/under-250") &&
+        !pathname.includes("/switch-99") &&
         !pathname.includes("/profile")))
 
   const activeColor = "var(--module-theme-color, #FA0272)"
@@ -117,17 +117,17 @@ export default function BottomNavigation() {
 
         {/* Under 250 Tab */}
         <Link
-          to="/food/user/under-250"
-          className={`flex flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 transition-all duration-300 relative rounded-full ${isUnder250
+          to="/food/user/switch-99"
+          className={`flex flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 transition-all duration-300 relative rounded-full ${isSwitch99
               ? ""
               : "text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/50"
             }`}
-          style={isUnder250 ? { color: activeColor, backgroundColor: activeBg } : undefined}
+          style={isSwitch99 ? { color: activeColor, backgroundColor: activeBg } : undefined}
         >
           <div className="relative">
-            <Tag className={`h-5 w-5 transition-transform duration-300 ${isUnder250 ? "scale-110" : "text-gray-500 dark:text-gray-400"}`} strokeWidth={isUnder250 ? 2.5 : 2} style={isUnder250 ? { color: activeColor, fill: activeFill } : undefined} />
+            <Tag className={`h-5 w-5 transition-transform duration-300 ${isSwitch99 ? "scale-110" : "text-gray-500 dark:text-gray-400"}`} strokeWidth={isSwitch99 ? 2.5 : 2} style={isSwitch99 ? { color: activeColor, fill: activeFill } : undefined} />
           </div>
-          <span className={`text-[10px] sm:text-xs font-semibold tracking-wide transition-all ${isUnder250 ? "" : "text-gray-500 dark:text-gray-400 opacity-80"}`}>
+          <span className={`text-[10px] sm:text-xs font-semibold tracking-wide transition-all ${isSwitch99 ? "" : "text-gray-500 dark:text-gray-400 opacity-80"}`}>
             Switch 99
           </span>
         </Link>

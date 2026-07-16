@@ -544,15 +544,67 @@ export default function ItemDetailsPage() {
         : [...prev, tag]
     )
   }
-
   const handleSave = async () => {
     if (!itemName.trim()) {
       toast.error("Please enter an item name")
       return
     }
-    if (isNewItem && images.length === 0) {
-      toast.error("Please add at least one image")
+    if (images.length === 0) {
+      toast.error("Image is mandatory. Please add an item image.")
       return
+    }
+
+    // Resolve categoryId from fetched categories (so FoodItem stores categoryId efficiently).
+    const matchedCategory = Array.isArray(categories)
+      ? categories.find((c) => String(c?.id || "") === String(selectedCategoryId || ""))
+      : null
+    const categoryId = matchedCategory?.id || matchedCategory?._id || null
+    const categoryName = matchedCategory?.name || category || ""
+
+    if (!categoryId) {
+      toast.error("Please select an approved category first")
+      setIsCategoryPopupOpen(true)
+      return
+    }
+
+    if (
+      matchedCategory?.foodTypeScope &&
+      matchedCategory.foodTypeScope !== "Both" &&
+      matchedCategory.foodTypeScope !== foodType
+    ) {
+      toast.error(`This ${matchedCategory.foodTypeScope} category cannot accept ${foodType} food`)
+      return
+    }
+
+    const normalizedVariants = variants
+      .map((variant) => ({
+        persistedId: String(variant.persistedId || "").trim(),
+        name: String(variant.name || "").trim(),
+        price: Number(variant.price),
+      }))
+      .filter((variant) => variant.name || variant.persistedId || variant.price)
+
+    if (normalizedVariants.some((variant) => !variant.name)) {
+      toast.error("Each variant must have a name")
+      return
+    }
+
+    if (normalizedVariants.some((variant) => !Number.isFinite(variant.price) || variant.price <= 0)) {
+      toast.error("Each variant price must be greater than 0")
+      return
+    }
+
+    const hasVariants = normalizedVariants.length > 0
+    const parsedBasePrice = Number(basePrice)
+    if (!hasVariants) {
+      if (!basePrice || String(basePrice).trim() === "") {
+        toast.error("Entering price is mandatory")
+        return
+      }
+      if (!Number.isFinite(parsedBasePrice) || parsedBasePrice <= 0) {
+        toast.error("Item price cannot be 0 or negative")
+        return
+      }
     }
 
     try {
@@ -620,8 +672,8 @@ export default function ItemDetailsPage() {
         self.indexOf(url) === index
       ).slice(0, 1)
 
-      if (isNewItem && allImageUrls.length === 0) {
-        toast.error("Please add at least one image")
+      if (allImageUrls.length === 0) {
+        toast.error("Image is mandatory. Please add an item image.")
         setUploadingImages(false)
         return
       }
@@ -632,58 +684,6 @@ export default function ItemDetailsPage() {
       debugLog('Newly uploaded URLs:', uploadedImageUrls.length, uploadedImageUrls)
       debugLog('Total image URLs to save:', allImageUrls.length, allImageUrls)
       debugLog('==========================')
-
-      // Resolve categoryId from fetched categories (so FoodItem stores categoryId efficiently).
-      const matchedCategory = Array.isArray(categories)
-        ? categories.find((c) => String(c?.id || "") === String(selectedCategoryId || ""))
-        : null
-      const categoryId = matchedCategory?.id || matchedCategory?._id || null
-      const categoryName = matchedCategory?.name || category || ""
-
-      if (!categoryId) {
-        toast.error("Please select an approved category first")
-        setIsCategoryPopupOpen(true)
-        setUploadingImages(false)
-        return
-      }
-
-      if (
-        matchedCategory?.foodTypeScope &&
-        matchedCategory.foodTypeScope !== "Both" &&
-        matchedCategory.foodTypeScope !== foodType
-      ) {
-        toast.error(`This ${matchedCategory.foodTypeScope} category cannot accept ${foodType} food`)
-        setUploadingImages(false)
-        return
-      }
-
-      const normalizedVariants = variants
-        .map((variant) => ({
-          persistedId: String(variant.persistedId || "").trim(),
-          name: String(variant.name || "").trim(),
-          price: Number(variant.price),
-        }))
-        .filter((variant) => variant.name || variant.persistedId || variant.price)
-
-      if (normalizedVariants.some((variant) => !variant.name)) {
-        toast.error("Each variant must have a name")
-        setUploadingImages(false)
-        return
-      }
-
-      if (normalizedVariants.some((variant) => !Number.isFinite(variant.price) || variant.price <= 0)) {
-        toast.error("Each variant price must be greater than 0")
-        setUploadingImages(false)
-        return
-      }
-
-      const hasVariants = normalizedVariants.length > 0
-      const parsedBasePrice = Number(basePrice)
-      if (!hasVariants && (!Number.isFinite(parsedBasePrice) || parsedBasePrice < 0)) {
-        toast.error("Please enter a valid base price")
-        setUploadingImages(false)
-        return
-      }
 
       const variantPayload = normalizedVariants.map((variant) => ({
         ...(variant.persistedId ? { _id: variant.persistedId } : {}),
