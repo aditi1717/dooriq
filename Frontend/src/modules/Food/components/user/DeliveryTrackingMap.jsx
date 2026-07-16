@@ -230,13 +230,22 @@ const DeliveryTrackingMap = ({
       // Extract ETA from directions
       const durationText = result?.routes?.[0]?.legs?.[0]?.duration?.text;
       if (durationText) {
-        setCurrentEta(durationText);
+        let durationMins = parseInt(durationText) || 0;
+        
+        // If rider is still going to the restaurant to pickup, add the restaurant's prep time!
+        if (!isOrderPickedUp) {
+          const prepTime = order?.estimatedDeliveryTime || order?.prepTime || 15;
+          durationMins += prepTime;
+        }
+
+        const finalEtaText = `${durationMins} mins`;
+        setCurrentEta(finalEtaText);
         if (onEtaUpdate) {
-          onEtaUpdate(durationText);
+          onEtaUpdate(durationMins);
         }
       }
     }
-  }, [onEtaUpdate]);
+  }, [onEtaUpdate, isOrderPickedUp, order]);
 
   const shouldUpdateRoute = useMemo(() => {
     if (!directions) return true;

@@ -518,7 +518,15 @@ export default function OrderTracking() {
   const [isUpdatingInstructions, setIsUpdatingInstructions] = useState(false)
   const [resolvedLookupId, setResolvedLookupId] = useState("")
   const [timerNow, setTimerNow] = useState(Date.now())
-  const handleEtaUpdate = useCallback((newEta) => setEstimatedTime(newEta), [])
+  const handleEtaUpdate = useCallback((newEta) => {
+    if (typeof newEta === 'string') {
+      const match = newEta.match(/\d+/);
+      const parsed = match ? parseInt(match[0]) : 0;
+      setEstimatedTime(parsed);
+    } else if (typeof newEta === 'number') {
+      setEstimatedTime(newEta);
+    }
+  }, [])
   const lastRealtimeRefreshRef = useRef(0)
   const trackingOrderIdsRef = useRef(new Set())
   const terminalPollStopRef = useRef(false)
