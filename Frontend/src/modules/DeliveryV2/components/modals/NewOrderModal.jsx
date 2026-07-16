@@ -57,11 +57,12 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
     // A. Use provided data if available (Direct distance from socket)
     const rawDist = order.pickupDistanceKm || order.distanceKm;
     const rawEta = order.estimatedTime || order.duration || order.eta;
+    const prepTime = order.estimatedDeliveryTime || order.prepTime || 15;
     
     if (rawDist != null) {
       return { 
         distanceKm: Number(rawDist).toFixed(1), 
-        etaMins: rawEta && rawEta > 0 ? Math.ceil(rawEta) : Math.ceil((rawDist * 1000) / 416) + 5
+        etaMins: rawEta && rawEta > 0 ? Math.ceil(rawEta) : Math.ceil((rawDist * 1000) / 416) + prepTime
       };
     }
 
@@ -77,7 +78,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
       );
       const km = distM / 1000;
       // Assume 25km/h avg for initial estimate (roughly 416m/min)
-      const mins = Math.ceil(distM / 416) + (order.prepTime || 5);
+      const mins = Math.ceil(distM / 416) + prepTime;
       
       return { 
         distanceKm: km.toFixed(1), 
@@ -85,7 +86,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
       };
     }
 
-    return { distanceKm: '??', etaMins: order.prepTime || 15 };
+    return { distanceKm: '??', etaMins: prepTime };
   }, [order, riderLocation]);
 
   if (!order) return null;
