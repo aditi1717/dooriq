@@ -227,11 +227,6 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
                   <div className="pt-1">
                     <div className="flex items-center justify-between">
                        <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-blue-600 mb-0.5">Customer Drop</h4>
-                       {mapsLink && (
-                        <a href={mapsLink} target="_blank" rel="noreferrer" className="text-[9px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full hover:bg-blue-100 transition-colors">
-                          Open Map
-                        </a>
-                      )}
                     </div>
                     <h3 className="text-gray-950 font-black text-lg leading-tight mb-0.5">Delivery Location</h3>
                     <p className="text-gray-500 text-[11px] font-bold line-clamp-1">{customerAddress}</p>
