@@ -1776,11 +1776,26 @@ export async function deleteOrderAdmin(orderId, adminId) {
     FoodOrder.deleteOne({ _id: order._id }),
   ]);
 
-  // Remove realtime tracking node if present.
+  // Remove realtime tracking node and offers if present.
   try {
     const db = getFirebaseDB();
-    if (db && order?.orderId) {
-      await db.ref(`active_orders/${order._id.toString()}`).remove();
+    if (db) {
+      if (order?.orderId) {
+        await db.ref(`active_orders/${order._id.toString()}`).remove();
+      }
+      
+      const offeredPartners = order.dispatch?.offeredTo || [];
+      for (const offer of offeredPartners) {
+        const pid = offer.partnerId?.toString();
+        if (pid) {
+          db.ref(`delivery_offers/${pid}/${order._id.toString()}`).remove().catch(() => {});
+        }
+      }
+      
+      const currentPartnerId = order.dispatch?.deliveryPartnerId?.toString();
+      if (currentPartnerId) {
+        db.ref(`delivery_offers/${currentPartnerId}/${order._id.toString()}`).remove().catch(() => {});
+      }
     }
   } catch (err) {
     logger.warn(`Delete order firebase cleanup failed: ${err?.message || err}`);
@@ -1852,6 +1867,25 @@ export async function updateOrderStatusAdmin(orderId, orderStatus, note = "", ad
         } catch (err) {
             logger.warn(`Admin cancellation refund failed for order ${order._id}: ${err?.message || err}`);
             order.payment.refund = { status: "failed", amount: order.pricing?.total || 0 };
+        }
+        
+        try {
+            const db = getFirebaseDB();
+            if (db) {
+                const offeredPartners = order.dispatch?.offeredTo || [];
+                for (const offer of offeredPartners) {
+                    const pid = offer.partnerId?.toString();
+                    if (pid) {
+                        db.ref(`delivery_offers/${pid}/${order._id.toString()}`).remove().catch(() => {});
+                    }
+                }
+                const currentPartnerId = order.dispatch?.deliveryPartnerId?.toString();
+                if (currentPartnerId) {
+                    db.ref(`delivery_offers/${currentPartnerId}/${order._id.toString()}`).remove().catch(() => {});
+                }
+            }
+        } catch (err) {
+            logger.warn(`Admin cancellation firebase offers cleanup failed: ${err?.message || err}`);
         }
     }
 
