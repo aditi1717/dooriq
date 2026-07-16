@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShieldCheck, DollarSign, CheckCircle2, 
-  QrCode, Loader2, Info, X, RefreshCw, Package, Phone
+  QrCode, Loader2, Info, X, RefreshCw, Package, Phone,
+  IndianRupee
 } from 'lucide-react';
 import { deliveryAPI } from '@food/api';
 import { toast } from 'sonner';
@@ -313,7 +314,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
             <div className="flex justify-between items-center mb-8">
                <div className="flex items-center gap-4">
                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${isPaid ? 'bg-emerald-100 text-emerald-600' : isCashAccepted ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'}`}>
-                   {isCashAccepted ? <CheckCircle2 className="w-8 h-8" /> : <DollarSign className="w-8 h-8" />}
+                   {isCashAccepted ? <CheckCircle2 className="w-8 h-8" /> : <IndianRupee className="w-8 h-8" />}
                  </div>
                  <div>
                    <h2 className="text-2xl font-black text-gray-900 tracking-tight">Collect Payment</h2>
@@ -340,7 +341,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
 
             <div className="bg-amber-50/50 rounded-[2.5rem] p-8 border border-amber-100 mb-8 relative overflow-hidden group">
                <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                  <DollarSign className="w-24 h-24" />
+                  <IndianRupee className="w-24 h-24" />
                </div>
 
                <div className="relative z-10">
@@ -358,7 +359,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
                    </div>
                  ) : isCashAccepted && (
                    <div className="inline-flex items-center gap-2 bg-blue-500 text-white pl-3 pr-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20">
-                     <DollarSign className="w-3.5 h-3.5" />
+                     <IndianRupee className="w-3.5 h-3.5" />
                      Collecting Cash
                    </div>
                  )}
@@ -389,7 +390,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
                        disabled={isGeneratingQr || isSwitchingToCash}
                        className="w-full py-5 bg-white border-2 border-gray-200 text-gray-700 text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all rounded-2xl"
                      >
-                       {isSwitchingToCash ? <Loader2 className="w-5 h-5 animate-spin" /> : <DollarSign className="w-5 h-5" />}
+                       {isSwitchingToCash ? <Loader2 className="w-5 h-5 animate-spin" /> : <IndianRupee className="w-5 h-5" />}
                        Take Cash
                      </button>
                    )}
