@@ -911,6 +911,12 @@ export const useDeliveryNotifications = () => {
         ...(statusData || {}),
         status: 'cancelled'
       });
+      const targetId = getOrderAlertKey(statusData);
+      const activeId = getOrderAlertKey(activeOrderRef.current) || getOrderAlertKey(newOrder);
+      if (targetId && activeId && targetId === activeId) {
+        clearNewOrder();
+        window.location.reload();
+      }
     });
 
     socketRef.current.on('order_deleted', (statusData) => {
@@ -919,6 +925,12 @@ export const useDeliveryNotifications = () => {
         ...(statusData || {}),
         status: 'deleted'
       });
+      const targetId = getOrderAlertKey(statusData);
+      const activeId = getOrderAlertKey(activeOrderRef.current) || getOrderAlertKey(newOrder);
+      if (targetId && activeId && targetId === activeId) {
+        clearNewOrder();
+        window.location.reload();
+      }
     });
 
     socketRef.current.on('order_claimed', (data) => {
@@ -951,6 +963,7 @@ export const useDeliveryNotifications = () => {
         ...(data || {}),
         status: 'deassigned'
       });
+      window.location.reload();
     });
 
     socketRef.current.on('admin_notification', (payload) => {

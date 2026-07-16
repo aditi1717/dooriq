@@ -1817,6 +1817,13 @@ export async function deleteOrderAdmin(orderId, adminId) {
       if (order.dispatch?.deliveryPartnerId) {
         io.to(rooms.delivery(order.dispatch.deliveryPartnerId)).emit("order_deleted", payload);
       }
+      const offeredPartners = order.dispatch?.offeredTo || [];
+      for (const offer of offeredPartners) {
+        const pid = offer.partnerId?.toString();
+        if (pid) {
+          io.to(rooms.delivery(pid)).emit("order_deleted", payload);
+        }
+      }
     }
   } catch (err) {
     logger.warn(`Delete order socket emit failed: ${err?.message || err}`);
@@ -1972,6 +1979,19 @@ export async function updateOrderStatusAdmin(orderId, orderStatus, note = "", ad
             io.to(rooms.restaurant(order.restaurantId)).emit("order_status_update", payload);
             if (order.dispatch?.deliveryPartnerId) {
                 io.to(rooms.delivery(order.dispatch.deliveryPartnerId)).emit("order_status_update", payload);
+            }
+            if (String(orderStatus).includes("cancel")) {
+                const offeredPartners = order.dispatch?.offeredTo || [];
+                for (const offer of offeredPartners) {
+                    const pid = offer.partnerId?.toString();
+                    if (pid) {
+                        io.to(rooms.delivery(pid)).emit("order_cancelled", {
+                            orderMongoId: order._id.toString(),
+                            orderId: order._id.toString(),
+                            status: 'cancelled'
+                        });
+                    }
+                }
             }
 
             // On accept (confirmed or preparing) -> request delivery partners via central logic
