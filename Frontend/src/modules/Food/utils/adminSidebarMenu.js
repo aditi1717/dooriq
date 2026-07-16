@@ -61,6 +61,7 @@ export const adminSidebarMenu = [
           { label: "Restaurant Settings", path: "/admin/food/restaurants/settings" },
           { label: "Subscription Settings", path: "/admin/food/restaurants/subscription-settings" },
           { label: "Subscription History", path: "/admin/food/restaurants/subscription-history" },
+          { label: "Restaurant Commission", path: "/admin/food/restaurants/commission" },
         ],
       },
     ],
