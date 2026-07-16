@@ -382,7 +382,9 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
       return merged
     })(),
     note: apiOrder?.note || previousOrder?.note || '',
-    coinsEarned: apiOrder?.coinsEarned || previousOrder?.coinsEarned || 0
+    coinsEarned: apiOrder?.coinsEarned || previousOrder?.coinsEarned || 0,
+    estimatedDeliveryTime: apiOrder?.estimatedDeliveryTime ?? previousOrder?.estimatedDeliveryTime ?? null,
+    estimatedTime: apiOrder?.estimatedTime ?? previousOrder?.estimatedTime ?? null
   }
 }
 

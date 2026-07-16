@@ -1268,6 +1268,7 @@ export async function updateOrderStatusRestaurant(
   restaurantId,
   orderStatus,
   note = "",
+  estimatedDeliveryTime = null,
 ) {
   await expireUnacceptedOrders({
     restaurantId: new mongoose.Types.ObjectId(restaurantId),
@@ -1298,6 +1299,9 @@ export async function updateOrderStatusRestaurant(
   order.orderStatus = orderStatus;
   if (note && String(note).trim()) {
     order.note = String(note).trim();
+  }
+  if (estimatedDeliveryTime !== null && estimatedDeliveryTime !== undefined) {
+    order.estimatedDeliveryTime = Number(estimatedDeliveryTime);
   }
 
   const normalizedPaymentMethod = String(order.payment?.method || "cash").toLowerCase();

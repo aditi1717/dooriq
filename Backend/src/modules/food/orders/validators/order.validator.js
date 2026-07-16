@@ -123,7 +123,8 @@ export function validateOrderStatusDto(body) {
             'delivered',
             'cancelled_by_restaurant'
         ]),
-        note: z.string().optional()
+        note: z.string().optional(),
+        estimatedDeliveryTime: z.number().optional()
     });
     const result = schema.safeParse(body);
     if (!result.success) {
