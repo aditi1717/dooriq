@@ -114,7 +114,7 @@ export async function updateDispatchSettings(dispatchMode, adminId) {
 
 export async function tryAutoAssign(orderId, options = {}) {
   const attempt = options.attempt || 1;
-  const lockTimeout = 55000; // 55 seconds lock interval
+  const lockTimeout = 30000; // 30 seconds lock interval
 
   const order = await FoodOrder.findOneAndUpdate(
     {
@@ -238,7 +238,7 @@ export async function tryAutoAssign(orderId, options = {}) {
           pushTargets,
           {
             title: 'New order available!',
-            body: `Order #${order.order_id || order._id} is available. You have 60 seconds to accept!`,
+            body: `Order #${order.order_id || order._id} is available. You have 30 seconds to accept!`,
             data: { type: 'new_order', orderId: order._id.toString() },
           }
         );
@@ -258,13 +258,13 @@ export async function tryAutoAssign(orderId, options = {}) {
     order.dispatch.offeredTo.push(...offeredToEntries);
     await order.save();
 
-    // Re-check in 60s
+    // Re-check in 30s
     await addOrderJob({
       action: 'DISPATCH_TIMEOUT_CHECK',
       orderMongoId: order._id.toString(),
       orderId: order._id.toString(),
       attempt: attempt + 1
-    }, { delay: 60000 });
+    }, { delay: 30000 });
 
     return order;
   } finally {
