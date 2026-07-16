@@ -6,6 +6,7 @@ import { ValidationError, NotFoundError } from '../../../../core/auth/errors.js'
 import { logger } from '../../../../utils/logger.js';
 import { config } from '../../../../config/env.js';
 import { getIO, rooms } from '../../../../config/socket.js';
+import { getFirebaseDB } from '../../../../config/firebase.js';
 import { addOrderJob } from '../../../../queues/producers/order.producer.js';
 import {
   buildDeliverySocketPayload,
@@ -197,11 +198,23 @@ export async function tryAutoAssign(orderId, options = {}) {
       const reofferEligible = partners.filter(
         (partner) => !permanentlyExcludedIds.has(partner.partnerId.toString())
       );
-      if (io && reofferEligible.length > 0) {
+      if (reofferEligible.length > 0) {
         const payload = buildDeliverySocketPayload(order, order.restaurantId);
-        for (const p of reofferEligible) {
-          const roomName = rooms.delivery(p.partnerId);
-          io.to(roomName).emit('new_order_available', { ...payload, pickupDistanceKm: p.distanceKm });
+        const db = getFirebaseDB();
+        if (db) {
+          for (const p of reofferEligible) {
+            db.ref(`delivery_offers/${p.partnerId}/${order._id.toString()}`).set({
+              ...payload,
+              pickupDistanceKm: p.distanceKm,
+              offeredAt: Date.now()
+            }).catch(() => {});
+          }
+        }
+        if (io) {
+          for (const p of reofferEligible) {
+            const roomName = rooms.delivery(p.partnerId);
+            io.to(roomName).emit('new_order_available', { ...payload, pickupDistanceKm: p.distanceKm });
+          }
         }
       }
 
@@ -219,8 +232,18 @@ export async function tryAutoAssign(orderId, options = {}) {
     const io = getIO();
     const payload = buildDeliverySocketPayload(order, order.restaurantId);
 
-    // BROADCAST: Notify all eligible riders
+    // BROADCAST: Notify all eligible riders via Firebase and Sockets
     logger.info(`Broadcasting order ${order._id} to ${eligible.length} riders.`);
+    const db = getFirebaseDB();
+    if (db) {
+      for (const p of eligible) {
+        db.ref(`delivery_offers/${p.partnerId}/${order._id.toString()}`).set({
+          ...payload,
+          pickupDistanceKm: p.distanceKm,
+          offeredAt: Date.now()
+        }).catch(() => {});
+      }
+    }
     for (const p of eligible) {
       const roomName = rooms.delivery(p.partnerId);
       if (io) io.to(roomName).emit('new_order', { ...payload, pickupDistanceKm: p.distanceKm });
@@ -294,10 +317,19 @@ export async function processDispatchTimeout(orderId, partnerId) {
     order.dispatch.deliveryPartnerId = null;
     await order.save();
     
+    const db = getFirebaseDB();
+    if (db) {
+      db.ref(`delivery_offers/${partnerId}/${orderId}`).remove().catch(() => {});
+    }
+    
     const attempt = (order.dispatch?.offeredTo?.length || 0) + 1;
     await tryAutoAssign(orderId, { attempt });
   } else if (order.dispatch?.status === 'unassigned') {
     // If it's already unassigned (e.g. from a previous timeout), just keep hunting
+    const db = getFirebaseDB();
+    if (db) {
+      db.ref(`delivery_offers/${partnerId}/${orderId}`).remove().catch(() => {});
+    }
     const attempt = (order.dispatch?.offeredTo?.length || 0) + 1;
     await tryAutoAssign(orderId, { attempt });
   }

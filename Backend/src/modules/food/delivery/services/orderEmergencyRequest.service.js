@@ -167,6 +167,7 @@ async function deassignOrderForRedispatch({
                 `Failed to clear tracking for reassigned order ${order._id}: ${error.message}`
             );
         });
+        await db.ref(`delivery_offers/${assignedPartnerId}/${String(order._id)}`).remove().catch(() => {});
     }
 
     const payload = {

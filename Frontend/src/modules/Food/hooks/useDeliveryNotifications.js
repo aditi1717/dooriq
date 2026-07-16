@@ -5,6 +5,8 @@ import { deliveryAPI } from '@food/api';
 import alertSound from '@food/assets/audio/alert.mp3';
 import originalSound from '@food/assets/audio/original.mp3';
 import { dispatchNotificationInboxRefresh } from '@food/hooks/useNotificationInbox';
+import { ref, onValue } from 'firebase/database';
+import { firebaseRealtimeDb, ensureFirebaseInitialized } from '@food/firebase';
 
 const shouldLogDeliverySocket = () => {
   if (typeof window === 'undefined') return import.meta.env.DEV;
@@ -1051,6 +1053,46 @@ export const useDeliveryNotifications = () => {
     }
     return false;
   }, []);
+
+  // Listen for Firebase Realtime Database delivery offers
+  useEffect(() => {
+    if (!deliveryPartnerId) return;
+
+    ensureFirebaseInitialized({ enableRealtimeDb: true });
+    const dbInstance = firebaseRealtimeDb;
+    if (!dbInstance) {
+      debugWarn('Firebase Realtime Database instance not resolved');
+      return;
+    }
+
+    const offersRef = ref(dbInstance, `delivery_offers/${deliveryPartnerId}`);
+    debugLog('?? Subscribed to Firebase Realtime DB delivery offers at path:', `delivery_offers/${deliveryPartnerId}`);
+
+    const unsubscribe = onValue(offersRef, (snapshot) => {
+      const data = snapshot.val();
+      debugLog('Firebase delivery_offers update received:', data);
+
+      if (data) {
+        const offerKeys = Object.keys(data);
+        if (offerKeys.length > 0) {
+          const orderId = offerKeys[0];
+          const orderData = data[orderId];
+          if (orderData) {
+            setNewOrder(orderData);
+            handleIncomingOrderAlert(orderData);
+          }
+        }
+      } else {
+        clearNewOrder();
+      }
+    }, (error) => {
+      debugError('Firebase delivery_offers subscription failed:', error.message);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [deliveryPartnerId, handleIncomingOrderAlert]);
 
   return {
     newOrder,

@@ -390,6 +390,18 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
 
     try {
       const io = getIO();
+      const db = getFirebaseDB();
+      const offeredPartners = order.dispatch?.offeredTo || [];
+
+      if (db) {
+        for (const offer of offeredPartners) {
+          const pid = offer.partnerId?.toString?.();
+          if (pid) {
+            db.ref(`delivery_offers/${pid}/${order._id.toString()}`).remove().catch(() => {});
+          }
+        }
+      }
+
       if (io) {
         const payload = {
           orderMongoId: order._id?.toString?.(),
@@ -484,6 +496,11 @@ export async function rejectOrderDelivery(orderId, deliveryPartnerId) {
     note: 'Rejected',
   });
   await order.save();
+
+  const db = getFirebaseDB();
+  if (db) {
+    db.ref(`delivery_offers/${deliveryPartnerId}/${order._id.toString()}`).remove().catch(() => {});
+  }
 
   enqueueOrderEvent('delivery_rejected', {
     orderMongoId: order._id?.toString?.(),
