@@ -234,8 +234,20 @@ const DeliveryTrackingMap = ({
         
         // If rider is still going to the restaurant to pickup, add the restaurant's prep time!
         if (!isOrderPickedUp) {
-          const prepTime = order?.estimatedDeliveryTime || order?.prepTime || 15;
-          durationMins += prepTime;
+          const basePrepTime = order?.estimatedDeliveryTime || order?.prepTime || 15;
+          const getPreparingTimestamp = (o) => {
+            if (!o) return null;
+            const history = o.statusHistory || [];
+            const preparingEntry = history.find(h => h.to === 'preparing' || h.to === 'confirmed');
+            if (preparingEntry) return new Date(preparingEntry.at);
+            return o.createdAt ? new Date(o.createdAt) : null;
+          };
+          const prepStart = getPreparingTimestamp(order);
+          const elapsedMs = prepStart ? (Date.now() - prepStart.getTime()) : 0;
+          const remainingSeconds = Math.max(0, basePrepTime * 60 - Math.floor(elapsedMs / 1000));
+          const remainingPrepTime = Math.ceil(remainingSeconds / 60);
+          
+          durationMins += remainingPrepTime;
         }
 
         const finalEtaText = `${durationMins} mins`;

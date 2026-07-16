@@ -56,12 +56,24 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
 
     // A. Use provided data if available (Direct distance from socket)
     const rawDist = order.pickupDistanceKm || order.distanceKm;
-    const prepTime = order.estimatedDeliveryTime || order.prepTime || 15;
+    const basePrepTime = order.estimatedDeliveryTime || order.prepTime || 15;
     
+    // Calculate remaining preparation time dynamically in real-time
+    const getPreparingTimestamp = (order) => {
+      const history = order.statusHistory || [];
+      const preparingEntry = history.find(h => h.to === 'preparing' || h.to === 'confirmed');
+      if (preparingEntry) return new Date(preparingEntry.at);
+      return order.createdAt ? new Date(order.createdAt) : null;
+    };
+    const prepStart = getPreparingTimestamp(order);
+    const elapsedMs = prepStart ? (Date.now() - prepStart.getTime()) : 0;
+    const remainingSeconds = Math.max(0, basePrepTime * 60 - Math.floor(elapsedMs / 1000));
+    const remainingPrepTime = Math.ceil(remainingSeconds / 60);
+
     if (rawDist != null) {
       return { 
         distanceKm: Number(rawDist).toFixed(1), 
-        etaMins: prepTime
+        etaMins: remainingPrepTime
       };
     }
 
@@ -79,12 +91,12 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
       
       return { 
         distanceKm: km.toFixed(1), 
-        etaMins: prepTime 
+        etaMins: remainingPrepTime
       };
     }
 
-    return { distanceKm: '??', etaMins: prepTime };
-  }, [order, riderLocation]);
+    return { distanceKm: '??', etaMins: remainingPrepTime };
+  }, [order, riderLocation, timeLeft]);
 
   if (!order) return null;
 

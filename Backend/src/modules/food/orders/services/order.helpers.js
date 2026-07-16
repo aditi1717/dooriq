@@ -256,6 +256,7 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
     dispatch: order?.dispatch,
     estimatedDeliveryTime: order?.estimatedDeliveryTime || 30,
     prepTime: order?.estimatedDeliveryTime || 30,
+    statusHistory: order?.statusHistory || [],
     createdAt: order?.createdAt,
     updatedAt: order?.updatedAt,
   };
