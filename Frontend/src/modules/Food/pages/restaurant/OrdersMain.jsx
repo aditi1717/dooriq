@@ -2931,9 +2931,13 @@ function PreparingOrders({
 
           const transformedOrders = preparingOrders.map((order) => {
             const initialETA = order.estimatedDeliveryTime || 30; // in minutes
-            const preparingTimestamp = order.tracking?.preparing?.timestamp
-              ? new Date(order.tracking.preparing.timestamp)
-              : new Date(order.createdAt); // Fallback to createdAt if preparing timestamp not available
+            const getPreparingTimestamp = (o) => {
+              const history = o.statusHistory || [];
+              const preparingEntry = history.find(h => h.to === 'preparing' || h.to === 'confirmed');
+              if (preparingEntry) return new Date(preparingEntry.at);
+              return o.createdAt ? new Date(o.createdAt) : null;
+            };
+            const preparingTimestamp = getPreparingTimestamp(order) || new Date(order.createdAt);
 
             return {
               orderId: order.orderId || order._id,

@@ -1004,7 +1004,13 @@ export default function OrderTracking() {
     if (!order) return;
     
     const calculateTimeRemaining = () => {
-      const orderTime = new Date(
+      const getPreparingTimestamp = (o) => {
+        const history = o.statusHistory || [];
+        const preparingEntry = history.find(h => h.to === 'preparing' || h.to === 'confirmed');
+        if (preparingEntry) return new Date(preparingEntry.at);
+        return o.createdAt ? new Date(o.createdAt) : null;
+      };
+      const orderTime = getPreparingTimestamp(order) || new Date(
         order.createdAt || order.orderDate || order.created_at || order.date || Date.now()
       );
       const estimatedMinutes =
