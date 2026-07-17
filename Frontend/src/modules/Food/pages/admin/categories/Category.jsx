@@ -318,13 +318,12 @@ export default function Category() {
         category?.name || "N/A",
         category?.foodTypeScope || "Both",
         category?.isGlobal ? "Global" : "Private",
-        zoneLabel(category?.zoneId),
         category?.approvalStatus || "pending",
       ])
 
       autoTable(doc, {
         startY: 35,
-        head: [["SL", "Category", "Diet Scope", "Visibility", "Zone", "Approval"]],
+        head: [["SL", "Category", "Diet Scope", "Visibility", "Approval"]],
         body: tableData,
         theme: "striped",
         headStyles: {
@@ -456,12 +455,11 @@ export default function Category() {
           <table className="min-w-full table-fixed">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
-                <th className="w-[20%] px-5 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Category</th>
-                <th className="w-[15%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Owner</th>
-                <th className="w-[12%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Visibility</th>
-                <th className="w-[12%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Zone</th>
-                <th className="w-[10%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Diet</th>
-                <th className="w-[8%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Status</th>
+                <th className="w-[25%] px-5 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Category</th>
+                <th className="w-[17%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Owner</th>
+                <th className="w-[14%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Visibility</th>
+                <th className="w-[11%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Diet</th>
+                <th className="w-[10%] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">Status</th>
                 <th className="w-[10%] px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600">Approval</th>
                 <th className="w-[13%] px-5 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-slate-600">Actions</th>
               </tr>
@@ -469,14 +467,14 @@ export default function Category() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-20 text-center">
+                  <td colSpan={7} className="px-6 py-20 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-600" />
                     <p className="mt-2 text-sm text-slate-500">Loading categories...</p>
                   </td>
                 </tr>
               ) : filteredCategories.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-20 text-center">
+                  <td colSpan={7} className="px-6 py-20 text-center">
                     <p className="text-lg font-semibold text-slate-700">No categories found</p>
                     <p className="mt-1 text-sm text-slate-500">Try a different search or create a new category.</p>
                   </td>
@@ -527,13 +525,7 @@ export default function Category() {
                           {category?.isGlobal ? "Global" : "Private"}
                         </span>
                       </td>
-                      <td className="px-4 py-5">
-                        <div className="max-w-[180px]">
-                          <p className="truncate text-sm font-medium text-slate-700" title={zoneText}>
-                            {zoneText}
-                          </p>
-                        </div>
-                      </td>
+
                       <td className="px-4 py-5 text-center">
                         <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${scopeBadgeClass(category?.foodTypeScope)}`}>
                           {category?.foodTypeScope || "Both"}
