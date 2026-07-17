@@ -55,6 +55,8 @@ const resolveCategoryId = (category) => String(category?._id || category?.id || 
 export default function Category() {
   const [searchQuery, setSearchQuery] = useState("")
   const [categories, setCategories] = useState([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
   const [loading, setLoading] = useState(true)
   const [showPendingOnly, setShowPendingOnly] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -110,6 +112,7 @@ export default function Category() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       fetchCategories()
+      setCurrentPage(1)
     }, 300)
     return () => window.clearTimeout(timer)
   }, [searchQuery, showPendingOnly])
@@ -127,6 +130,13 @@ export default function Category() {
       )
     })
   }, [categories, searchQuery])
+
+  const totalPages = Math.max(1, Math.ceil(filteredCategories.length / itemsPerPage))
+
+  const paginatedCategories = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    return filteredCategories.slice(startIndex, startIndex + itemsPerPage)
+  }, [filteredCategories, currentPage])
 
   const fetchCategories = async () => {
     try {
@@ -480,7 +490,7 @@ export default function Category() {
                   </td>
                 </tr>
               ) : (
-                filteredCategories.map((category) => {
+                paginatedCategories.map((category) => {
                   const categoryId = resolveCategoryId(category)
                   const isRestaurantCategory = Boolean(category?.createdByRestaurantId || category?.restaurantId)
                   const creatorName = category?.createdByRestaurant?.name || category?.restaurant?.name || (isRestaurantCategory ? "Unknown Restaurant" : "Admin")
@@ -604,6 +614,50 @@ export default function Category() {
             </tbody>
           </table>
         </div>
+
+        {!loading && filteredCategories.length > 0 && (
+          <div className="border-t border-slate-200 bg-slate-50 px-5 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <span className="text-sm font-semibold text-slate-500">
+              Showing {Math.min(filteredCategories.length, (currentPage - 1) * itemsPerPage + 1)} to {Math.min(filteredCategories.length, currentPage * itemsPerPage)} of {filteredCategories.length} categories
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Previous
+              </button>
+              
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    className={`min-w-9 h-9 flex items-center justify-center rounded-lg text-sm font-semibold transition-colors ${
+                      currentPage === page
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {typeof window !== "undefined" &&

@@ -474,7 +474,7 @@ export default function Wallet() {
                         boxShadow:
                           "0 12px 24px rgba(var(--module-theme-rgb,250,2,114),0.30)",
                       }}
-                      onClick={() => setAddMoneyModalOpen(true)}
+                      /* onClick={() => setAddMoneyModalOpen(true)} */
                     >
                       <Plus className="h-4 w-4 md:h-5 md:w-5 lg:h-6 lg:w-6" />
                       Add money

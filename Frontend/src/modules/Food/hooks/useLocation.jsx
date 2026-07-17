@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { locationAPI, userAPI } from "@food/api"
+import { locationAPI, userAPI, restaurantAPI } from "@food/api"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -12,6 +12,17 @@ const DEFAULT_LOCATION = {
   area: "",
   address: "Select location",
   formattedAddress: "Select location"
+}
+
+const DEFAULT_INDORE_LOCATION = {
+  latitude: 22.7533,
+  longitude: 75.8937,
+  city: "Indore",
+  state: "Madhya Pradesh",
+  country: "India",
+  area: "Vijay Nagar",
+  address: "Vijay Nagar, Indore",
+  formattedAddress: "Vijay Nagar, Indore, Madhya Pradesh"
 }
 
 
@@ -134,6 +145,7 @@ export function useLocation() {
   const [permissionGranted, setPermissionGranted] = useState(false)
 
   const watchIdRef = useRef(null)
+  const liveGeoEnabledRef = useRef(true)
   const updateTimerRef = useRef(null)
   const prevLocationCoordsRef = useRef({ latitude: null, longitude: null })
   const lastGeocodeAtRef = useRef(0)
@@ -798,6 +810,12 @@ export function useLocation() {
 
   /* ===================== MAIN LOCATION ===================== */
   const getLocation = async (updateDB = true, forceFresh = false, showLoading = false) => {
+    if (!liveGeoEnabledRef.current) {
+      localStorage.setItem("userLocation", JSON.stringify(DEFAULT_INDORE_LOCATION))
+      setLocation(DEFAULT_INDORE_LOCATION)
+      if (showLoading) setLoading(false)
+      return DEFAULT_INDORE_LOCATION
+    }
     // If not forcing fresh, try DB first (faster)
     let dbLocation = !forceFresh ? await fetchLocationFromDB() : null
     if (dbLocation && !forceFresh) {
@@ -1090,6 +1108,10 @@ export function useLocation() {
 
   /* ===================== WATCH LOCATION ===================== */
   const startWatchingLocation = () => {
+    if (!liveGeoEnabledRef.current) {
+      debugLog("?? Skipping startWatchingLocation because live_geolocation is disabled")
+      return
+    }
     if (!navigator.geolocation) {
       debugWarn("?? Geolocation not supported")
       return
@@ -1315,6 +1337,27 @@ export function useLocation() {
 
     const init = async () => {
       try {
+        let liveGeoEnabled = true
+        try {
+          const featureRes = await restaurantAPI.getFeatureSettingsPublic()
+          const features = Array.isArray(featureRes?.data?.data) ? featureRes.data.data : []
+          const liveGeoFeature = features.find(f => f.key === "live_geolocation")
+          if (liveGeoFeature && liveGeoFeature.isEnabled === false) {
+            liveGeoEnabled = false
+          }
+        } catch (err) {
+          debugWarn("Failed to fetch feature settings, defaulting to enabled", err)
+        }
+
+        liveGeoEnabledRef.current = liveGeoEnabled
+
+        if (!liveGeoEnabled) {
+          localStorage.setItem("userLocation", JSON.stringify(DEFAULT_INDORE_LOCATION))
+          setLocation(DEFAULT_INDORE_LOCATION)
+          setLoading(false)
+          setPermissionGranted(true)
+          return
+        }
         const stored = localStorage.getItem("userLocation")
         if (stored) {
           try {

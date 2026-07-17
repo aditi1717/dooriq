@@ -1,7 +1,19 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { restaurantAPI } from "@food/api"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
+
+const DEFAULT_INDORE_LOCATION = {
+  latitude: 22.7533,
+  longitude: 75.8937,
+  city: "Indore",
+  state: "Madhya Pradesh",
+  country: "India",
+  area: "Vijay Nagar",
+  address: "Vijay Nagar, Indore",
+  formattedAddress: "Vijay Nagar, Indore, Madhya Pradesh"
+}
 
 
 /**
@@ -20,6 +32,7 @@ export function useLocationSimple() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [permissionGranted, setPermissionGranted] = useState(false)
+  const liveGeoEnabledRef = useRef(true)
 
   /**
    * Extract area/subLocality from Ola Maps API response
@@ -231,6 +244,13 @@ export function useLocationSimple() {
    * Called explicitly by user (e.g., button click)
    */
   const requestLocation = async () => {
+    if (!liveGeoEnabledRef.current) {
+      localStorage.setItem("userLocation", JSON.stringify(DEFAULT_INDORE_LOCATION))
+      setLocation(DEFAULT_INDORE_LOCATION)
+      setPermissionGranted(true)
+      setError(null)
+      return DEFAULT_INDORE_LOCATION
+    }
     setLoading(true)
     setError(null)
 
@@ -266,35 +286,61 @@ export function useLocationSimple() {
 
   // Initialize: Load cached location; only fetch if missing.
   useEffect(() => {
-    // Load cached location immediately (no loading state)
-    const cached = localStorage.getItem("userLocation")
-    if (cached) {
+    const init = async () => {
+      let liveGeoEnabled = true
       try {
-        const cachedLocation = JSON.parse(cached)
-        setLocation(cachedLocation)
-        setLoading(false)
+        const featureRes = await restaurantAPI.getFeatureSettingsPublic()
+        const features = Array.isArray(featureRes?.data?.data) ? featureRes.data.data : []
+        const liveGeoFeature = features.find(f => f.key === "live_geolocation")
+        if (liveGeoFeature && liveGeoFeature.isEnabled === false) {
+          liveGeoEnabled = false
+        }
       } catch (err) {
-        debugError("Failed to parse cached location:", err)
+        debugWarn("Failed to fetch feature settings, defaulting to enabled", err)
       }
-    } else {
-      setLoading(false)
+
+      liveGeoEnabledRef.current = liveGeoEnabled
+
+      if (!liveGeoEnabled) {
+        localStorage.setItem("userLocation", JSON.stringify(DEFAULT_INDORE_LOCATION))
+        setLocation(DEFAULT_INDORE_LOCATION)
+        setLoading(false)
+        setPermissionGranted(true)
+        return
+      }
+
+      // Load cached location immediately (no loading state)
+      const cached = localStorage.getItem("userLocation")
+      if (cached) {
+        try {
+          const cachedLocation = JSON.parse(cached)
+          setLocation(cachedLocation)
+          setLoading(false)
+        } catch (err) {
+          debugError("Failed to parse cached location:", err)
+        }
+      } else {
+        setLoading(false)
+      }
+
+      // IMPORTANT: Do NOT fetch on every reload.
+      // Only fetch once when userLocation is missing; after that, rely on localStorage
+      // unless the user explicitly requests a refresh via requestLocation().
+      if (!cached) {
+        getCurrentLocation()
+          .then((locationData) => {
+            setLocation(locationData)
+            setPermissionGranted(true)
+            setError(null)
+          })
+          .catch((err) => {
+            setError(err.message)
+            setPermissionGranted(false)
+          })
+      }
     }
 
-    // IMPORTANT: Do NOT fetch on every reload.
-    // Only fetch once when userLocation is missing; after that, rely on localStorage
-    // unless the user explicitly requests a refresh via requestLocation().
-    if (!cached) {
-      getCurrentLocation()
-        .then((locationData) => {
-          setLocation(locationData)
-          setPermissionGranted(true)
-          setError(null)
-        })
-        .catch((err) => {
-          setError(err.message)
-          setPermissionGranted(false)
-        })
-    }
+    init()
   }, [])
 
   return {

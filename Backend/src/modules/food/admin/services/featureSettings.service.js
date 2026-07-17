@@ -4,7 +4,8 @@ export const FEATURE_KEYS = {
     RESTAURANT_SUBSCRIPTION: 'restaurant_subscription',
     COD_CONTROL: 'cod_control',
     ADMIN_ACCESS_SECTION: 'admin_access_section',
-    ROOT_LANDING_AND_UNREGISTERED_CONTROL: 'root_landing_and_unregistered_control'
+    ROOT_LANDING_AND_UNREGISTERED_CONTROL: 'root_landing_and_unregistered_control',
+    LIVE_GEOLOCATION: 'live_geolocation'
 };
 
 const DEFAULT_FEATURES = [
@@ -30,6 +31,12 @@ const DEFAULT_FEATURES = [
         key: FEATURE_KEYS.ROOT_LANDING_AND_UNREGISTERED_CONTROL,
         name: 'Root Landing & Unregistered Restaurants',
         description: 'Controls root URL behavior and Unregistered Restaurants visibility. When disabled, root redirects to /food/user and Unregistered Restaurants is hidden.',
+        isEnabled: true
+    },
+    {
+        key: FEATURE_KEYS.LIVE_GEOLOCATION,
+        name: 'Live Geolocation',
+        description: 'When enabled, the app fetches the user\'s live location on load. When disabled, it defaults to Vijay Nagar, Indore.',
         isEnabled: true
     }
 ];

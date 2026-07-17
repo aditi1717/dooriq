@@ -14,6 +14,8 @@ const debugError = (...args) => {}
 export default function Customers() {
   const [searchQuery, setSearchQuery] = useState("")
   const [customers, setCustomers] = useState([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
   const [loading, setLoading] = useState(true)
   const [totalCustomers, setTotalCustomers] = useState(0)
   const [selectedCustomer, setSelectedCustomer] = useState(null)
@@ -27,6 +29,10 @@ export default function Customers() {
     sortBy: "",
     chooseFirst: "",
   })
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, filters])
 
   const filteredCustomers = useMemo(() => {
     let result = [...customers]
@@ -82,6 +88,13 @@ export default function Customers() {
 
     return result
   }, [customers, searchQuery, filters])
+
+  const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / itemsPerPage))
+
+  const paginatedCustomers = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    return filteredCustomers.slice(startIndex, startIndex + itemsPerPage)
+  }, [filteredCustomers, currentPage])
 
   const handleFilterChange = (field, value) => {
     setFilters(prev => ({ ...prev, [field]: value }))
@@ -344,14 +357,6 @@ export default function Customers() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => {
-                  // Filters are applied automatically via useMemo
-                }}
-                className="px-6 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all"
-              >
-                Apply Filters
-              </button>
-              <button
-                onClick={() => {
                   setFilters({
                     orderDate: "",
                     joiningDate: "",
@@ -446,10 +451,10 @@ export default function Customers() {
                     </td>
                   </tr>
                 ) : (
-                  filteredCustomers.map((customer, index) => (
+                  paginatedCustomers.map((customer, index) => (
                     <tr key={customer.id || customer.sl} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-medium text-slate-700">{index + 1}</span>
+                        <span className="text-sm font-medium text-slate-700">{(currentPage - 1) * itemsPerPage + index + 1}</span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -519,6 +524,50 @@ export default function Customers() {
               </tbody>
             </table>
           </div>
+
+          {!loading && filteredCustomers.length > 0 && (
+            <div className="border-t border-slate-200 bg-slate-50 px-5 py-4 mt-4 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+              <span className="text-sm font-semibold text-slate-500">
+                Showing {Math.min(filteredCustomers.length, (currentPage - 1) * itemsPerPage + 1)} to {Math.min(filteredCustomers.length, currentPage * itemsPerPage)} of {filteredCustomers.length} customers
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setCurrentPage(page)}
+                      className={`min-w-9 h-9 flex items-center justify-center rounded-lg text-sm font-semibold transition-colors ${
+                        currentPage === page
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

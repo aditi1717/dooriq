@@ -102,13 +102,24 @@ export default function ViewOrderDialog({ isOpen, onOpenChange, order }) {
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] bg-white p-0 overflow-y-auto">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200 sticky top-0 bg-white z-10">
-          <DialogTitle className="flex items-center gap-2">
-            <Eye className="w-5 h-5 text-orange-600" />
-            Order Details
-          </DialogTitle>
-          <DialogDescription>
-            View complete information about this order
-          </DialogDescription>
+          <div className="flex items-start justify-between">
+            <div>
+              <DialogTitle className="flex items-center gap-2">
+                <Eye className="w-5 h-5 text-orange-600" />
+                Order Details
+              </DialogTitle>
+              <DialogDescription className="mt-1">
+                View complete information about this order
+              </DialogDescription>
+            </div>
+            <button
+              onClick={() => onOpenChange(false)}
+              className="rounded-lg p-1.5 hover:bg-slate-100 text-slate-500 transition-colors"
+              aria-label="Close dialog"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </DialogHeader>
         <div className="px-6 py-6 space-y-6">
           {/* Basic Order Information */}
