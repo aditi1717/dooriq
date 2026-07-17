@@ -518,6 +518,12 @@ export default function OrderTracking() {
   const [isUpdatingInstructions, setIsUpdatingInstructions] = useState(false)
   const [resolvedLookupId, setResolvedLookupId] = useState("")
   const [timerNow, setTimerNow] = useState(Date.now())
+
+  useEffect(() => {
+    if (order?.note) {
+      setDeliveryInstructions(order.note)
+    }
+  }, [order?.note])
   const handleEtaUpdate = useCallback((newEta) => {
     if (typeof newEta === 'string') {
       const match = newEta.match(/\d+/);
@@ -1616,14 +1622,23 @@ export default function OrderTracking() {
         {/* Delivery Instructions - Only show if NOT delivered */}
         {!isDeliveredOrder && !isCancelledOrder && (
           <div onClick={() => setIsInstructionsModalOpen(true)} className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-gray-100 dark:border-zinc-800 mb-6 cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl mt-0.5">
                   <FileText className="w-4 h-4 text-purple-500" />
                 </div>
-                <span className="text-sm font-bold text-gray-800 dark:text-white">Add delivery instructions</span>
+                <div>
+                  <span className="text-sm font-bold text-gray-800 dark:text-white">
+                    {order?.note ? "Delivery instructions" : "Add delivery instructions"}
+                  </span>
+                  {order?.note && (
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 italic">
+                      "{order.note}"
+                    </p>
+                  )}
+                </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-gray-400" />
+              <ChevronRight className="w-4 h-4 text-gray-400 mt-1" />
             </div>
           </div>
         )}

@@ -932,13 +932,15 @@ export default function SearchResults() {
             {/* Small Restaurant Cards - Horizontal Scroll */}
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3 sm:gap-4 lg:gap-5">
               {filteredRecommended.slice(0, 6).map((restaurant) => {
+                const restaurantAvailability = getRestaurantAvailabilityStatus(restaurant, new Date(availabilityTick));
+                const isRestaurantClosed = isOutOfService || !restaurantAvailability.isOpen;
                 return (
                   <Link
                     key={restaurant.id}
                     to={`/user/restaurants/${restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, '-')}`}
                     className="block"
                   >
-                    <div className={`group ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
+                    <div className={`group ${isRestaurantClosed ? 'grayscale opacity-75' : ''}`}>
                       {/* Image Container */}
                       <div className="relative aspect-square rounded-xl overflow-hidden mb-2 bg-gray-200 dark:bg-gray-800">
                         {restaurant.image ? (
@@ -1002,10 +1004,12 @@ export default function SearchResults() {
             {nonRepeatedAllRestaurants.map((restaurant) => {
               const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
               const isFavorite = favorites.has(restaurant.id)
+              const restaurantAvailability = getRestaurantAvailabilityStatus(restaurant, new Date(availabilityTick));
+              const isRestaurantClosed = isOutOfService || !restaurantAvailability.isOpen;
 
               return (
                 <Link key={restaurant.id} to={`/user/restaurants/${restaurant.slug || restaurantSlug}`} className="h-full flex">
-                  <Card className={`overflow-hidden cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-md flex flex-col h-full w-full ${shouldShowGrayscale ? 'grayscale opacity-75' : ''
+                  <Card className={`overflow-hidden cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-md flex flex-col h-full w-full ${isRestaurantClosed ? 'grayscale opacity-75' : ''
                     }`}>
                     {/* Image Section */}
                     <div className="relative h-44 sm:h-52 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0 bg-gray-200 dark:bg-gray-800">

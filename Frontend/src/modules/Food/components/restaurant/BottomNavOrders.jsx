@@ -82,9 +82,9 @@ function BottomNavOrders() {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[60] px-3 pb-[max(0.55rem,env(safe-area-inset-bottom))]">
-      <div className="mx-auto w-full max-w-md">
-        <div className="relative overflow-hidden rounded-full bg-gray-900/96 backdrop-blur-xl py-1.5 px-2 shadow-[0_24px_60px_rgba(0,0,0,0.35)] border border-white/10">
+    <div className="fixed bottom-0 left-0 right-0 z-[60]">
+      <div className="w-full">
+        <div className="relative overflow-hidden bg-gray-900/96 backdrop-blur-xl py-1.5 px-2 shadow-[0_-4px_24px_rgba(0,0,0,0.25)] border-t border-white/10">
           <div className="relative flex items-center justify-around gap-1">
             {tabs.map((tab) => {
               const Icon = tab.icon

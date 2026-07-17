@@ -491,23 +491,14 @@ export default function OrdersTable({
                 {visibleColumns.actions && (
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     <div className="flex items-center justify-center gap-2">
-                      {onAcceptOrder && (
+                      {onAcceptOrder && String(order.orderStatus || "").trim().toLowerCase() === "pending" && (
                         <button
                           onClick={() => onAcceptOrder(order)}
                           disabled={
-                            actionLoadingOrderId === (order.id || order.orderId) ||
-                            String(order.orderStatus || "").trim().toLowerCase() !== "pending"
+                            actionLoadingOrderId === (order.id || order.orderId)
                           }
-                          className={`px-2.5 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
-                            String(order.orderStatus || "").trim().toLowerCase() === "pending"
-                              ? "text-white bg-emerald-600 hover:bg-emerald-700"
-                              : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                          } disabled:opacity-60 disabled:cursor-not-allowed`}
-                          title={
-                            String(order.orderStatus || "").trim().toLowerCase() === "pending"
-                              ? "Accept Order"
-                              : "Available only for pending orders"
-                          }
+                          className="px-2.5 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1 text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                          title="Accept Order"
                         >
                           {actionLoadingOrderId === (order.id || order.orderId) ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -517,23 +508,14 @@ export default function OrdersTable({
                           <span>Accept</span>
                         </button>
                       )}
-                      {onRejectOrder && (
+                      {onRejectOrder && String(order.orderStatus || "").trim().toLowerCase() === "pending" && (
                         <button
                           onClick={() => onRejectOrder(order)}
                           disabled={
-                            actionLoadingOrderId === (order.id || order.orderId) ||
-                            String(order.orderStatus || "").trim().toLowerCase() !== "pending"
+                            actionLoadingOrderId === (order.id || order.orderId)
                           }
-                          className={`px-2.5 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
-                            String(order.orderStatus || "").trim().toLowerCase() === "pending"
-                              ? "text-white bg-rose-600 hover:bg-rose-700"
-                              : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                          } disabled:opacity-60 disabled:cursor-not-allowed`}
-                          title={
-                            String(order.orderStatus || "").trim().toLowerCase() === "pending"
-                              ? "Reject Order"
-                              : "Available only for pending orders"
-                          }
+                          className="px-2.5 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1 text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                          title="Reject Order"
                         >
                           {actionLoadingOrderId === (order.id || order.orderId) ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />

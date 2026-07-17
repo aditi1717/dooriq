@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
+  ArrowLeft,
   Search,
   SlidersHorizontal,
   ChevronUp,
@@ -1896,12 +1897,12 @@ export default function Inventory() {
   return (
     <div className="min-h-screen bg-[#f3f5f8] flex flex-col">
       {/* Navbar */}
-      <div className="sticky top-0 z-50 bg-white">
-        <RestaurantNavbar
-          showSearch={false}
-          showOfflineOnlineTag={false}
-          showNotifications={false}
-        />
+      <div className="sticky top-0 z-50 bg-white px-4 py-3.5 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-bold text-gray-900">
+            Inventory
+          </h1>
+        </div>
       </div>
 
       {/* Tabs */}

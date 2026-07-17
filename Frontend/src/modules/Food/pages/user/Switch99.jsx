@@ -1337,8 +1337,10 @@ export default function Under250() {
         ) : (
           sortedAndFilteredRestaurants.map((restaurant) => {
             const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
+            const restaurantAvailability = getRestaurantAvailabilityStatus(restaurant, new Date(availabilityTick));
+            const isRestaurantClosed = isOutOfService || !restaurantAvailability.isOpen;
             return (
-              <section key={restaurant.id} className="pt-4 sm:pt-6 md:pt-8 lg:pt-10">
+              <section key={restaurant.id} className={`pt-4 sm:pt-6 md:pt-8 lg:pt-10 ${isRestaurantClosed ? 'grayscale opacity-75' : ''}`}>
                 {/* Restaurant Header */}
                 <div className="flex items-start justify-between mb-3 md:mb-4 lg:mb-6">
                   <div className="flex-1">
@@ -1493,13 +1495,11 @@ export default function Under250() {
                                     </button>
                                   </div>
                                 ) : (
-                                  <Button
-                                    variant={"outline"}
-                                    size="sm"
+                                  <button
                                     disabled={shouldShowGrayscale}
-                                    className={`h-7 md:h-8 lg:h-9 px-3 md:px-4 lg:px-5 text-xs md:text-sm lg:text-base ${shouldShowGrayscale
+                                    className={`h-7 md:h-8 lg:h-9 px-3 md:px-4 lg:px-5 text-xs md:text-sm lg:text-base rounded-lg border font-bold flex items-center justify-center transition-colors ${shouldShowGrayscale
                                       ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 border-gray-300 dark:border-gray-700 cursor-not-allowed opacity-50'
-                                      : 'bg-[#FFF2EB] text-[#EB590E] border-[#EB590E] hover:bg-[#EB590E] hover:text-white'
+                                      : 'bg-[#FFF2EB] text-[#EB590E] border-[#EB590E] hover:bg-[#EB590E] hover:text-white dark:bg-[#eb590e]/10 dark:text-[#eb590e] dark:border-[#eb590e]/50 dark:hover:bg-[#eb590e] dark:hover:text-white'
                                       }`}
                                     onClick={(e) => {
                                       e.stopPropagation()
@@ -1509,7 +1509,7 @@ export default function Under250() {
                                     }}
                                   >
                                     Add
-                                  </Button>
+                                  </button>
                                 )}
                               </div>
                             </div>

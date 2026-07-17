@@ -99,7 +99,7 @@ export default function Cart() {
   const routerLocation = useLocation()
   const goBack = useAppBackNavigation()
   const orderSuccessAudioRef = useRef(null)
-  const hasRestoredRecipientRef = useRef(false)
+  const hasRestoredRecipientRef = useRef(true)
   const hasRestoredNoteRef = useRef(false)
 
   // Defensive check: Ensure CartProvider is available
@@ -167,10 +167,34 @@ export default function Cart() {
   })
   const [showShareModal, setShowShareModal] = useState(false)
   const [sharePayload, setSharePayload] = useState(null)
-  const [isEditingRecipient, setIsEditingRecipient] = useState(false)
-  const [recipientDetails, setRecipientDetails] = useState({
-    name: "",
-    phone: "",
+  const [isEditingRecipient, setIsEditingRecipient] = useState(() => {
+    try {
+      if (typeof window === "undefined") return false
+      const raw = window.localStorage.getItem(CART_RECIPIENT_DETAILS_STORAGE_KEY)
+      if (raw) {
+        const stored = JSON.parse(raw)
+        return Boolean(stored?.isEditingRecipient)
+      }
+    } catch {
+      return false
+    }
+    return false
+  })
+  const [recipientDetails, setRecipientDetails] = useState(() => {
+    try {
+      if (typeof window === "undefined") return { name: "", phone: "" }
+      const raw = window.localStorage.getItem(CART_RECIPIENT_DETAILS_STORAGE_KEY)
+      if (raw) {
+        const stored = JSON.parse(raw)
+        return {
+          name: stored?.name || "",
+          phone: stored?.phone ? String(stored.phone).replace(/\D/g, "").slice(0, 10) : "",
+        }
+      }
+    } catch {
+      return { name: "", phone: "" }
+    }
+    return { name: "", phone: "" }
   })
 
   const [sendCutlery, setSendCutlery] = useState(true)
@@ -199,6 +223,18 @@ export default function Cart() {
     }
     fetchCoinSettings()
   }, [])
+
+  // Disable body scroll when share modal is open
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    if (showShareModal) {
+      const originalOverflow = document.body.style.overflow
+      document.body.style.overflow = "hidden"
+      return () => {
+        document.body.style.overflow = originalOverflow
+      }
+    }
+  }, [showShareModal])
   const [deliveryAddressMode, setDeliveryAddressMode] = useState(() => {
     try {
       if (typeof window === "undefined") return "saved"
@@ -300,7 +336,7 @@ export default function Cart() {
 
   useEffect(() => {
     if (!isCodEnabled && selectedPaymentMethod === "cash") {
-      setSelectedPaymentMethod("wallet")
+      setSelectedPaymentMethod("razorpay")
     }
   }, [isCodEnabled, selectedPaymentMethod])
 
@@ -476,29 +512,7 @@ export default function Cart() {
     }
   })
 
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    try {
-      const raw = window.localStorage.getItem(CART_RECIPIENT_DETAILS_STORAGE_KEY)
-      if (!raw) {
-        hasRestoredRecipientRef.current = true
-        return
-      }
-
-      const stored = JSON.parse(raw)
-      setRecipientDetails({
-        name: stored?.name || "",
-        phone: sanitizeRecipientPhone(stored?.phone || ""),
-      })
-      setIsEditingRecipient(Boolean(stored?.isEditingRecipient))
-    } catch {
-      setRecipientDetails({ name: "", phone: "" })
-      setIsEditingRecipient(false)
-    } finally {
-      hasRestoredRecipientRef.current = true
-    }
-  }, [])
+  // Recipient details restored from state initializers directly on mount
 
   useEffect(() => {
     setRecipientDetails((prev) => ({
@@ -1296,6 +1310,15 @@ export default function Cart() {
       navigate("/food/user/profile")
     } else {
       navigate("/food/user")
+    }
+  }
+
+  const handleAddMoreItems = () => {
+    const slug = restaurantData?.slug || restaurantData?.restaurantId || restaurantData?._id || cart[0]?.restaurantId || (restaurantData?.name ? restaurantData.name.toLowerCase().replace(/\s+/g, "-") : null);
+    if (slug) {
+      navigate(`/user/restaurants/${slug}`, { state: { backTo: "/food/user/cart" } })
+    } else {
+      navigate("/user")
     }
   }
 
@@ -2176,7 +2199,7 @@ export default function Cart() {
 
                 {/* Add more items */}
                 <button
-                  onClick={handleBack}
+                  onClick={handleAddMoreItems}
                   className="flex items-center gap-2 mt-4 md:mt-6 text-[#EB590E] dark:text-[#EB590E]"
                 >
                   <Plus className="h-4 w-4 md:h-5 md:w-5" />
@@ -2606,7 +2629,7 @@ export default function Cart() {
                       />
                     </div>
                     <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                      Agar aap kisi aur ke liye order kar rahe ho, to yahan uska naam aur phone save kar do.
+                      If you're ordering for someone else, save their name and phone number here.
                     </p>
                   </div>
                 )}
@@ -3035,7 +3058,7 @@ export default function Cart() {
 
                     <div className="space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-4 flex-1 min-h-0">
                       {[
-                        /* {
+                        {
                           id: 'razorpay',
                           name: 'Online Payment',
                           description: 'UPI, Cards, Netbanking',
@@ -3043,7 +3066,7 @@ export default function Cart() {
                           color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400',
                           selectedColor: 'bg-emerald-500 text-white',
                           badge: 'SECURE'
-                        }, */
+                        },
                         {
                           id: 'wallet',
                           name: 'Quick Wallet',

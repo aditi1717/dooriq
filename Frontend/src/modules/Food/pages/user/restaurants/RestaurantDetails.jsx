@@ -2538,13 +2538,13 @@ function RestaurantDetailsContent() {
                 boxShadow: "0 4px 10px rgba(var(--module-theme-rgb, 250,2,114), 0.25)",
               } : undefined}
             >
-              {isRestaurantOffline ? "Offline" : "Open now"}
+              {isRestaurantOffline ? "Closed" : "Open now"}
             </Badge>
           </div>
 
           {isRestaurantOffline && (
             <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              This restaurant is currently offline. Orders are unavailable right now.
+              This restaurant is currently closed. Orders are unavailable right now.
             </div>
           )}
 

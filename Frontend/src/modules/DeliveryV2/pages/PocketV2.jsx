@@ -4,7 +4,7 @@ import {
   Wallet, IndianRupee, ArrowRight, ArrowLeft,
   ShieldCheck, AlertTriangle, HelpCircle,
   Receipt, FileText, LayoutGrid, X, ChevronRight,
-  Sparkles, Loader2
+  ChevronDown, Sparkles, Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { deliveryAPI, restaurantAPI } from '@food/api';
@@ -441,7 +441,7 @@ export const PocketV2 = () => {
                </button>
              )}
 
-             {/* {codControlEnabled && (
+             {codControlEnabled && (
                 <div className="p-4">
                    <button 
                       onClick={() => setShowDepositPopup(true)}
@@ -454,7 +454,7 @@ export const PocketV2 = () => {
                       <IndianRupee className="w-4 h-4" /> Deposit Cash
                    </button>
                 </div>
-             )} */}
+             )}
           </div>
 
           {/* 5. MORE SERVICES - Grid */}
@@ -534,7 +534,15 @@ export const PocketV2 = () => {
                    initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: "spring", damping: 25, stiffness: 200 }} 
                    className="relative w-full bg-white border-t border-gray-100 rounded-t-[40px] p-8 pb-12 shadow-[0_-20px_50px_rgba(0,0,0,0.1)]"
                 >
-                   <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                   <div className="flex justify-center mb-6">
+                      <button 
+                         onClick={() => setShowDepositPopup(false)}
+                         className="w-12 h-12 flex items-center justify-center bg-gray-100 hover:bg-gray-200 active:scale-95 rounded-full transition-all text-gray-500 hover:text-gray-700 shadow-sm border border-gray-200"
+                         aria-label="Close"
+                      >
+                         <ChevronDown className="w-6 h-6 text-gray-500" />
+                      </button>
+                   </div>
                    
                    <div className="text-center mb-8">
                       <div className="w-20 h-20 bg-orange-50 rounded-[28px] flex items-center justify-center mx-auto mb-5 border border-orange-100 text-orange-500 relative shadow-inner">

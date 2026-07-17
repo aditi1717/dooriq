@@ -245,63 +245,18 @@ export const PickupActionModal = ({
               />
             </div>
           ) : (
-            <div className="pt-6 space-y-6">
-              <div className="flex justify-center items-center gap-4 w-full">
-                 {!billImageUploaded && !isUploadingBill && (
-                   <>
-                      <button
-                        onClick={handleTakeCameraPhoto}
-                        className="flex-1 flex items-center justify-center gap-3 py-5 rounded-[1.5rem] bg-gray-950 text-white font-black text-[11px] uppercase tracking-widest shadow-2xl active:scale-95 transition-all group"
-                      >
-                        <Camera className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                        <span>Camera</span>
-                      </button>
-                      <button
-                        onClick={handlePickFromGallery}
-                        className="flex-1 flex items-center justify-center gap-3 py-5 rounded-[1.5rem] bg-orange-50 text-orange-600 border-2 border-dashed border-orange-200 font-black text-[11px] uppercase tracking-widest active:scale-95 transition-all group"
-                      >
-                        <ImageIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                        <span>Gallery</span>
-                      </button>
-                   </>
-                 )}
-
-                 {isUploadingBill && (
-                    <div className="w-full flex items-center justify-center gap-3 py-5 rounded-[1.5rem] bg-gray-50 text-gray-400 border border-gray-100 font-black text-[11px] uppercase tracking-widest">
-                       <Loader2 className="w-5 h-5 animate-spin" />
-                       <span>Uploading Bill...</span>
-                    </div>
-                 )}
-
-                 {billImageUploaded && (
-                    <div className="w-full flex items-center justify-center gap-3 py-5 rounded-[1.5rem] bg-emerald-50 text-emerald-700 border border-emerald-100 font-black text-[11px] uppercase tracking-widest shadow-inner">
-                       <CheckCircle2 className="w-5 h-5" />
-                       <span>Bill Verified ✓</span>
-                    </div>
-                 )}
-
-                 <input
-                   ref={cameraInputRef}
-                   type="file"
-                   accept="image/*"
-                   onChange={(e) => handleBillImageSelect(e.target.files[0])}
-                   className="hidden"
-                 />
-              </div>
-
-              <div>
-                <p className={`text-center text-[10px] font-black uppercase tracking-[0.2em] mb-4 ${billImageUploaded ? 'text-emerald-600' : 'text-gray-400'}`}>
-                  {billImageUploaded ? "Order Ready - Swipe to pick up" : "Capture bill to unlock pickup"}
-                </p>
-                <ActionSlider 
-                  key="action-pickup"
-                  label="Slide to Pick Up" 
-                  successLabel="Picked Up!"
-                  disabled={!billImageUploaded}
-                  onConfirm={() => onPickedUp(billImageUrl)}
-                  color="bg-orange-500"
-                />
-              </div>
+            <div className="pt-6">
+              <p className="text-center text-[10px] font-black uppercase tracking-[0.2em] mb-4 text-emerald-600">
+                Order Ready - Swipe to pick up
+              </p>
+              <ActionSlider 
+                key="action-pickup"
+                label="Slide to Pick Up" 
+                successLabel="Picked Up!"
+                disabled={false}
+                onConfirm={() => onPickedUp(null)}
+                color="bg-orange-500"
+              />
             </div>
           )}
         </div>

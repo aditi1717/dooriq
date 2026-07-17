@@ -474,7 +474,7 @@ export default function Wallet() {
                         boxShadow:
                           "0 12px 24px rgba(var(--module-theme-rgb,250,2,114),0.30)",
                       }}
-                      /* onClick={() => setAddMoneyModalOpen(true)} */
+                      onClick={() => setAddMoneyModalOpen(true)}
                     >
                       <Plus className="h-4 w-4 md:h-5 md:w-5 lg:h-6 lg:w-6" />
                       Add money
@@ -530,7 +530,7 @@ export default function Wallet() {
                                 </div>
 
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-gray-900 dark:text-white font-semibold text-sm md:text-base lg:text-lg truncate mb-1">
+                                  <p className="text-gray-900 dark:text-white font-semibold text-sm md:text-base lg:text-lg mb-1 break-words">
                                     {transaction.description}
                                   </p>
                                   {(transaction?.metadata?.source === "referral_signup" ||

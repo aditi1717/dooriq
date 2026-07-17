@@ -150,9 +150,9 @@ export default function ReferEarn() {
               type="button"
               onClick={handleShare}
               disabled={!referralLink}
-              className="w-full mt-3 h-11 rounded-xl bg-[#EB590E] hover:bg-[#d84f0a]"
+              className="w-full mt-3 h-11 rounded-xl bg-[#EB590E] hover:bg-[#d84f0a] text-white font-bold transition-all shadow-sm"
             >
-              <Share2 className="h-4 w-4 mr-2" />
+              <Share2 className="h-4 w-4 mr-2 text-white" />
               Share Invite
             </Button>
           </CardContent>

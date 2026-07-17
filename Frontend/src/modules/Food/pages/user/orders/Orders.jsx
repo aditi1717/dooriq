@@ -103,6 +103,22 @@ export default function Orders() {
     }
   }, [orders])
 
+  // Disable body scroll when share modal is open
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    if (showShareModal) {
+      const originalOverflow = document.body.style.overflow
+      document.body.style.overflow = "hidden"
+      return () => {
+        document.body.style.overflow = originalOverflow
+      }
+    }
+  }, [showShareModal])
+
+  const handleBack = () => {
+    navigate("/food/user/profile")
+  }
+
   // Get order status text
   const getOrderStatus = (order) => {
     const status = order.status
@@ -699,7 +715,7 @@ Order again from this restaurant in the ${companyName} app.`
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-10">
         <div className="bg-white dark:bg-zinc-900 p-4 flex items-center shadow-sm sticky top-0 z-10 border-b border-gray-100 dark:border-zinc-800">
-          <button onClick={goBack} className="focus:outline-none">
+          <button onClick={handleBack} className="focus:outline-none">
             <ArrowLeft className="w-6 h-6 text-gray-700 dark:text-gray-200 cursor-pointer" />
           </button>
           <h1 className="ml-4 text-xl font-semibold text-gray-800 dark:text-white">Your Orders</h1>
@@ -715,7 +731,7 @@ Order again from this restaurant in the ${companyName} app.`
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-10">
         <div className="bg-white dark:bg-zinc-900 p-4 flex items-center shadow-sm sticky top-0 z-10 border-b border-gray-100 dark:border-zinc-800">
-          <button onClick={goBack} className="focus:outline-none">
+          <button onClick={handleBack} className="focus:outline-none">
             <ArrowLeft className="w-6 h-6 text-gray-700 dark:text-gray-200 cursor-pointer" />
           </button>
           <h1 className="ml-4 text-xl font-semibold text-gray-800 dark:text-white">Your Orders</h1>
@@ -734,7 +750,7 @@ Order again from this restaurant in the ${companyName} app.`
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 pb-10 font-sans">
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 p-4 flex items-center shadow-sm sticky top-0 z-10 border-b border-gray-100 dark:border-slate-800">
-        <button onClick={goBack} className="focus:outline-none">
+        <button onClick={handleBack} className="focus:outline-none">
           <ArrowLeft className="w-6 h-6 text-gray-700 dark:text-gray-200 cursor-pointer" />
         </button>
         <h1 className="ml-4 text-xl font-semibold text-gray-800 dark:text-white">Your Orders</h1>

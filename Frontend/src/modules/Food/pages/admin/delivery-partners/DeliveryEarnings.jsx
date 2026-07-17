@@ -37,7 +37,7 @@ export default function DeliveryEarnings() {
   const [earnings, setEarnings] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 1 })
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 })
   const [summary, setSummary] = useState({
     totalDeliveryPartners: 0,
     totalEarnings: 0,
@@ -392,27 +392,43 @@ export default function DeliveryEarnings() {
                 className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
-                  <Download className="w-4 h-4" />
-                  <span>Export</span>
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Export Format</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => handleExport("excel")}>
-                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                  Export as Excel
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport("pdf")}>
-                  <FileDown className="w-4 h-4 mr-2" />
-                  Export as PDF
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-3">
+              <select
+                value={pagination.limit}
+                onChange={(e) => {
+                  const newLimit = parseInt(e.target.value, 10)
+                  setPagination(prev => ({ ...prev, limit: newLimit, page: 1 }))
+                }}
+                className="px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700"
+              >
+                <option value={10}>10 per page</option>
+                <option value={25}>25 per page</option>
+                <option value={50}>50 per page</option>
+                <option value={100}>100 per page</option>
+              </select>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                    <Download className="w-4 h-4" />
+                    <span>Export</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Export Format</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleExport("excel")}>
+                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                    Export as Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("pdf")}>
+                    <FileDown className="w-4 h-4 mr-2" />
+                    Export as PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
 
@@ -510,16 +526,26 @@ export default function DeliveryEarnings() {
                 >
                   Previous
                 </button>
-                {Array.from({ length: Math.min(5, pagination.pages) }).map((_, idx) => {
-                  const pageNum = pagination.page <= 3 
-                    ? idx + 1 
-                    : pagination.page >= pagination.pages - 2 
-                      ? pagination.pages - 4 + idx 
-                      : pagination.page - 2 + idx
-                  if (pageNum < 1 || pageNum > pagination.pages) return null
-                  return (
+                {(() => {
+                  const current = pagination.page
+                  const total = pagination.pages
+                  const maxVisible = 5
+
+                  let start = Math.max(1, current - Math.floor(maxVisible / 2))
+                  let end = Math.min(total, start + maxVisible - 1)
+
+                  if (end - start + 1 < maxVisible) {
+                    start = Math.max(1, end - maxVisible + 1)
+                  }
+
+                  const pagesToRender = []
+                  for (let i = start; i <= end; i++) {
+                    pagesToRender.push(i)
+                  }
+
+                  return pagesToRender.map((pageNum) => (
                     <button
-                      key={idx}
+                      key={pageNum}
                       onClick={() => handlePageChange(pageNum)}
                       className={`px-3 py-1 text-sm rounded border ${
                         pagination.page === pageNum
@@ -529,8 +555,8 @@ export default function DeliveryEarnings() {
                     >
                       {pageNum}
                     </button>
-                  )
-                })}
+                  ))
+                })()}
                 <button
                   onClick={() => handlePageChange(pagination.page + 1)}
                   disabled={pagination.page === pagination.pages}

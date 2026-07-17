@@ -650,6 +650,23 @@ export default function UserOrderDetails() {
               </p>
             </div>
           </div>
+
+          {/* Note / Instruction */}
+          {order?.note && (
+            <div className="flex gap-3 border-t border-gray-100 dark:border-zinc-800 pt-4 mt-2">
+              <div className="mt-0.5">
+                <FileText className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-800 dark:text-white text-sm">
+                  Delivery instructions
+                </h4>
+                <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5 leading-relaxed italic">
+                  "{order.note}"
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

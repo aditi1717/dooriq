@@ -501,7 +501,6 @@ const RestaurantCard = React.memo(({
   const availability = getRestaurantAvailabilityStatus(
     restaurant,
     new Date(availabilityTick),
-    { ignoreOperationalStatus: true },
   );
 
   const restaurantSlug = useMemo(() => {
@@ -640,7 +639,7 @@ const RestaurantCard = React.memo(({
                       >
                         {availability.isOpen
                           ? "Open now"
-                          : "Offline"}
+                          : "Closed"}
                       </span>
                       {availability.isOpen &&
                         availability.closingCountdownLabel &&

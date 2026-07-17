@@ -927,7 +927,14 @@ export default function OrdersMain() {
   // New order popup states
   const [showNewOrderPopup, setShowNewOrderPopup] = useState(false);
   const [popupOrder, setPopupOrder] = useState(null); // Store order for popup (from Socket.IO or API)
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(() => {
+    try {
+      if (typeof window === "undefined") return false;
+      return localStorage.getItem("restaurant_orders_muted") === "true";
+    } catch {
+      return false;
+    }
+  });
   const [prepTime, setPrepTime] = useState(11);
   const [countdown, setCountdown] = useState(240); // 4 minutes in seconds
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(true);
@@ -1265,8 +1272,31 @@ export default function OrdersMain() {
     showNewOrderPopupRef.current = showNewOrderPopup;
   }, [showNewOrderPopup]);
 
+  // Disable body scroll when new order popup is open
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (showNewOrderPopup) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [showNewOrderPopup]);
+
   useEffect(() => {
     isMutedRef.current = isMuted;
+  }, [isMuted]);
+
+  // Persist mute state to localStorage
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("restaurant_orders_muted", isMuted ? "true" : "false");
+      }
+    } catch (e) {
+      // Ignore
+    }
   }, [isMuted]);
 
   useEffect(() => {
@@ -2697,7 +2727,8 @@ export default function OrdersMain() {
                   {/* Delivery Resend Button - Only for preparing/ready orders with no partner */}
                   {(String(selectedOrder.status).toLowerCase() === "preparing" ||
                     String(selectedOrder.status).toLowerCase() === "ready") &&
-                    !selectedOrder.deliveryPartnerId && (
+                    !selectedOrder.deliveryPartnerId &&
+                    selectedOrder.dispatchStatus !== "accepted" && (
                       <div className="mt-1">
                         <ResendNotificationButton
                           orderId={selectedOrder.orderId}
@@ -2865,7 +2896,7 @@ function OrderCard({
               {deliveryPartnerId ? "Assigned" : "Not Assigned"}
             </span>
           )}
-          {dispatchStatus !== "accepted" && (isPreparing || isReady || normalizedStatus === "confirmed") && (
+          {!deliveryPartnerId && dispatchStatus !== "accepted" && (isPreparing || isReady || normalizedStatus === "confirmed") && (
             <ResendNotificationButton orderId={orderId} mongoId={mongoId} onSuccess={onSelect} />
           )}
         </div>

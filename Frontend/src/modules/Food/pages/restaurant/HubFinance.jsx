@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { Bell, Menu, ChevronDown, Calendar, Download, FileText, Wallet, X, Info } from "lucide-react"
+import { Bell, Menu, ChevronDown, Calendar, Download, FileText, Wallet, X, Info, ArrowLeft } from "lucide-react"
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders"
 import { restaurantAPI } from "@food/api"
 const debugLog = (...args) => {}
@@ -780,55 +780,18 @@ export default function HubFinance() {
         )}
       </AnimatePresence>
 
-      <div className="sticky bg-white top-0 z-40 px-4 py-3 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <div className="flex-1 min-w-0 flex items-start gap-2">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1">
-                <p className="text-lg font-bold text-gray-900 truncate">
-                  {restaurantData?.name || financeData?.restaurant?.name || "Restaurant"}
-                </p>
-                <ChevronDown className="w-4 h-4 text-gray-600 flex-shrink-0" />
-              </div>
-              <p className="text-xs text-gray-600 mt-0.5">
-                {(() => {
-                  const restaurantId = restaurantData?.restaurantId || financeData?.restaurant?.restaurantId
-                  const address = restaurantData?.address || financeData?.restaurant?.address || ''
-                  const parts = []
-                  if (restaurantId) {
-                    const formattedId = formatRestaurantId(restaurantId)
-                    parts.push(`ID: ${formattedId}`)
-                  }
-                  if (address) {
-                    const shortAddress = address.length > 40 ? address.substring(0, 40) + '...' : address
-                    parts.push(shortAddress)
-                  }
-                  return parts.length > 0 ? parts.join(' • ') : 'Loading...'
-                })()}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1 ml-2">
-            <button
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              onClick={() => navigate("/restaurant/withdrawal-history")}
-              title="Withdrawal History"
-            >
-              <Wallet className="w-5 h-5" style={{ color: "var(--module-theme-color, #2563EB)" }} />
-            </button>
-            <button
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              onClick={() => navigate("/restaurant/notifications")}
-            >
-              <Bell className="w-5 h-5" style={{ color: "var(--module-theme-color, #2563EB)" }} />
-            </button>
-            <button
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              onClick={() => navigate("/restaurant/explore")}
-            >
-              <Menu className="w-5 h-5" style={{ color: "var(--module-theme-color, #2563EB)" }} />
-            </button>
-          </div>
+      <div className="sticky bg-white top-0 z-40 px-4 py-3.5 border-b border-gray-200">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate("/food/restaurant")}
+            className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
+            aria-label="Back to dashboard"
+          >
+            <ArrowLeft className="w-5 h-5 text-gray-700" />
+          </button>
+          <h1 className="text-lg font-bold text-gray-900">
+            Hub Finance
+          </h1>
         </div>
       </div>
 

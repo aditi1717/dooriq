@@ -13,6 +13,7 @@ import { useZone } from "@food/hooks/useZone"
 import { searchAPI } from "@/services/api"
 import { motion, AnimatePresence } from "framer-motion"
 import { useProfile } from "@food/context/ProfileContext"
+import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
 
 // Helper to resolve media URLs consistently
 const getMediaUrl = (url) => {
@@ -55,6 +56,13 @@ export default function ProfessionalSearch() {
   const [categories, setCategories] = useState([])
   const [selectedCategoryId, setSelectedCategoryId] = useState(searchParams.get("cat") || null)
   const [history, setHistory] = useState([])
+  const [availabilityTick, setAvailabilityTick] = useState(Date.now())
+
+  // Refresh availability every minute
+  useEffect(() => {
+    const id = setInterval(() => setAvailabilityTick(Date.now()), 60000)
+    return () => clearInterval(id)
+  }, [])
 
   // Load search history
   useEffect(() => {
@@ -268,8 +276,11 @@ export default function ProfessionalSearch() {
                    <h2 className="text-lg font-bold dark:text-white">Dishes from restaurants</h2>
                 </div>
                 <div className="grid gap-4">
-                  {results.dishes.map((r) => (
-                    <Link to={`/user/restaurants/${r.slug || r._id}${r.matchedDishId ? `?dish=${r.matchedDishId}` : ''}`} key={r._id} className="flex gap-4 p-3 bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 hover:shadow-md transition-shadow group">
+                  {results.dishes.map((r) => {
+                    const availability = getRestaurantAvailabilityStatus(r, new Date(availabilityTick))
+                    const isClosed = !availability.isOpen
+                    return (
+                    <Link to={`/user/restaurants/${r.slug || r._id}${r.matchedDishId ? `?dish=${r.matchedDishId}` : ''}`} key={r._id} className={`flex gap-4 p-3 bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 hover:shadow-md transition-shadow group ${isClosed ? 'grayscale opacity-75' : ''}`}>
                        <div className="w-24 h-24 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 relative">
                            <img 
                             src={getMediaUrl(r.matchedDishImage || r.profileImage || r.image || (Array.isArray(r.images) && r.images[0]))} 
@@ -301,9 +312,15 @@ export default function ProfessionalSearch() {
                              <span>•</span>
                              <span className="line-clamp-1">{r.cuisines?.slice(0, 2).join(", ")}</span>
                           </div>
+                          {isClosed && (
+                            <span className="mt-1.5 inline-flex self-start text-[10px] font-bold text-gray-500 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                              Restaurant Closed
+                            </span>
+                          )}
                        </div>
                     </Link>
-                  ))}
+                    )
+                  })}
                 </div>
               </section>
             )}
@@ -316,8 +333,11 @@ export default function ProfessionalSearch() {
                    <h2 className="text-lg font-bold dark:text-white">Restaurants</h2>
                 </div>
                 <div className="grid gap-6">
-                  {results.restaurants.map((r) => (
-                    <Link to={`/user/restaurants/${r._id}`} key={r._id} className="block group">
+                  {results.restaurants.map((r) => {
+                    const availability = getRestaurantAvailabilityStatus(r, new Date(availabilityTick))
+                    const isClosed = !availability.isOpen
+                    return (
+                    <Link to={`/user/restaurants/${r._id}`} key={r._id} className={`block group ${isClosed ? 'grayscale opacity-75' : ''}`}>
                       <div className="relative rounded-3xl overflow-hidden aspect-[16/9] mb-3 bg-slate-200">
                          <img 
                           src={getMediaUrl(r.profileImage || r.image || (Array.isArray(r.images) && r.images[0]))} 
@@ -343,6 +363,11 @@ export default function ProfessionalSearch() {
                               {r.offer.toUpperCase()}
                            </div>
                         )}
+                        {isClosed && (
+                          <div className="absolute top-4 right-4 bg-gray-800/80 text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                            Closed
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center justify-between px-1">
                          <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-zinc-400 font-medium">
@@ -353,12 +378,15 @@ export default function ProfessionalSearch() {
                             <span>•</span>
                             <span>{r.location?.area || "Nearby"}</span>
                          </div>
-                         <div className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-500/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                            Top Pick
-                         </div>
+                         {!isClosed && (
+                           <div className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-500/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                              Top Pick
+                           </div>
+                         )}
                       </div>
                     </Link>
-                  ))}
+                    )
+                  })}
                 </div>
               </section>
             )}
