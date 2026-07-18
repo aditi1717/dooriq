@@ -98,7 +98,7 @@ export default function NotificationsV2() {
       <div className="fixed top-0 inset-x-0 h-20 bg-[#f8f9fa]/90 backdrop-blur-xl z-50 px-5 flex items-center justify-between pb-2 pt-6">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate("/food/delivery/profile")}
+            onClick={() => navigate("/food/delivery/feed")}
             className="p-3 bg-white hover:bg-gray-50 border border-gray-100 shadow-sm rounded-[20px] transition-all active:scale-95"
             aria-label="Back"
           >

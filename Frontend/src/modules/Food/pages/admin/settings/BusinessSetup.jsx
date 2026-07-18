@@ -147,8 +147,13 @@ export default function BusinessSetup() {
         return;
       }
 
-      if (formData.pincode.trim() && !/^\d{4,10}$/.test(formData.pincode.trim())) {
-        toast.error("Please enter a valid pincode (4-10 digits)");
+      if (formData.state.trim() && /\d/.test(formData.state.trim())) {
+        toast.error("State name cannot contain numbers");
+        return;
+      }
+
+      if (formData.pincode.trim() && !/^\d{6}$/.test(formData.pincode.trim())) {
+        toast.error("Please enter a valid pincode (exactly 6 digits)");
         return;
       }
 
@@ -338,13 +343,12 @@ export default function BusinessSetup() {
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Region <span className="text-red-500">*</span>
                 </label>
-                <select
-                  value={formData.region}
-                  onChange={(e) => handleInputChange("region", e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="India">India</option>
-                </select>
+                <input
+                  type="text"
+                  value="India"
+                  disabled
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50 text-slate-500 cursor-not-allowed"
+                />
               </div>
 
               <div>
@@ -361,9 +365,6 @@ export default function BusinessSetup() {
                       <option value="+91">+91 (IN)</option>
                     </select>
                     <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none">
-                      ?
-                    </span>
                   </div>
                   <input
                     type="text"
@@ -402,7 +403,10 @@ export default function BusinessSetup() {
                   placeholder="Enter Your State"
                   value={formData.state}
                   maxLength={50}
-                  onChange={(e) => handleInputChange("state", e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[0-9]/g, "");
+                    handleInputChange("state", val);
+                  }}
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
@@ -415,7 +419,7 @@ export default function BusinessSetup() {
                   type="text"
                   placeholder="Enter Your Pincode"
                   value={formData.pincode}
-                  maxLength={10}
+                  maxLength={6}
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, "");
                     handleInputChange("pincode", val);

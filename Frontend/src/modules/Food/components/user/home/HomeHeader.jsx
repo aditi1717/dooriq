@@ -178,30 +178,12 @@ export default function HomeHeader({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    if (!notificationsHistoryPushedRef.current) {
-      window.history.pushState({ notificationsPopup: true }, "");
-      notificationsHistoryPushedRef.current = true;
-    }
-
-    const handlePopState = () => {
-      notificationsHistoryPushedRef.current = false;
-      setIsNotificationsOpen(false);
-    };
-
-    window.addEventListener("popstate", handlePopState);
-
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("popstate", handlePopState);
     };
   }, [isNotificationsOpen]);
 
-  const closeNotifications = (useHistoryBack = true) => {
-    if (useHistoryBack && notificationsHistoryPushedRef.current) {
-      notificationsHistoryPushedRef.current = false;
-      window.history.back();
-      return;
-    }
+  const closeNotifications = () => {
     setIsNotificationsOpen(false);
   };
 
@@ -265,7 +247,7 @@ export default function HomeHeader({
                 <span className="text-[10px] font-bold text-gray-900/80 dark:text-white/80 uppercase tracking-wider">Deliver to</span>
                 <ChevronDown className="h-2.5 w-2.5 text-gray-900/80 dark:text-white/80" />
               </div>
-              <span className="text-sm font-bold text-gray-900 dark:text-white truncate drop-shadow-sm max-w-full">
+              <span className="text-sm font-bold text-gray-900 dark:text-white whitespace-normal line-clamp-2 drop-shadow-sm max-w-full">
                 {savedAddressText || (location?.area && location?.city 
                   ? `${location.area}, ${location.city}` 
                   : location?.area || location?.city || "Select Location")}
@@ -358,13 +340,16 @@ export default function HomeHeader({
                   )}
                 </h3>
                 <div className="flex items-center gap-2">
-                  <Link
-                    to="/food/user/notifications"
-                    onClick={() => closeNotifications()}
-                    className="text-xs font-bold text-orange-600 hover:text-orange-700"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsNotificationsOpen(false);
+                      navigate("/food/user/notifications");
+                    }}
+                    className="text-xs font-bold text-orange-600 hover:text-orange-700 font-medium"
                   >
-                    {mergedNotifications.length > 0 ? "View All" : ""}
-                  </Link>
+                    View All
+                  </button>
                   <button
                     type="button"
                     onClick={() => closeNotifications()}
@@ -418,15 +403,6 @@ export default function HomeHeader({
                     <p className="text-xs text-gray-400 font-medium">All caught up!</p>
                   </div>
                 )}
-              </div>
-              <div className="p-3 bg-gray-50/50 dark:bg-gray-800/50 text-center">
-                <Link
-                  to="/food/user/notifications"
-                  onClick={() => closeNotifications()}
-                  className="text-xs font-bold text-gray-400 hover:text-gray-600"
-                >
-                  {mergedNotifications.length > 0 ? "Manage Settings" : "Check Notifications Page"}
-                </Link>
               </div>
             </motion.div>
           </motion.div>

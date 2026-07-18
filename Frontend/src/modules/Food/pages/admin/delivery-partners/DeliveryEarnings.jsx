@@ -34,6 +34,7 @@ const formatDate = (dateString) => {
 
 export default function DeliveryEarnings() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [earnings, setEarnings] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -79,7 +80,7 @@ export default function DeliveryEarnings() {
         ...(filters.deliveryPartnerId && { deliveryPartnerId: filters.deliveryPartnerId }),
         ...(filters.fromDate && { fromDate: filters.fromDate }),
         ...(filters.toDate && { toDate: filters.toDate }),
-        ...(searchQuery.trim() && { search: searchQuery.trim() })
+        ...(debouncedSearch.trim() && { search: debouncedSearch.trim() })
       }
 
       const response = await adminAPI.getDeliveryEarnings(params)
@@ -101,7 +102,20 @@ export default function DeliveryEarnings() {
     } finally {
       setLoading(false)
     }
-  }, [pagination.page, pagination.limit, filters, searchQuery])
+  }, [pagination.page, pagination.limit, filters, debouncedSearch])
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  // Reset page to 1 on new search query
+  useEffect(() => {
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }, [debouncedSearch])
 
   useEffect(() => {
     fetchDeliveryPartners()
@@ -387,7 +401,6 @@ export default function DeliveryEarnings() {
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value)
-                  setPagination(prev => ({ ...prev, page: 1 }))
                 }}
                 className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />

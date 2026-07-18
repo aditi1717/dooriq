@@ -77,8 +77,6 @@ const DeliverymanList = lazy(() => import("@food/pages/admin/delivery-partners/D
 const DeliveryLiveTracking = lazy(() => import("@food/pages/admin/delivery-partners/DeliveryLiveTracking"));
 const DeliverymanReviews = lazy(() => import("@food/pages/admin/delivery-partners/DeliverymanReviews"));
 const DeliverymanBonus = lazy(() => import("@food/pages/admin/delivery-partners/DeliverymanBonus"));
-const EarningAddon = lazy(() => import("@food/pages/admin/delivery-partners/EarningAddon"));
-const EarningAddonHistory = lazy(() => import("@food/pages/admin/delivery-partners/EarningAddonHistory"));
 const DeliveryEarnings = lazy(() => import("@food/pages/admin/delivery-partners/DeliveryEarnings"));
 // Disbursement Management
 // Report Management
@@ -319,8 +317,6 @@ export default function AdminRouter() {
             <Route path="delivery-partners/join-request" element={<JoinRequest />} />
             <Route path="delivery-partners/reviews" element={<DeliverymanReviews />} />
             <Route path="delivery-partners/bonus" element={<DeliverymanBonus />} />
-            <Route path="delivery-partners/earning-addon" element={<EarningAddon />} />
-            <Route path="delivery-partners/earning-addon-history" element={<EarningAddonHistory />} />
             <Route path="delivery-partners/earnings" element={<DeliveryEarnings />} />
 
             {/* REPORTS & SETTINGS */}

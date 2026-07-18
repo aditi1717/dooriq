@@ -96,7 +96,8 @@ export default function ProfessionalSearch() {
   }
 
   const performSearch = useCallback(async (searchTerm, catId) => {
-    if (!searchTerm && !catId) {
+    const trimmed = String(searchTerm || "").trim()
+    if (!trimmed && !catId) {
       setResults({ restaurants: [], dishes: [] })
       return
     }
@@ -104,7 +105,7 @@ export default function ProfessionalSearch() {
     setLoading(true)
     try {
       const res = await searchAPI.unifiedSearch({
-        q: searchTerm,
+        q: trimmed,
         categoryId: catId,
         lat: userCoords?.latitude,
         lng: userCoords?.longitude,

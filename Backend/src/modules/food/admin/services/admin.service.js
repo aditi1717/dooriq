@@ -4284,7 +4284,8 @@ export async function getDeliveryEarnings(query = {}) {
     const skip = (page - 1) * limit;
 
     const filter = {
-        'dispatch.deliveryPartnerId': { $ne: null }
+        'dispatch.deliveryPartnerId': { $ne: null },
+        orderStatus: 'delivered'
     };
 
     // Date range filters

@@ -193,6 +193,15 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
   const orderId = order.orderId || order._id || 'ORD';
   const amountToCollect = order.pricing?.total || order.amountToCollect || 0;
 
+  const paymentMethod = (
+    order?.paymentMethod ||
+    order?.payment?.method ||
+    order?.transaction?.payment?.method ||
+    order?.transaction?.paymentMethod ||
+    'cod'
+  ).toLowerCase();
+  const isCod = ['cash', 'cod', 'cash_on_delivery', 'razorpay_qr'].includes(paymentMethod);
+
 
   const checkPaymentSync = useCallback(async () => {
     try {
@@ -318,7 +327,9 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
                  </div>
                  <div>
                    <h2 className="text-2xl font-black text-gray-900 tracking-tight">Collect Payment</h2>
-                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Step 2 of 2 • Order #{order?.shortId || order?.orderId || order?._id?.slice(-6) || 'N/A'}</p>
+                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
+                     {isCod ? 'Collect Payment' : 'Step 2 of 2'} • Order #{order?.shortId || order?.orderId || order?._id?.slice(-6) || 'N/A'}
+                   </p>
                  </div>
                </div>
                <div className="flex items-center gap-2">
@@ -437,7 +448,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
               <h3 className="text-gray-950 font-bold text-xl mb-2">Scan to Pay</h3>
               <p className="text-gray-500 text-sm mb-8 font-medium">Order Total: ₹{amountToCollect.toFixed(2)}</p>
               
-              <div className="relative p-6 bg-gray-50 rounded-3xl border-2 border-gray-100 mb-8">
+              <div className="flex flex-col items-center gap-4 p-6 bg-gray-50 rounded-3xl border-2 border-gray-100 mb-8">
                  <img 
                    src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(collectQrLink)}`} 
                    alt="Razorpay QR"
@@ -446,9 +457,10 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
                  <button 
                     onClick={handleManualCheck}
                     disabled={isSyncing}
-                    className="absolute top-2 right-2 flex gap-1.5 items-center bg-green-500 text-white px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all"
+                    className="flex gap-1.5 items-center text-white px-4 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all"
+                    style={{ backgroundColor: "var(--module-theme-color, #f97316)" }}
                  >
-                    {isSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} 
+                    {isSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} 
                     Check Status
                  </button>
               </div>
@@ -478,10 +490,13 @@ export const DeliveryVerificationModal = ({ order, onComplete, onClose }) => {
   ).toLowerCase();
   const isCod = ['cash', 'cod', 'cash_on_delivery', 'razorpay_qr'].includes(paymentMethod);
 
-  // Determine initial step: skip OTP if already verified
+  // Determine initial step: skip OTP for COD orders or if already verified
   const [step, setStep] = useState(() => {
+    if (isCod) {
+      return 'payment';
+    }
     if (alreadyVerified) {
-      return isCod ? 'payment' : 'complete';
+      return 'complete';
     }
     return 'otp';
   });

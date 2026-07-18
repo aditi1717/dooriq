@@ -43,8 +43,16 @@ const ICON_MAP = {
 
 export default function Notifications() {
   const [notificationsList, setNotificationsList] = useState(() => {
-    const saved = localStorage.getItem('food_user_notifications')
-    return saved ? JSON.parse(saved) : DEFAULT_NOTIFICATIONS
+    try {
+      const saved = localStorage.getItem('food_user_notifications')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed)) return parsed
+      }
+    } catch (e) {
+      console.error("Error parsing local notifications:", e)
+    }
+    return DEFAULT_NOTIFICATIONS
   })
   const {
     items: broadcastNotifications,
@@ -107,27 +115,31 @@ export default function Notifications() {
   }, [])
   
   const mergedNotifications = useMemo(() => {
-    const localItems = (notificationsList || []).map((item) => ({
-      ...item,
-      source: "local",
-    }))
-    const broadcastItems = (broadcastNotifications || []).map((item) => ({
-      ...item,
-      source: "broadcast",
-      type: "broadcast",
-      time: item.createdAt
-        ? new Date(item.createdAt).toLocaleString("en-IN", {
-            day: "2-digit",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-          })
-        : "Just now",
-      timestamp: item.createdAt || Date.now(),
-      icon: "Bell",
-      iconColor: "text-blue-600",
-    }))
+    const localItems = (Array.isArray(notificationsList) ? notificationsList : [])
+      .filter(Boolean)
+      .map((item) => ({
+        ...item,
+        source: "local",
+      }))
+    const broadcastItems = (Array.isArray(broadcastNotifications) ? broadcastNotifications : [])
+      .filter(Boolean)
+      .map((item) => ({
+        ...item,
+        source: "broadcast",
+        type: "broadcast",
+        time: item.createdAt
+          ? new Date(item.createdAt).toLocaleString("en-IN", {
+              day: "2-digit",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            })
+          : "Just now",
+        timestamp: item.createdAt || Date.now(),
+        icon: "Bell",
+        iconColor: "text-blue-600",
+      }))
 
     return [...broadcastItems, ...localItems].sort(
       (a, b) =>
@@ -136,7 +148,7 @@ export default function Notifications() {
     )
   }, [broadcastNotifications, notificationsList])
 
-  const unreadCount = notificationsList.filter(n => !n.read).length + broadcastUnreadCount
+  const unreadCount = (Array.isArray(notificationsList) ? notificationsList : []).filter(n => n && !n.read).length + broadcastUnreadCount
 
   const handleMarkAsRead = (id, source = "local") => {
     if (source === "broadcast") {
@@ -204,10 +216,7 @@ export default function Notifications() {
                 className={`relative cursor-pointer transition-all duration-200 py-1 hover:shadow-md ${!notification.read ? "bg-red-50/50 dark:bg-red-900/20 border-red-200 dark:border-red-800" : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
                   }`}
               >
-                {/* Unread Dot - Top Right */}
-                {!notification.read && (
-                  <div className="absolute top-2 right-2 w-2.5 h-2.5 md:w-3 md:h-3 bg-[#EB590E] rounded-full" />
-                )}
+
 
                 <CardContent className="p-3 md:p-4 lg:p-5">
                   <div className="flex items-start gap-3 sm:gap-4 md:gap-5">

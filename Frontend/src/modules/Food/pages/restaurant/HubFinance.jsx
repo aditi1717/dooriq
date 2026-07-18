@@ -11,11 +11,26 @@ const debugError = (...args) => {}
 
 export default function HubFinance() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState(() => {
     const tabParam = searchParams.get("tab")
     return tabParam === "invoices" ? "invoices" : "payouts"
   })
+
+  // Sync tab state with URL query parameter changes
+  useEffect(() => {
+    const tabParam = searchParams.get("tab")
+    if (tabParam === "invoices" || tabParam === "payouts") {
+      setActiveTab(tabParam)
+    }
+  }, [searchParams])
+
+  const handleTabChange = (tabName) => {
+    setActiveTab(tabName)
+    const newParams = new URLSearchParams(searchParams)
+    newParams.set("tab", tabName)
+    setSearchParams(newParams, { replace: true })
+  }
   const [selectedDateRange, setSelectedDateRange] = useState("Last 30 days")
   const [showDownloadMenu, setShowDownloadMenu] = useState(false)
   const [showDateRangePicker, setShowDateRangePicker] = useState(false)
@@ -799,7 +814,7 @@ export default function HubFinance() {
       <div className="px-4 py-3">
         <div className="flex gap-2">
           <button
-            onClick={() => setActiveTab("payouts")}
+            onClick={() => handleTabChange("payouts")}
             className={`flex-1 py-3 px-4 rounded-full font-medium text-sm transition-colors ${
               activeTab === "payouts"
                 ? ""
@@ -814,7 +829,7 @@ export default function HubFinance() {
             Payouts
           </button>
           <button
-            onClick={() => setActiveTab("invoices")}
+            onClick={() => handleTabChange("invoices")}
             className={`flex-1 py-3 px-4 rounded-full font-medium text-sm transition-colors ${
               activeTab === "invoices"
                 ? ""

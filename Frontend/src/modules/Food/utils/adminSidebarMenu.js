@@ -162,8 +162,6 @@ export const adminSidebarMenu = [
           { label: "Live Tracking", path: "/admin/food/delivery-partners/live-tracking" },
           { label: "Deliveryman Reviews", path: "/admin/food/delivery-partners/reviews" },
           { label: "Bonus", path: "/admin/food/delivery-partners/bonus" },
-          { label: "Earning Addon", path: "/admin/food/delivery-partners/earning-addon" },
-          { label: "Earning Addon History", path: "/admin/food/delivery-partners/earning-addon-history" },
           { label: "Delivery Earning", path: "/admin/food/delivery-partners/earnings" },
         ],
       },

@@ -545,7 +545,14 @@ export const PocketV2 = () => {
                    </div>
                    
                    <div className="text-center mb-8">
-                      <div className="w-20 h-20 bg-orange-50 rounded-[28px] flex items-center justify-center mx-auto mb-5 border border-orange-100 text-orange-500 relative shadow-inner">
+                      <div 
+                         className="w-20 h-20 rounded-[28px] flex items-center justify-center mx-auto mb-5 border relative shadow-inner"
+                         style={{
+                           backgroundColor: "rgba(var(--module-theme-rgb, 0,183,97), 0.10)",
+                           borderColor: "rgba(var(--module-theme-rgb, 0,183,97), 0.22)",
+                           color: "var(--module-theme-color, #00B761)"
+                         }}
+                      >
                          <IndianRupee className="w-10 h-10 relative z-10" />
                       </div>
                       <h3 className="text-2xl font-black text-gray-900 tracking-tight mb-1">Deposit Cash</h3>
@@ -562,7 +569,7 @@ export const PocketV2 = () => {
                          <input 
                             type="number" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)}
                             placeholder="Amount to deposit"
-                            className="w-full bg-white border border-gray-200 rounded-[20px] py-5 pl-14 pr-5 text-xl font-black text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none transition-all shadow-sm"
+                            className="w-full bg-white border border-gray-200 rounded-[20px] py-5 pl-14 pr-5 text-xl font-black text-gray-900 placeholder-gray-400 focus:border-[var(--module-theme-color,#00B761)] focus:ring-4 focus:ring-[rgba(var(--module-theme-rgb,0,183,97),0.1)] outline-none transition-all shadow-sm"
                          />
                       </div>
                       <p className="text-[9px] font-black text-gray-400 mt-4 text-center uppercase tracking-widest relative z-10">
@@ -574,7 +581,11 @@ export const PocketV2 = () => {
                       <button 
                          onClick={handleDeposit}
                          disabled={depositing}
-                         className="w-full py-5 bg-gradient-to-br from-orange-400 to-orange-500 text-white rounded-[24px] font-black text-sm tracking-widest uppercase shadow-[0_8px_20px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-400 disabled:shadow-none"
+                         className="w-full py-5 text-white rounded-[24px] font-black text-sm tracking-widest uppercase active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:bg-gray-300 disabled:text-gray-400 disabled:shadow-none"
+                         style={!depositing ? {
+                           background: "linear-gradient(135deg, rgba(var(--module-theme-rgb, 0,183,97), 0.9), var(--module-theme-color, #00B761))",
+                           boxShadow: "0 8px 20px rgba(var(--module-theme-rgb, 0,183,97), 0.32)",
+                         } : undefined}
                       >
                          {depositing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
                          {depositing ? 'Processing...' : 'Proceed to Pay'}

@@ -349,7 +349,25 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
   }
 
   const restaurantName =
-    activeOrder.restaurant || activeOrder.restaurantName || "Restaurant";
+    activeOrder.restaurantId?.restaurantName ||
+    activeOrder.restaurantId?.name ||
+    activeOrder.restaurantName ||
+    activeOrder.restaurant_name ||
+    activeOrder.restaurant ||
+    "Restaurant";
+
+  const restaurantImage = (() => {
+    const img =
+      activeOrder.restaurantId?.profileImage ||
+      activeOrder.restaurantId?.logo ||
+      activeOrder.restaurantImage ||
+      activeOrder.restaurant?.profileImage ||
+      activeOrder.restaurant?.logo;
+    if (!img) return "";
+    if (typeof img === "string") return img;
+    if (typeof img === "object") return img.url || img.secure_url || "";
+    return "";
+  })();
   const statusText = (() => {
     const s = String(orderStatus);
     const p = String(orderPhase);
@@ -412,7 +430,20 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
           </button>
 
           <div className="flex items-center gap-4 relative z-10 w-full">
-            <CookingAnimation />
+            {restaurantImage ? (
+              <div className="w-12 h-12 rounded-xl border border-gray-100 overflow-hidden shadow-sm shrink-0 bg-white flex items-center justify-center">
+                <img 
+                  src={restaurantImage} 
+                  alt={restaurantName} 
+                  className="w-full h-full object-cover" 
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                />
+              </div>
+            ) : (
+              <CookingAnimation />
+            )}
 
             <div className="flex-1 min-w-0 pr-4">
               <p className="text-gray-900 font-bold text-base md:text-lg truncate tracking-tight">{restaurantName}</p>

@@ -336,6 +336,17 @@ function TimePickerWheel({
   )
 }
 
+// Helper to resolve media URLs consistently
+const getMediaUrl = (url) => {
+  if (!url || typeof url !== 'string') return null;
+  if (url.startsWith('http')) return url;
+  
+  const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api/v1";
+  const origin = apiBase.split('/api/v1')[0];
+  
+  return `${origin}${url.startsWith('/') ? url : '/' + url}`;
+};
+
 export default function ExploreMore() {
   const navigate = useNavigate()
   const [profileOpen, setProfileOpen] = useState(false)
@@ -361,6 +372,13 @@ export default function ExploreMore() {
 
   // Restaurant data state
   const [restaurantData, setRestaurantData] = useState(null)
+  const [hasImageError, setHasImageError] = useState(false)
+
+  // Reset image error state when profileImage changes
+  useEffect(() => {
+    setHasImageError(false)
+  }, [restaurantData?.profileImage])
+
   const [loadingRestaurant, setLoadingRestaurant] = useState(true)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
@@ -915,6 +933,9 @@ export default function ExploreMore() {
     </motion.div>
   )
 
+  const restaurantImage = restaurantData?.profileImage?.url || restaurantData?.profileImage;
+  const resolvedImageUrl = restaurantImage && !hasImageError ? getMediaUrl(restaurantImage) : null;
+
   return (
     <div className="min-h-screen bg-[#F8F9FA] overflow-x-hidden pb-24 font-sans">
       {/* Header */}
@@ -973,8 +994,17 @@ export default function ExploreMore() {
           <div className="relative overflow-hidden rounded-[24px] bg-white p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-black/5">
             <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-[#FA0272]/5 blur-3xl pointer-events-none" />
             <div className="relative flex items-center gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-gradient-to-br from-[#FA0272]/10 to-[#FA0272]/5 ring-1 ring-[#FA0272]/10">
-                <Store className="h-6 w-6 text-[#FA0272]" strokeWidth={1.5} />
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-gradient-to-br from-[#FA0272]/10 to-[#FA0272]/5 ring-1 ring-[#FA0272]/10 overflow-hidden">
+                {resolvedImageUrl ? (
+                  <img 
+                    src={resolvedImageUrl} 
+                    alt={restaurantDisplayName} 
+                    className="w-full h-full object-cover"
+                    onError={() => setHasImageError(true)}
+                  />
+                ) : (
+                  <Store className="h-6 w-6 text-[#FA0272]" strokeWidth={1.5} />
+                )}
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <h2 className="text-[17px] font-extrabold text-gray-900 truncate tracking-tight mb-0.5">

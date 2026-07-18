@@ -12,8 +12,10 @@ const debugError = (...args) => {}
 
 export default function RestaurantReport() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [restaurants, setRestaurants] = useState([])
   const [loading, setLoading] = useState(true)
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 })
   const [filters, setFilters] = useState({
     zone: "All Zones",
     all: "All",
@@ -38,6 +40,19 @@ export default function RestaurantReport() {
     fetchZones()
   }, [])
 
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  // Reset page to 1 on new search or filters
+  useEffect(() => {
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }, [debouncedSearch, filters])
+
   // Fetch restaurant report data
   useEffect(() => {
     const fetchRestaurantReport = async () => {
@@ -45,17 +60,28 @@ export default function RestaurantReport() {
         setLoading(true)
         
         const params = {
+          page: pagination.page,
+          limit: pagination.limit,
           zone: filters.zone !== "All Zones" ? filters.zone : undefined,
           all: filters.all !== "All" ? filters.all : undefined,
           type: filters.type !== "All types" ? filters.type : undefined,
           time: filters.time !== "All Time" ? filters.time : undefined,
-          search: searchQuery || undefined
+          search: debouncedSearch.trim() || undefined
         }
 
         const response = await adminAPI.getRestaurantReport(params)
 
         if (response?.data?.success && response.data.data) {
           setRestaurants(response.data.data.restaurants || [])
+          const responsePagination = response.data.data
+          if (responsePagination) {
+            setPagination({
+              page: Number(responsePagination.page) || 1,
+              limit: Number(responsePagination.limit) || 10,
+              total: Number(responsePagination.total) || 0,
+              pages: Math.ceil((Number(responsePagination.total) || 0) / (Number(responsePagination.limit) || 10)) || 1
+            })
+          }
         } else {
           setRestaurants([])
           if (response?.data?.message) {
@@ -72,7 +98,11 @@ export default function RestaurantReport() {
     }
 
     fetchRestaurantReport()
-  }, [filters, searchQuery])
+  }, [filters, debouncedSearch, pagination.page, pagination.limit])
+
+  const handlePageChange = (newPage) => {
+    setPagination(prev => ({ ...prev, page: newPage }))
+  }
 
   const filteredRestaurants = useMemo(() => {
     return restaurants // Backend already filters, so just return restaurants
@@ -263,7 +293,7 @@ export default function RestaurantReport() {
         {/* Restaurant Report Table Section */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <h2 className="text-xl font-bold text-slate-900">Restaurant Report Table {totalRestaurants}</h2>
+            <h2 className="text-xl font-bold text-slate-900">Restaurant Report Table {pagination.total}</h2>
 
             <div className="flex items-center gap-3">
               <div className="relative flex-1 sm:flex-initial min-w-[250px]">
@@ -276,6 +306,20 @@ export default function RestaurantReport() {
                 />
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               </div>
+
+              <select
+                value={pagination.limit}
+                onChange={(e) => {
+                  const newLimit = parseInt(e.target.value, 10)
+                  setPagination(prev => ({ ...prev, limit: newLimit, page: 1 }))
+                }}
+                className="px-3 py-2.5 border border-slate-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700"
+              >
+                <option value={10}>10 per page</option>
+                <option value={25}>25 per page</option>
+                <option value={50}>50 per page</option>
+                <option value={100}>100 per page</option>
+              </select>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -438,6 +482,61 @@ export default function RestaurantReport() {
               </tbody>
             </table>
           </div>
+          {/* Pagination */}
+          {!loading && pagination.pages > 1 && (
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-200">
+              <p className="text-sm text-slate-600">
+                Showing {(pagination.page - 1) * pagination.limit + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} restaurants
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePageChange(pagination.page - 1)}
+                  disabled={pagination.page === 1}
+                  className="px-3 py-1.5 text-sm rounded border border-slate-300 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 font-medium"
+                >
+                  Previous
+                </button>
+                {(() => {
+                  const current = pagination.page
+                  const total = pagination.pages
+                  const maxVisible = 5
+
+                  let start = Math.max(1, current - Math.floor(maxVisible / 2))
+                  let end = Math.min(total, start + maxVisible - 1)
+
+                  if (end - start + 1 < maxVisible) {
+                    start = Math.max(1, end - maxVisible + 1)
+                  }
+
+                  const pagesToRender = []
+                  for (let i = start; i <= end; i++) {
+                    pagesToRender.push(i)
+                  }
+
+                  return pagesToRender.map((pageNum) => (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`px-3 py-1.5 text-sm rounded border font-medium ${
+                        pagination.page === pageNum
+                          ? "bg-slate-900 border-slate-900 text-white"
+                          : "border-slate-300 text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  ))
+                })()}
+                <button
+                  onClick={() => handlePageChange(pagination.page + 1)}
+                  disabled={pagination.page === pagination.pages}
+                  className="px-3 py-1.5 text-sm rounded border border-slate-300 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 font-medium"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

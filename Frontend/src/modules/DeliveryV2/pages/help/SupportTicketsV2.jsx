@@ -53,69 +53,61 @@ export const SupportTicketsV2 = () => {
         <h1 className="text-xl font-black text-gray-950">Support Tickets</h1>
       </div>
 
-      <div className="pt-24 px-4 space-y-6">
+      <div className="pt-24 px-4 space-y-4">
         {/* Create Action */}
         <button 
           onClick={() => navigate("/food/delivery/help/tickets/create")}
-          className="w-full text-white p-5 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all"
+          className="w-full text-white p-4 rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2.5 active:scale-95 transition-all"
           style={{
             background: "linear-gradient(135deg, rgba(var(--module-theme-rgb, 0,183,97), 0.88), var(--module-theme-color, #00B761))",
-            boxShadow: "0 12px 24px rgba(var(--module-theme-rgb, 0,183,97), 0.30)",
+            boxShadow: "0 8px 16px rgba(var(--module-theme-rgb, 0,183,97), 0.20)",
           }}
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-4 h-4" />
           Raise New Ticket
-        </button>
-
-        <button
-          onClick={() => navigate("/food/delivery/help/order-emergency")}
-          className="flex w-full items-center justify-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-black uppercase tracking-widest text-red-700 active:scale-95 transition-all"
-        >
-          <AlertTriangle className="h-5 w-5" />
-          Active Order Emergency
         </button>
 
         {/* List */}
         {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-3">
-             <Loader2 className="w-8 h-8 animate-spin text-gray-200" />
-             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Syncing Tickets...</p>
+          <div className="py-16 flex flex-col items-center justify-center gap-2">
+             <Loader2 className="w-6 h-6 animate-spin text-gray-200" />
+             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Syncing Tickets...</p>
           </div>
         ) : tickets.length === 0 ? (
-          <div className="py-24 text-center">
-             <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                <MessageSquare className="w-10 h-10 text-gray-200" />
+          <div className="py-20 text-center">
+             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <MessageSquare className="w-8 h-8 text-gray-200" />
              </div>
-             <h3 className="text-sm font-black text-gray-950 uppercase tracking-widest">No Active Tickets</h3>
-             <p className="text-[10px] text-gray-400 font-bold uppercase mt-2">Create a ticket if you need assistance</p>
+             <h3 className="text-xs font-black text-gray-950 uppercase tracking-widest">No Active Tickets</h3>
+             <p className="text-[9px] text-gray-400 font-bold uppercase mt-1.5">Create a ticket if you need assistance</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {tickets.map((ticket, idx) => (
               <div 
                 key={ticket._id || idx}
                 onClick={() => navigate(`/food/delivery/help/tickets/${ticket._id}`)}
-                className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm active:scale-[0.98] transition-all relative overflow-hidden group"
+                className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm active:scale-[0.98] transition-all relative overflow-hidden group"
               >
-                <div className="flex justify-between items-start mb-3">
+                <div className="flex justify-between items-start mb-2">
                    <div className="flex-1 pr-4">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-0.5">
                          <h4 className="text-sm font-black text-gray-950 group-hover:text-blue-600 transition-colors uppercase tracking-tight line-clamp-1">{ticket.subject}</h4>
-                         {ticket.ticketId && <span className="text-[9px] font-mono font-bold bg-gray-100 px-2 py-0.5 rounded">#{ticket.ticketId}</span>}
+                         {ticket.ticketId && <span className="text-[8px] font-mono font-bold bg-gray-100 px-1.5 py-0.5 rounded">#{ticket.ticketId}</span>}
                       </div>
                       <p className="text-xs text-gray-500 font-medium line-clamp-1">{ticket.description}</p>
                    </div>
-                   <ChevronRight className="w-5 h-5 text-gray-200" />
+                   <ChevronRight className="w-4 h-4 text-gray-300" />
                 </div>
                 
-                <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-50">
-                   <div className="flex items-center gap-2">
-                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${getStatusColor(ticket.status)}`}>
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
+                   <div className="flex items-center gap-1.5">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest border ${getStatusColor(ticket.status)}`}>
                         {ticket.status?.replace('_', ' ')}
                       </span>
-                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{ticket.category}</span>
+                      <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{ticket.category}</span>
                    </div>
-                   <span className="text-[9px] font-bold text-gray-300">{new Date(ticket.createdAt).toLocaleDateString()}</span>
+                   <span className="text-[8px] font-bold text-gray-300">{new Date(ticket.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
             ))}

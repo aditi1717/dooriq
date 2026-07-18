@@ -315,60 +315,6 @@ export default function NotificationBroadcast() {
           </div>
         </form>
       </div>
-
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">History</h2>
-            <p className="text-sm text-slate-500">Latest sent broadcasts and their targets.</p>
-          </div>
-        </div>
-
-        {historyLoading ? (
-          <div className="py-10 text-sm text-slate-500 flex items-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Loading history...
-          </div>
-        ) : history.length === 0 ? (
-          <div className="py-10 text-sm text-slate-500">No broadcast notifications found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200">
-                  <th className="py-3 pr-4 font-semibold">Title</th>
-                  <th className="py-3 pr-4 font-semibold">Message</th>
-                  <th className="py-3 pr-4 font-semibold">Target</th>
-                  <th className="py-3 pr-4 font-semibold">Recipients</th>
-                  <th className="py-3 pr-4 font-semibold">Date</th>
-                  <th className="py-3 text-right font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((item) => (
-                  <tr key={item?._id} className="border-b border-slate-100 align-top">
-                    <td className="py-4 pr-4 font-semibold text-slate-900">{item?.title || "Notification"}</td>
-                    <td className="py-4 pr-4 text-slate-600 max-w-sm">{item?.message || "-"}</td>
-                    <td className="py-4 pr-4 text-slate-700">{item?.targetLabel || item?.targetType}</td>
-                    <td className="py-4 pr-4 text-slate-700">{item?.targetCount || item?.targets?.length || 0}</td>
-                    <td className="py-4 pr-4 text-slate-500 whitespace-nowrap">{toDateLabel(item?.createdAt)}</td>
-                    <td className="py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(item?._id)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

@@ -15,6 +15,7 @@ const formatCurrency = (amount) => {
 
 export default function DeliverymanList() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [deliverymen, setDeliverymen] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -25,6 +26,7 @@ export default function DeliverymanList() {
   const [editValues, setEditValues] = useState({ pocketBalance: "", cashInHand: "" })
   const [savingDeliveryId, setSavingDeliveryId] = useState(null)
   const [deletingDeliveryId, setDeletingDeliveryId] = useState(null)
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 })
   const [visibleColumns, setVisibleColumns] = useState({
     si: true,
     name: true,
@@ -72,22 +74,32 @@ export default function DeliverymanList() {
       setError(null)
       
       const params = {
-        page: 1,
-        limit: 1000, // Get all for now
+        page: pagination.page,
+        limit: pagination.limit,
       }
 
       // Add search to params if provided
-      if (searchQuery.trim()) {
-        params.search = searchQuery.trim()
+      if (debouncedSearch.trim()) {
+        params.search = debouncedSearch.trim()
       }
 
       const [partnersResponse, walletRowsResult] = await Promise.allSettled([
         adminAPI.getDeliveryPartners(params),
-        fetchAllWalletRows(searchQuery.trim()),
+        fetchAllWalletRows(debouncedSearch.trim()),
       ])
 
       if (partnersResponse.status === "fulfilled" && partnersResponse.value?.data?.success) {
         const partners = partnersResponse.value.data.data.deliveryPartners || []
+        const responsePagination = partnersResponse.value.data?.data?.pagination || null
+        if (responsePagination) {
+          setPagination({
+            page: Number(responsePagination.page) || 1,
+            limit: Number(responsePagination.limit) || 10,
+            total: Number(responsePagination.total) || 0,
+            pages: Number(responsePagination.pages) || 1,
+          })
+        }
+
         const walletRows = walletRowsResult.status === "fulfilled" ? walletRowsResult.value || [] : []
 
         const walletMap = new Map(
@@ -99,13 +111,13 @@ export default function DeliverymanList() {
           return {
             ...partner,
             walletSummary: wallet || null,
-pocketBalance: wallet?.pocketBalance || 0,
-cashInHand: wallet?.cashCollected || 0,
-remainingCashLimit: wallet?.remainingCashLimit || 0,
-totalEarning: wallet?.totalEarning || 0,
-bonus: wallet?.bonus || 0,
-totalWithdrawn: wallet?.totalWithdrawn || 0,
-availableCashLimit: wallet?.availableCashLimit || 0,
+            pocketBalance: wallet?.pocketBalance || 0,
+            cashInHand: wallet?.cashCollected || 0,
+            remainingCashLimit: wallet?.remainingCashLimit || 0,
+            totalEarning: wallet?.totalEarning || 0,
+            bonus: wallet?.bonus || 0,
+            totalWithdrawn: wallet?.totalWithdrawn || 0,
+            availableCashLimit: wallet?.availableCashLimit || 0,
           }
         })
 
@@ -139,20 +151,23 @@ availableCashLimit: wallet?.availableCashLimit || 0,
     }
   }
 
-  // Fetch on mount
-  useEffect(() => {
-    fetchDeliverymen()
-  }, [])
-
-  // Debounced search effect
+  // Debounce search query
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchDeliverymen()
-    }, 500) // Wait 500ms after user stops typing
-
+      setDebouncedSearch(searchQuery)
+    }, 500)
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery])
+
+  // Reset page to 1 on new search
+  useEffect(() => {
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }, [debouncedSearch])
+
+  // Fetch when page, limit, or search query changes
+  useEffect(() => {
+    fetchDeliverymen()
+  }, [pagination.page, pagination.limit, debouncedSearch])
 
   const filteredDeliverymen = useMemo(() => {
     // Backend already handles search, but we can do client-side filtering if needed
@@ -226,6 +241,10 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
       availabilityStatus: true,
       actions: true,
     })
+  }
+
+  const handlePageChange = (newPage) => {
+    setPagination(prev => ({ ...prev, page: newPage }))
   }
 
   const columnsConfig = {
@@ -433,7 +452,7 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-slate-700">Deliveryman</span>
               <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700">
-                {filteredDeliverymen.length}
+                {pagination.total}
               </span>
             </div>
           </div>
@@ -714,6 +733,61 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
               </table>
             )}
           </div>
+          {/* Pagination */}
+          {!loading && pagination.pages > 1 && (
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-200">
+              <p className="text-sm text-slate-600">
+                Showing {(pagination.page - 1) * pagination.limit + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} delivery partners
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePageChange(pagination.page - 1)}
+                  disabled={pagination.page === 1}
+                  className="px-3 py-1.5 text-sm rounded border border-slate-300 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 font-medium"
+                >
+                  Previous
+                </button>
+                {(() => {
+                  const current = pagination.page
+                  const total = pagination.pages
+                  const maxVisible = 5
+
+                  let start = Math.max(1, current - Math.floor(maxVisible / 2))
+                  let end = Math.min(total, start + maxVisible - 1)
+
+                  if (end - start + 1 < maxVisible) {
+                    start = Math.max(1, end - maxVisible + 1)
+                  }
+
+                  const pagesToRender = []
+                  for (let i = start; i <= end; i++) {
+                    pagesToRender.push(i)
+                  }
+
+                  return pagesToRender.map((pageNum) => (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`px-3 py-1.5 text-sm rounded border font-medium ${
+                        pagination.page === pageNum
+                          ? "bg-slate-900 border-slate-900 text-white"
+                          : "border-slate-300 text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  ))
+                })()}
+                <button
+                  onClick={() => handlePageChange(pagination.page + 1)}
+                  disabled={pagination.page === pagination.pages}
+                  className="px-3 py-1.5 text-sm rounded border border-slate-300 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 font-medium"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

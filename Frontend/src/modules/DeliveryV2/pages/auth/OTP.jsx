@@ -8,6 +8,7 @@ import { setAuthData as storeAuthData } from "@food/utils/auth"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { motion, AnimatePresence } from "framer-motion"
 import { getCachedSettings, getModuleLogoUrl, loadBusinessSettings } from "@food/utils/businessSettings"
+import { useDeliveryOnboardingStore } from "../../store/useDeliveryOnboardingStore"
 
 export default function DeliveryOTP() {
   const companyName = useCompanyName()
@@ -181,6 +182,7 @@ export default function DeliveryOTP() {
         return
       }
       if (data.needsRegistration === true) {
+        useDeliveryOnboardingStore.getState().clearOnboardingState()
         sessionStorage.removeItem("deliveryAuthData")
         sessionStorage.setItem("deliveryNeedsRegistration", "true")
         sessionStorage.setItem("deliverySignupDetails", JSON.stringify({ name: "", phone: phone.replace(/\D/g, "").slice(-10), countryCode: "+91" }))
@@ -388,7 +390,11 @@ export default function DeliveryOTP() {
                   <div className="pt-4 flex flex-col gap-3">
                      {isRejected && (
                         <Button
-                          onClick={() => navigate("/food/delivery/signup/details")}
+                          onClick={() => {
+                            useDeliveryOnboardingStore.getState().clearOnboardingState()
+                            sessionStorage.removeItem("deliverySignupDetails")
+                            navigate("/food/delivery/signup/details")
+                          }}
                           className="w-full h-12 rounded-xl font-black bg-red-600 hover:bg-red-700 text-white shadow-md text-sm"
                         >
                           RE-APPLY NOW

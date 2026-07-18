@@ -223,7 +223,9 @@ export const createBroadcastNotification = async ({ body = {}, adminId } = {}) =
 
     const targetIds = resolvedTargets.map((target) => toObjectId(target.ownerId, 'targetId'));
 
-    const broadcast = await BroadcastNotification.create({
+    const broadcastId = new mongoose.Types.ObjectId();
+    const broadcast = {
+        _id: broadcastId,
         title,
         message,
         targetType,
@@ -236,8 +238,9 @@ export const createBroadcastNotification = async ({ body = {}, adminId } = {}) =
         })),
         link,
         createdBy: toObjectId(adminId, 'createdBy'),
-        targetCount: resolvedTargets.length
-    });
+        targetCount: resolvedTargets.length,
+        createdAt: new Date()
+    };
 
     await createInboxNotifications({
         notifications: resolvedTargets.map((target) =>
@@ -276,47 +279,19 @@ export const createBroadcastNotification = async ({ body = {}, adminId } = {}) =
 };
 
 export const getBroadcastNotifications = async ({ page = 1, limit = 10 } = {}) => {
-    const { skip, ...meta } = paginationMeta({ page, limit });
-
-    const [items, total] = await Promise.all([
-        BroadcastNotification.find({})
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(meta.limit)
-            .populate('createdBy', 'name email')
-            .lean(),
-        BroadcastNotification.countDocuments({})
-    ]);
-
     return {
-        items: items.map((item) => ({
-            ...item,
-            targetLabel:
-                item.targetType === 'CUSTOM'
-                    ? `${Number(item.targetCount || item.targets?.length || 0)} selected recipients`
-                    : OWNER_LABEL_MAP[item.targetType] || item.targetType
-        })),
+        items: [],
         pagination: {
-            page: meta.page,
-            limit: meta.limit,
-            total,
-            totalPages: Math.max(1, Math.ceil(total / meta.limit))
+            page: 1,
+            limit: Math.max(1, limit),
+            total: 0,
+            totalPages: 1
         }
     };
 };
 
 export const deleteBroadcastNotification = async (broadcastId) => {
-    const normalizedId = toObjectId(broadcastId, 'broadcastId');
-    const broadcast = await BroadcastNotification.findByIdAndDelete(normalizedId).lean();
-
-    if (!broadcast) {
-        throw new NotFoundError('Broadcast notification not found');
-    }
-
-    const result = await FoodNotification.deleteMany({ broadcastId: normalizedId });
-
     return {
-        broadcast,
-        deletedInboxCount: Number(result?.deletedCount || 0)
+        success: true
     };
 };

@@ -155,6 +155,33 @@ export const ProfileV2 = () => {
 
       <div className="px-4 py-6 space-y-6">
         
+        {/* Wallet & Referral Earnings Card Grid */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Wallet Balance Card */}
+          <div 
+            onClick={() => navigate("/food/delivery/pocket/balance")}
+            className="bg-white rounded-[24px] p-5 border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex flex-col justify-between min-h-[110px] cursor-pointer hover:bg-gray-50 active:scale-[0.98] transition-all"
+          >
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Wallet Balance</p>
+              <h3 className="text-2xl font-black text-gray-900 mt-2">₹{walletBalance.toFixed(2)}</h3>
+            </div>
+            <p className="text-[9px] font-bold text-gray-400 mt-2 uppercase tracking-wide">Available Cash</p>
+          </div>
+
+          {/* Referral Earning Card */}
+          <div 
+            onClick={() => navigate("/food/delivery/profile/referrals")}
+            className="bg-white rounded-[24px] p-5 border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex flex-col justify-between min-h-[110px] cursor-pointer hover:bg-gray-50 active:scale-[0.98] transition-all"
+          >
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Referral Earned</p>
+              <h3 className="text-2xl font-black text-gray-900 mt-2">₹{referralReward.toFixed(2)}</h3>
+            </div>
+            <p className="text-[9px] font-bold text-gray-400 mt-2 uppercase tracking-wide">Total Rewards</p>
+          </div>
+        </div>
+
         {/* Navigation Buttons */}
         <div className="grid grid-cols-1 gap-3">
           <button

@@ -781,9 +781,15 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
   const { otp, ratings } = body;
   logger.info(`[DeliveryComplete] Attempting to complete order ${order._id} for partner ${deliveryPartnerId}. Status: ${order.orderStatus}`);
 
+  const tx = await FoodTransaction.findOne({ orderId: order._id }).lean();
+  const prevPayStatus = String(tx?.payment?.status || order?.payment?.status || 'unpaid').toLowerCase();
+  const payMethod = String(tx?.payment?.method || order?.payment?.method || order?.paymentMethod || 'cash').toLowerCase();
+  const isCod = ['cash', 'cod', 'cash_on_delivery', 'razorpay_qr'].includes(payMethod);
+  const otpRequired = order.deliveryVerification?.dropOtp?.required && !isCod;
+
   if (
     otp &&
-    order.deliveryVerification?.dropOtp?.required &&
+    otpRequired &&
     !order.deliveryVerification?.dropOtp?.verified
   ) {
     const orderWithSecret = await FoodOrder.findById(order._id).select('+deliveryOtp');
@@ -798,7 +804,7 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
   }
 
   if (
-    order.deliveryVerification?.dropOtp?.required &&
+    otpRequired &&
     !order.deliveryVerification?.dropOtp?.verified &&
     !otp
   ) {
@@ -813,10 +819,6 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
       logger.warn(`[DeliveryComplete] Status advance check failed for ${order._id}. Current: ${from}`);
       throw new ValidationError(`Order is already at status '${from}'. Cannot re-mark as '${nextStatus}'.`);
   }
-  
-  const tx = await FoodTransaction.findOne({ orderId: order._id }).lean();
-  const prevPayStatus = String(tx?.payment?.status || order?.payment?.status || 'unpaid').toLowerCase();
-  const payMethod = String(tx?.payment?.method || order?.payment?.method || order?.paymentMethod || 'cash').toLowerCase();
 
   logger.info(`[DeliveryComplete] Order ${order._id} payment: ${payMethod}, status: ${prevPayStatus}`);
 

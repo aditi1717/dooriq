@@ -204,11 +204,11 @@ export async function updateBusinessSettings(req, res, next) {
         if (address && address.length > 250) {
             return res.status(400).json({ success: false, message: 'Address is too long (max 250 characters)' });
         }
-        if (state && state.length > 50) {
-            return res.status(400).json({ success: false, message: 'State name is too long (max 50 characters)' });
+        if (state && (state.length > 50 || /\d/.test(state))) {
+            return res.status(400).json({ success: false, message: 'State name is invalid and cannot contain numbers (max 50 characters)' });
         }
-        if (pincode && !/^\d{4,10}$/.test(pincode.trim())) {
-            return res.status(400).json({ success: false, message: 'Invalid pincode (4-10 digits required)' });
+        if (pincode && !/^\d{6}$/.test(pincode.trim())) {
+            return res.status(400).json({ success: false, message: 'Invalid pincode (must be exactly 6 digits)' });
         }
 
         if (restaurantTdsPercentage !== undefined) {

@@ -2304,7 +2304,7 @@ export default function OrdersMain() {
         {showNewOrderPopup && (
           <>
             <motion.div
-              className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-[2px] flex items-start justify-center pt-12 p-4 sm:items-center sm:pt-4"
+              className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}>

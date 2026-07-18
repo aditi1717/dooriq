@@ -29,6 +29,7 @@ const OrderEmergencyRequestsV2 = lazy(() => import('./pages/help/OrderEmergencyR
 const ShowIdCardV2 = lazy(() => import('./pages/help/ShowIdCardV2'));
 const PocketDetailsV2 = lazy(() => import('./pages/pocket/PocketDetailsV2').then((m) => ({ default: m.PocketDetailsV2 })));
 const ProfileDetailsV2 = lazy(() => import('./pages/profile/ProfileDetailsV2').then((m) => ({ default: m.ProfileDetailsV2 })));
+const ReferralEarningHistoryV2 = lazy(() => import('./pages/profile/ReferralEarningHistoryV2').then((m) => ({ default: m.ReferralEarningHistoryV2 })));
 const TermsAndConditionsV2 = lazy(() => import('./pages/TermsAndConditionsV2'));
 const PrivacyPolicyV2 = lazy(() => import('./pages/PrivacyPolicyV2'));
 const HelpContentV2 = lazy(() => import('./pages/HelpContentV2'));
@@ -85,6 +86,7 @@ const DeliveryV2Router = () => {
         <Route path="profile/details" element={<ProtectedRoute><ProfileDetailsV2 /></ProtectedRoute>} />
         <Route path="profile/bank" element={<ProtectedRoute><ProfileBankV2 /></ProtectedRoute>} />
         <Route path="profile/documents" element={<ProtectedRoute><ProfileDocsV2 /></ProtectedRoute>} />
+        <Route path="profile/referrals" element={<ProtectedRoute><ReferralEarningHistoryV2 /></ProtectedRoute>} />
         
         {/* Support Systems */}
         <Route path="help/tickets" element={<ProtectedRoute><SupportTicketsV2 /></ProtectedRoute>} />

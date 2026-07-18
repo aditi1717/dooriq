@@ -483,7 +483,6 @@ export default function AllOrdersPage() {
               <h1 className="text-base font-bold text-gray-900">
                 {restaurantData?.name || 'Restaurant'}
               </h1>
-              <ChevronDown className="w-4 h-4 text-gray-600" />
             </div>
           </div>
         </div>

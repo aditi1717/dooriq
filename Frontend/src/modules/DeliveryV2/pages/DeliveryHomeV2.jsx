@@ -111,6 +111,23 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     setCurrentTab(tab);
   }, [tab]);
 
+  // Intercept browser/hardware back button when on pocket, history, or profile tabs
+  // and redirect to the home feed tab instead of traversing tab history
+  useEffect(() => {
+    if (currentTab === "feed") return;
+
+    window.history.pushState(null, null, window.location.pathname);
+
+    const handlePopState = () => {
+      navigate("/food/delivery/feed", { replace: true });
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [currentTab, navigate]);
+
   const [showVerification, setShowVerification] = useState(false);
   const [showEmergencyPopup, setShowEmergencyPopup] = useState(false);
   const [profileImage, setProfileImage] = useState(null);

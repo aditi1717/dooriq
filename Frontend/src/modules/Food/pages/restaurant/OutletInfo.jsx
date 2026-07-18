@@ -54,6 +54,29 @@ export default function OutletInfo() {
   
   // State management
   const [restaurantData, setRestaurantData] = useState(null)
+  const [isSubscriptionEnabled, setIsSubscriptionEnabled] = useState(() => {
+    if (typeof window !== "undefined") {
+      const val = localStorage.getItem("restaurant_subscription_feature_enabled")
+      return val !== "false"
+    }
+    return true
+  })
+
+  useEffect(() => {
+    const checkSubscriptionFeature = async () => {
+      try {
+        const res = await restaurantAPI.getFeatureSettingsPublic()
+        const rows = Array.isArray(res?.data?.data) ? res.data.data : []
+        const feature = rows.find((row) => row.key === "restaurant_subscription")
+        const enabled = feature ? Boolean(feature.isEnabled) : true
+        setIsSubscriptionEnabled(enabled)
+        localStorage.setItem("restaurant_subscription_feature_enabled", String(enabled))
+      } catch {
+        // Safe fallback
+      }
+    }
+    checkSubscriptionFeature()
+  }, [])
   const [loading, setLoading] = useState(true)
   const [restaurantName, setRestaurantName] = useState("")
   const [cuisineTags, setCuisineTags] = useState("")
@@ -1624,29 +1647,7 @@ export default function OutletInfo() {
           </div>
         </div>
 
-        {/* Info Section */}
-        <div className="px-4 pt-4 pb-4 bg-white">
-          <div className="flex items-start gap-4">
-            <div className="flex flex-col gap-2">
-              <button onClick={() => navigate("/restaurant/ratings-reviews")} className="flex items-center gap-2 text-left w-full">
-                <div
-                  className="px-2.5 py-1.5 rounded flex items-center gap-1 shrink-0"
-                  style={{
-                    background:
-                      "linear-gradient(135deg, rgba(var(--module-theme-rgb,37,99,235),0.90), var(--module-theme-color,#2563EB))",
-                  }}
-                >
-                  <span className="text-white text-sm font-bold">{Number(displayRating || 0).toFixed(1)}</span>
-                  <Star className="w-3.5 h-3.5 text-white fill-white" />
-                </div>
-                <span className="text-sm font-semibold" style={{ color: "var(--module-theme-color, #2563EB)" }}>
-                  {displayTotalRatings || 0} DELIVERY REVIEWS
-                </span>
-                <ChevronRight className="w-4 h-4 text-gray-400 shrink-0 ml-auto" />
-              </button>
-            </div>
-          </div>
-        </div>
+
 
         <div className="px-4 py-4">
           <h2 className="text-base font-bold text-gray-900">Restaurant Information</h2>
@@ -1892,13 +1893,15 @@ export default function OutletInfo() {
             </div>
           </div>
 
-          <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-4 border border-amber-200 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-900 mb-3">Subscription</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><p className="text-xs text-slate-500">Current plan</p><p className="text-sm font-semibold text-slate-900">{loading ? "Loading..." : currentPlanLabel}</p></div>
-              <div><p className="text-xs text-slate-500">Valid till</p><p className="text-sm font-semibold text-slate-900">{loading ? "Loading..." : subscriptionValidTillLabel}</p></div>
+          {isSubscriptionEnabled && (
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-4 border border-amber-200 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-900 mb-3">Subscription</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><p className="text-xs text-slate-500">Current plan</p><p className="text-sm font-semibold text-slate-900">{loading ? "Loading..." : currentPlanLabel}</p></div>
+                <div><p className="text-xs text-slate-500">Valid till</p><p className="text-sm font-semibold text-slate-900">{loading ? "Loading..." : subscriptionValidTillLabel}</p></div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
