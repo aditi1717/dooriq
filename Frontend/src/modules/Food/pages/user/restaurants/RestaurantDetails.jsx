@@ -2513,11 +2513,7 @@ function RestaurantDetailsContent() {
             )}
           </div>
 
-          {/* Top Category */} 
-          <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-            <Utensils className="h-4 w-4" />
-            <span>{restaurant?.topCategory || restaurant?.cuisine || "Multi-cuisine"}</span>
-          </div>
+
 
           {/* Location */}
           <div className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">

@@ -28,7 +28,7 @@ export default function Cashback() {
     { key: "en", label: "English(EN)" },
     { key: "bn", label: "Bengali - বাংলা (BN)" },
     { key: "ar", label: "Arabic - العربية (AR)" },
-    { key: "es", label: "Spanish - espa�ol(ES)" },
+    { key: "es", label: "Spanish - espa�ol(ES)" },
   ]
 
   const filteredCashbacks = useMemo(() => {
@@ -283,7 +283,7 @@ export default function Cashback() {
               <div className="relative flex-1 sm:flex-initial min-w-[200px]">
                 <input
                   type="text"
-                  placeholder="Ex: Search by title"
+                  placeholder="Search by title"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
@@ -370,4 +370,5 @@ export default function Cashback() {
     </div>
   )
 }
+
 

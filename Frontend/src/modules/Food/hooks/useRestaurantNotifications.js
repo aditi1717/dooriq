@@ -4,6 +4,7 @@ import { API_BASE_URL } from '@food/api/config';
 import { restaurantAPI } from '@food/api';
 import alertSound from '@food/assets/audio/alert.mp3';
 import { dispatchNotificationInboxRefresh } from '@food/hooks/useNotificationInbox';
+import { isModuleAuthenticated } from '@food/utils/auth';
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -90,6 +91,40 @@ export const useRestaurantNotifications = () => {
   const userInteractedRef = useRef(false); // Track user interaction for autoplay policy
   const audioUnlockAttemptedRef = useRef(false);
   const [restaurantId, setRestaurantId] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => isModuleAuthenticated("restaurant"));
+
+  // Listen for authentication changes to handle logout in current or other tabs
+  useEffect(() => {
+    const handleAuthChange = () => {
+      const authStatus = isModuleAuthenticated("restaurant");
+      setIsAuthenticated(authStatus);
+      if (!authStatus) {
+        setRestaurantId(null);
+        setNewOrder(null);
+        setIsConnected(false);
+        if (socketRef.current) {
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
+        if (alertLoopTimerRef.current) {
+          clearInterval(alertLoopTimerRef.current);
+          alertLoopTimerRef.current = null;
+        }
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
+      }
+    };
+
+    window.addEventListener("restaurantAuthChanged", handleAuthChange);
+    window.addEventListener("storage", handleAuthChange);
+
+    return () => {
+      window.removeEventListener("restaurantAuthChanged", handleAuthChange);
+      window.removeEventListener("storage", handleAuthChange);
+    };
+  }, []);
   const lastConnectErrorLogRef = useRef(0);
   const lastAlertAtByOrderRef = useRef(new Map());
   const lastBrowserNotificationAtByOrderRef = useRef(new Map());
@@ -216,6 +251,10 @@ export const useRestaurantNotifications = () => {
 
   // Get restaurant ID from API
   useEffect(() => {
+    if (!isAuthenticated) {
+      setRestaurantId(null);
+      return;
+    }
     const fetchRestaurantId = async () => {
       try {
         const response = await restaurantAPI.getCurrentRestaurant();
@@ -229,20 +268,20 @@ export const useRestaurantNotifications = () => {
       }
     };
     fetchRestaurantId();
-  }, []);
+  }, [isAuthenticated]);
 
   // Reliability fallback:
   // If Socket.IO fails (expired jwt / missing token / room join failed),
   // we still fetch restaurant orders from REST periodically and trigger the same
   // alert flow. This prevents "restaurant didn't receive the order" cases.
   useEffect(() => {
-    if (!restaurantId) return;
+    if (!restaurantId || !isAuthenticated) return;
 
     const ALERT_POLL_MS = 8000;
     let isCancelled = false;
 
     const pollOrders = async () => {
-      if (isCancelled) return;
+      if (isCancelled || !isAuthenticated) return;
 
       try {
         const response = await restaurantAPI.getOrders({ page: 1, limit: 30 });
@@ -262,7 +301,7 @@ export const useRestaurantNotifications = () => {
             return new Date(bt).getTime() - new Date(at).getTime();
           });
 
-        if (confirmed.length > 0) {
+        if (confirmed.length > 0 && isAuthenticated) {
           // Trigger alerts for newest confirmed orders (dedupe prevents spam).
           confirmed.slice(0, 5).forEach((o) => handleIncomingOrderAlert(o));
         }
@@ -279,7 +318,7 @@ export const useRestaurantNotifications = () => {
       isCancelled = true;
       clearInterval(intervalId);
     };
-  }, [restaurantId]);
+  }, [restaurantId, isAuthenticated]);
 
   useEffect(() => {
     if (!supportsBrowserNotifications()) return;
@@ -328,6 +367,10 @@ export const useRestaurantNotifications = () => {
   }, []);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setIsConnected(false);
+      return;
+    }
     if (!API_BASE_URL || !String(API_BASE_URL).trim()) {
       setIsConnected(false);
       return;
@@ -667,7 +710,7 @@ export const useRestaurantNotifications = () => {
         audioRef.current = null;
       }
     };
-  }, [restaurantId]);
+  }, [restaurantId, isAuthenticated]);
 
   // Track user interaction for autoplay policy
   useEffect(() => {

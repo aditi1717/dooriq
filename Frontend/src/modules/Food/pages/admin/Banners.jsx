@@ -42,7 +42,7 @@ export default function Banners() {
     { key: "en", label: "English(EN)" },
     { key: "bn", label: "Bengali - বাংলা(BN)" },
     { key: "ar", label: "Arabic - العربية (AR)" },
-    { key: "es", label: "Spanish - espa�ol(ES)" },
+    { key: "es", label: "Spanish - espa�ol(ES)" },
   ]
 
   const filteredBanners = useMemo(() => {
@@ -177,7 +177,7 @@ export default function Banners() {
                   className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                 >
                   <option value="">Select</option>
-                  <option value="cafe-monarch">Caf� Monarch</option>
+                  <option value="cafe-monarch">Caf� Monarch</option>
                   <option value="hungry-puppets">Hungry Puppets</option>
                 </select>
               </div>
@@ -239,7 +239,7 @@ export default function Banners() {
               <div className="relative flex-1 sm:flex-initial min-w-[200px]">
                 <input
                   type="text"
-                  placeholder="Ex: Search by title ..."
+                  placeholder="Search by title"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
@@ -331,4 +331,5 @@ export default function Banners() {
     </div>
   )
 }
+
 

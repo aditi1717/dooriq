@@ -1502,14 +1502,15 @@ export const restaurantAPI = {
     apiClient.delete(`/food/restaurant/addons/${String(id)}`, {
       contextModule: "restaurant",
     }),
-  logout: (refreshToken) => {
+  logout: (refreshToken, platform = null) => {
     const token =
       refreshToken ||
       (typeof localStorage !== "undefined"
         ? localStorage.getItem("restaurant_refreshToken")
         : null);
     const fcmToken = typeof localStorage !== "undefined" ? localStorage.getItem("fcm_web_registered_token_restaurant") : null;
-    return authService.logout(token, fcmToken, "web");
+    const resolvedPlatform = platform || (typeof window !== "undefined" && window.flutter_inappwebview ? "mobile" : "web");
+    return authService.logout(token, fcmToken, resolvedPlatform);
   },
   /** Backend has no email/password login; use phone OTP only. */
   login: (_email, _password) =>
@@ -1849,7 +1850,7 @@ export const deliveryAPI = {
     apiClient.get("/food/delivery/referrals/stats", {
       contextModule: "delivery",
     }),
-  logout: (refreshToken) => {
+  logout: (refreshToken, platform = null) => {
     deliveryMeCached = null;
     deliveryMeCacheTime = 0;
     try {
@@ -1861,7 +1862,8 @@ export const deliveryAPI = {
         ? localStorage.getItem("delivery_refreshToken")
         : null);
     const fcmToken = typeof localStorage !== "undefined" ? localStorage.getItem("fcm_web_registered_token_delivery") : null;
-    return authService.logout(token, fcmToken, "web");
+    const resolvedPlatform = platform || (typeof window !== "undefined" && window.flutter_inappwebview ? "mobile" : "web");
+    return authService.logout(token, fcmToken, resolvedPlatform);
   },
   /** POST /food/delivery/register - multipart FormData (new partner, no token). */
   register: (formData) => {

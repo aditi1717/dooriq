@@ -359,6 +359,11 @@ export default function Category() {
     event.preventDefault()
     if (!ensureActionAccess(editingCategory ? "edit" : "create")) return
 
+    if (!selectedImageFile && !formData.image) {
+      toast.error("Category image is required")
+      return
+    }
+
     try {
       setUploadingImage(true)
       let imageUrl = String(formData.image || "").trim()
@@ -724,7 +729,7 @@ export default function Category() {
                         </div>
 
                         <div>
-                          <label className="mb-2 block text-sm font-medium text-slate-700">Category Image</label>
+                          <label className="mb-2 block text-sm font-medium text-slate-700">Category Image <span className="text-red-500">*</span></label>
                           <div className="space-y-3">
                             {(imagePreview || formData.image) && (
                               <div className="relative h-32 w-32 overflow-hidden rounded-2xl border border-slate-300">

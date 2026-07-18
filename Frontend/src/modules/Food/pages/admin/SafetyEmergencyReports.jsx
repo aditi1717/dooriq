@@ -230,7 +230,7 @@ export default function SafetyEmergencyReports() {
             <div className="relative flex-1 sm:flex-initial min-w-[250px]">
               <input
                 type="text"
-                placeholder="Ex: Search by name or email"
+                placeholder="Search by name or email"
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value)

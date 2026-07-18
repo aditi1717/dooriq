@@ -695,38 +695,32 @@ const RestaurantCard = React.memo(({
                 {/* Cuisine & Offers */}
                 <div className="mt-auto flex flex-col gap-1">
                   <div className="flex items-center gap-2 min-w-0">
-                    <p className="text-xs lg:text-sm text-gray-500 dark:text-gray-400 line-clamp-1 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors duration-300 shrink min-w-0">
-                      {restaurant.cuisine}
-                    </p>
                     {currentOffer && (
-                      <>
-                        <span className="text-xs text-gray-300 dark:text-gray-600">|</span>
-                        <div
-                          className="flex flex-1 items-center gap-1 min-w-0"
+                      <div
+                        className="flex flex-1 items-center gap-1 min-w-0"
+                        style={{ color: "#16a34a" }}
+                      >
+                        <BadgePercent
+                          className="h-3.5 w-3.5 shrink-0"
                           style={{ color: "#16a34a" }}
-                        >
-                          <BadgePercent
-                            className="h-3.5 w-3.5 shrink-0"
-                            style={{ color: "#16a34a" }}
-                          />
-                          <div className="flex-1 overflow-hidden min-w-0">
-                            <AnimatePresence mode="wait">
-                              <motion.span
-                                key={`${restaurantSlug}-offer-${offerIndex}-${currentOffer}`}
-                                initial={{ y: 10, opacity: 0 }}
-                                animate={{ y: 0, opacity: 1 }}
-                                exit={{ y: -10, opacity: 0 }}
-                                transition={{ duration: 0.25, ease: "easeOut" }}
-                                className="block truncate text-[11px] lg:text-xs font-semibold"
-                                style={{ color: "#16a34a" }}
-                                title={currentOffer}
-                              >
-                                {currentOffer}
-                              </motion.span>
-                            </AnimatePresence>
-                          </div>
+                        />
+                        <div className="flex-1 overflow-hidden min-w-0">
+                          <AnimatePresence mode="wait">
+                            <motion.span
+                              key={`${restaurantSlug}-offer-${offerIndex}-${currentOffer}`}
+                              initial={{ y: 10, opacity: 0 }}
+                              animate={{ y: 0, opacity: 1 }}
+                              exit={{ y: -10, opacity: 0 }}
+                              transition={{ duration: 0.25, ease: "easeOut" }}
+                              className="block truncate text-[11px] lg:text-xs font-semibold"
+                              style={{ color: "#16a34a" }}
+                              title={currentOffer}
+                            >
+                              {currentOffer}
+                            </motion.span>
+                          </AnimatePresence>
                         </div>
-                      </>
+                      </div>
                     )}
                   </div>
                   {restaurant.pureVegRestaurant && (

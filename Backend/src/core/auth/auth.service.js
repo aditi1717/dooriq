@@ -529,21 +529,18 @@ export const logout = async (refreshToken, fcmToken, platform) => {
   if (fcmToken) {
     console.log(`[FCM-Logout] Starting logout-driven token removal: platform=${platform}, tokenPreview=${fcmToken?.slice(0, 10)}...`);
     
-    // We try to remove the token from all 4 possible models regardless of the user ID, 
-    // ensuring no stale connections are left across any role or app the user was logged into.
-    const field = isMobilePlatform(platform) ? "fcmTokenMobile" : "fcmTokens";
     const models = [FoodUser, FoodRestaurant, FoodDeliveryPartner, FoodAdmin];
     
     try {
       await Promise.all(
         models.map((model) =>
           model.updateMany(
-            { [field]: fcmToken },
-            { $pull: { [field]: fcmToken } },
+            { $or: [{ fcmTokens: fcmToken }, { fcmTokenMobile: fcmToken }] },
+            { $pull: { fcmTokens: fcmToken, fcmTokenMobile: fcmToken } },
           ),
         ),
       );
-      console.log("[FCM-Logout] Token removed from all collections successfully");
+      console.log("[FCM-Logout] Token removed from all collections (web & mobile) successfully");
     } catch (err) {
       logger.warn({ err }, "Failed to remove FCM token from all collections during logout");
     }

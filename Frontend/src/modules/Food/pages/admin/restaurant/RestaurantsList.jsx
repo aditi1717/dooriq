@@ -1041,6 +1041,11 @@ export default function RestaurantsList() {
     if (!selectedRestaurant) return
     const restaurantId = selectedRestaurant._id || selectedRestaurant.id
 
+    if (!profileImagePreview && !profileImageFile) {
+      alert("Restaurant profile image is required")
+      return
+    }
+
     try {
       setSavingDetails(true)
 
@@ -1330,7 +1335,7 @@ export default function RestaurantsList() {
               <div className="relative flex-1 sm:flex-initial min-w-[250px]">
                 <input
                   type="text"
-                  placeholder="Ex: search by Restaurant n"
+                  placeholder="Search by restaurant name"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1647,7 +1652,7 @@ export default function RestaurantsList() {
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
-                      <p className="text-xs text-slate-500 mb-2">Profile Image</p>
+                      <p className="text-xs text-slate-500 mb-2">Profile Image <span className="text-red-500">*</span></p>
                       <div className="flex items-center gap-4">
                         <div className="w-24 h-24 rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
                           {profileImagePreview ? (

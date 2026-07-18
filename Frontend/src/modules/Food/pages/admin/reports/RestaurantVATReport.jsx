@@ -105,7 +105,7 @@ export default function RestaurantVATReport() {
                   className="w-full px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="All Restaurants">All Restaurants</option>
-                  <option value="Café Monarch">Café Monarch</option>
+                  <option value="Cafï¿½ Monarch">Cafï¿½ Monarch</option>
                   <option value="Hungry Puppets">Hungry Puppets</option>
                   <option value="Cheesy Restaurant">Cheesy Restaurant</option>
                   <option value="Cheese Burger">Cheese Burger</option>
@@ -197,7 +197,7 @@ export default function RestaurantVATReport() {
               <div className="relative flex-1 sm:flex-initial min-w-[200px]">
                 <input
                   type="text"
-                  placeholder="Ex: Name"
+                  placeholder="Search by name"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-4 pr-10 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
