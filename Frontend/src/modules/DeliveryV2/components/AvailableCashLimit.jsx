@@ -23,7 +23,6 @@ export default function AvailableCashLimit({ onClose, walletData = {} }) {
         </div>
 
         <DetailRow label="Cash in hand" value={formatCurrency(cashInHand)} />
-        <DetailRow label="Deductions" value={formatCurrency(deductions)} />
         <DetailRow label="Pocket withdrawals" value={formatCurrency(pocketWithdrawals)} />
 
         <div className="py-3 flex justify-between items-center border-b border-gray-200">

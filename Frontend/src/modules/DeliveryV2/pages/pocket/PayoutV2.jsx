@@ -24,15 +24,14 @@ export const PayoutV2 = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Fetch withdrawal transactions
-        const response = await deliveryAPI.getWalletTransactions({ 
-          type: 'withdrawal', 
-          limit: 100 
-        });
+        // Fetch the full wallet which always embeds withdrawal records
+        const response = await deliveryAPI.getWallet();
         
         if (response?.data?.success) {
-          const transactions = response.data.data.transactions || [];
-          const withdrawalTx = transactions
+          const wallet = response.data.data?.wallet || response.data.data || {};
+          const allTransactions = wallet.transactions || [];
+
+          const withdrawalTx = allTransactions
             .filter((t) => String(t?.type || '').trim().toLowerCase() === 'withdrawal')
             .sort((a, b) => {
               const aTime = new Date(a?.date || a?.createdAt || 0).getTime();
@@ -56,8 +55,7 @@ export const PayoutV2 = () => {
           setWithdrawals(withdrawalTx.map(t => {
             const rawStatus = String(t.status || 'pending').trim().toLowerCase();
             const status =
-              rawStatus === 'approved' ? 'Approved'
-              : rawStatus === 'completed' ? 'Completed'
+              rawStatus === 'approved' || rawStatus === 'completed' ? 'Completed'
               : rawStatus === 'rejected' || rawStatus === 'denied' ? 'Rejected'
               : 'Pending';
 

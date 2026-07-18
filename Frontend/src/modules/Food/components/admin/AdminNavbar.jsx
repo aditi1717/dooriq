@@ -40,7 +40,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@food/components/ui/popover";
-import quickSpicyLogo from "@food/assets/switcheats-logo.png";
+import dooriqLogo from "@food/assets/dooriq-logo.png";
 import { adminAPI } from "@food/api";
 import { clearModuleAuth } from "@food/utils/auth";
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings";
@@ -289,7 +289,7 @@ export default function AdminNavbar({ onMenuClick }) {
                     loading="lazy"
                     onError={(e) => {
                       // Fallback to default logo if company logo fails to load
-                      e.target.src = quickSpicyLogo;
+                      e.target.src = dooriqLogo;
                     }}
                   />
                 ) : (
@@ -298,7 +298,7 @@ export default function AdminNavbar({ onMenuClick }) {
                       {businessSettings.companyName}
                     </span>
                   ) : (
-                    <img src={quickSpicyLogo} alt={businessSettings?.companyName || "Company"} className="w-24 h-10 object-contain" loading="lazy" />
+                    <img src={dooriqLogo} alt={businessSettings?.companyName || "Company"} className="w-24 h-10 object-contain" loading="lazy" />
                   )
                 )}
               </div>

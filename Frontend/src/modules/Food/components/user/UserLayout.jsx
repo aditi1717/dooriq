@@ -226,6 +226,8 @@ export default function UserLayout() {
     normalizedPath === "/user/dining" ||
     normalizedPath === "/switch-99" ||
     normalizedPath === "/user/switch-99" ||
+    normalizedPath === "/user/cart" ||
+    normalizedPath === "/cart" ||
     isProfileRoot ||
     normalizedPath === "" // Handle empty string case for root relative to /food
 

@@ -15,7 +15,7 @@ import {
 import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
 import { Eye, EyeOff } from "lucide-react"
-import quickSpicyLogo from "@food/assets/switcheats-logo.png"
+import dooriqLogo from "@food/assets/dooriq-logo.png"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -30,7 +30,7 @@ export default function AdminLogin() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
-  const [logoUrl, setLogoUrl] = useState(quickSpicyLogo)
+  const [logoUrl, setLogoUrl] = useState(dooriqLogo)
   const submittingRef = useRef(false)
 
   useEffect(() => {
@@ -144,8 +144,8 @@ export default function AdminLogin() {
                   loading="lazy"
                   onError={(e) => {
                     // Fallback to default logo if business logo fails to load
-                    if (e.target.src !== quickSpicyLogo) {
-                      e.target.src = quickSpicyLogo
+                    if (e.target.src !== dooriqLogo) {
+                      e.target.src = dooriqLogo
                     }
                   }}
                 />

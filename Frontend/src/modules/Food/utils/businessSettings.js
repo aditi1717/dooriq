@@ -403,15 +403,16 @@ export const updateFavicon = (url) => {
 };
 
 const resolveLogoByModule = (settings, moduleName = "user") => {
-  if (!settings || typeof settings !== "object") return "";
+  const defaultLogo = "/dooriq-logo (2).png";
+  if (!settings || typeof settings !== "object") return defaultLogo;
   const moduleKey = String(moduleName || "").trim().toLowerCase();
   if (moduleKey === "restaurant") {
-    return settings.restaurantLogo?.url || settings.logo?.url || "";
+    return settings.restaurantLogo?.url || settings.logo?.url || defaultLogo;
   }
   if (moduleKey === "delivery") {
-    return settings.deliveryLogo?.url || settings.logo?.url || "";
+    return settings.deliveryLogo?.url || settings.logo?.url || defaultLogo;
   }
-  return settings.logo?.url || "";
+  return settings.logo?.url || defaultLogo;
 };
 
 const resolveFaviconByModule = (settings, moduleName = "user") => {
@@ -530,22 +531,22 @@ export const getCachedSettings = () => {
 
 /**
  * Get company name from business settings with fallback
- * @returns {string} Company name or default "SwitchEats Food"
+ * @returns {string} Company name or default "Dooriq Food"
  */
 export const getCompanyName = () => {
   const settings = getCachedSettings();
-  return settings?.companyName || "dooriq";
+  return settings?.companyName || "Dooriq";
 };
 
 /**
  * Get company name asynchronously (loads if not cached)
- * @returns {Promise<string>} Company name or default "dooriq"
+ * @returns {Promise<string>} Company name or default "Dooriq"
  */
 export const getCompanyNameAsync = async () => {
   try {
     const settings = await loadBusinessSettings();
-    return settings?.companyName || "dooriq";
+    return settings?.companyName || "Dooriq";
   } catch (error) {
-    return "dooriq";
+    return "Dooriq";
   }
 };

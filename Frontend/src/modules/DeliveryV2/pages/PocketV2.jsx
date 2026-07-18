@@ -491,21 +491,10 @@ export const PocketV2 = () => {
                </div>
              )}
 
-             <div onClick={() => navigate('/food/delivery/pocket/deductions')} className="bg-white p-5 rounded-[28px] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] active:bg-gray-50 transition-colors flex flex-col justify-between group">
-                <div
-                  className="w-10 h-10 rounded-2xl flex items-center justify-center mb-4 border group-active:scale-95 transition-transform"
-                  style={{
-                    backgroundColor: "rgba(var(--module-theme-rgb, 0,183,97), 0.10)",
-                    color: "var(--module-theme-color, #00B761)",
-                    borderColor: "rgba(var(--module-theme-rgb, 0,183,97), 0.22)",
-                  }}
-                >
-                   <FileText className="w-5 h-5" />
-                </div>
-                <p className="text-sm font-bold text-gray-700 leading-tight">Deduction<br/>List</p>
-             </div>
-
-             <div onClick={() => navigate('/food/delivery/pocket/details')} className="bg-white p-5 rounded-[28px] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] active:bg-gray-50 transition-colors flex flex-col justify-between group">
+             <div 
+                onClick={() => navigate('/food/delivery/pocket/details')} 
+                className={`bg-white p-5 rounded-[28px] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] active:bg-gray-50 transition-colors flex flex-col justify-between group ${codControlEnabled ? 'col-span-2' : ''}`}
+             >
                 <div
                   className="w-10 h-10 rounded-2xl flex items-center justify-center mb-4 border group-active:scale-95 transition-transform"
                   style={{

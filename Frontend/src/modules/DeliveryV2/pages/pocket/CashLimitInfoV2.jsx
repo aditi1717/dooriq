@@ -126,7 +126,6 @@ export const CashLimitInfoV2 = () => {
                       subLabel="Resets every Monday and increases with earnings"
                    />
                    <DetailRow label="Cash in hand" value={formatCurrency(walletState.cashInHand)} />
-                   <DetailRow label="Deductions" value={formatCurrency(walletState.deductions)} />
                    <DetailRow label="Pocket withdrawals" value={formatCurrency(walletState.pocketWithdrawals)} />
 
                    <div className="py-5 px-5 mt-2 flex justify-between items-center bg-emerald-50 border-t border-emerald-100/50">

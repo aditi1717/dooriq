@@ -94,8 +94,8 @@ export default function DeliveryCMSPage({ endpoint, title: defaultTitle, module 
                     <Mail className="w-6 h-6 text-[#E23744]" />
                   </div>
                   <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-2">Partner Email</h3>
-                  <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">{pageData.email || 'delivery@switcheats.com'}</p>
-                  <a href={`mailto:${pageData.email || 'delivery@switcheats.com'}`} className="mt-4 text-[10px] font-black text-[#E23744] uppercase tracking-widest hover:underline">Write to us</a>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">{pageData.email || 'delivery@dooriq.com'}</p>
+                  <a href={`mailto:${pageData.email || 'delivery@dooriq.com'}`} className="mt-4 text-[10px] font-black text-[#E23744] uppercase tracking-widest hover:underline">Write to us</a>
                 </div>
                 <div className="bg-gray-50 dark:bg-zinc-900/50 p-6 rounded-2xl border border-gray-100 dark:border-zinc-800 flex flex-col items-center text-center group transition-all hover:border-[#E23744]/30">
                   <div className="w-12 h-12 bg-white dark:bg-zinc-800 rounded-xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform">

@@ -9,8 +9,8 @@ export default function PromoRow({ handleVegModeChange, navigate, isVegMode, tog
   const promoCardsData = [
     {
       id: 'offers',
-      title: "Hot Deals",
-      value: "Offers",
+      title: "Discounts",
+      value: "Coupons",
       icon: discountPromoIcon,
     },
     {

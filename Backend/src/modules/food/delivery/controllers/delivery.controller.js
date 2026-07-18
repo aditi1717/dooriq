@@ -175,7 +175,7 @@ export const getWalletController = async (req, res, next) => {
             createdAt: tx?.createdAt || tx?.date
         });
 
-        if (requestedTypeRaw === 'bonus' || requestedTypeRaw === 'deposit' || requestedTypeRaw === 'deduction') {
+        if (requestedTypeRaw === 'bonus' || requestedTypeRaw === 'deposit' || requestedTypeRaw === 'deduction' || requestedTypeRaw === 'withdrawal') {
             if (!deliveryPartnerId || !mongoose.Types.ObjectId.isValid(deliveryPartnerId)) {
                 return sendResponse(res, 200, 'Wallet fetched successfully', { wallet: { transactions: [] } });
             }
@@ -199,7 +199,9 @@ export const getWalletController = async (req, res, next) => {
                     transactionId: b.transactionId
                 }));
             } else {
-                const allowedTypes = requestedTypeRaw === 'deposit'
+                const allowedTypes = requestedTypeRaw === 'withdrawal'
+                    ? new Set(['withdrawal'])
+                    : requestedTypeRaw === 'deposit'
                     ? new Set(['deposit'])
                     : new Set(['withdrawal', 'deposit']);
 

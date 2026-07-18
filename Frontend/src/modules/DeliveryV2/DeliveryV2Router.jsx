@@ -16,7 +16,7 @@ const SignupStep2 = lazy(() => import("./pages/auth/SignupStep2"))
 const DeliveryHomeV2 = lazy(() => import('./pages/DeliveryHomeV2'));
 const PayoutV2 = lazy(() => import('./pages/pocket/PayoutV2').then((m) => ({ default: m.PayoutV2 })));
 const PocketStatementV2 = lazy(() => import('./pages/pocket/PocketStatementV2').then((m) => ({ default: m.PocketStatementV2 })));
-const DeductionStatementV2 = lazy(() => import('./pages/pocket/DeductionStatementV2').then((m) => ({ default: m.DeductionStatementV2 })));
+
 const LimitSettlementV2 = lazy(() => import('./pages/pocket/LimitSettlementV2').then((m) => ({ default: m.LimitSettlementV2 })));
 const PocketBalanceV2 = lazy(() => import('./pages/pocket/PocketBalanceV2').then((m) => ({ default: m.PocketBalanceV2 })));
 const CashLimitInfoV2 = lazy(() => import('./pages/pocket/CashLimitInfoV2').then((m) => ({ default: m.CashLimitInfoV2 })));
@@ -103,7 +103,7 @@ const DeliveryV2Router = () => {
         {/* Financial Deep-Pages */}
         <Route path="pocket/payout" element={<ProtectedRoute><PayoutV2 /></ProtectedRoute>} />
         <Route path="pocket/statement" element={<ProtectedRoute><PocketStatementV2 /></ProtectedRoute>} />
-        <Route path="pocket/deductions" element={<ProtectedRoute><DeductionStatementV2 /></ProtectedRoute>} />
+
         <Route path="pocket/limit-settlement" element={<ProtectedRoute><LimitSettlementV2 /></ProtectedRoute>} />
         <Route path="pocket/balance" element={<ProtectedRoute><PocketBalanceV2 /></ProtectedRoute>} />
         <Route path="pocket/cash-limit" element={<ProtectedRoute><CashLimitInfoV2 /></ProtectedRoute>} />

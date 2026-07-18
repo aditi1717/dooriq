@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  ArrowLeft, ChevronDown, Loader2, Gift, 
-  CheckCircle2, Clock, Search, History, Calendar, Filter
+  ArrowLeft, ChevronDown, Loader2, 
+  CheckCircle2, Clock, Calendar, Filter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { deliveryAPI, restaurantAPI } from '@food/api';
 import { toast } from 'sonner';
 import useDeliveryBackNavigation from '../hooks/useDeliveryBackNavigation';
-import useCloseOnBrowserBack from '../hooks/useCloseOnBrowserBack';
 
 export const HistoryV2 = () => {
   const goBack = useDeliveryBackNavigation();
@@ -18,11 +17,7 @@ export const HistoryV2 = () => {
   const [showTripTypePicker, setShowTripTypePicker] = useState(false);
   const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [showBonusModal, setShowBonusModal] = useState(false);
-  const [bonusTransactions, setBonusTransactions] = useState([]);
-  const [bonusLoading, setBonusLoading] = useState(false);
   const [codControlEnabled, setCodControlEnabled] = useState(true);
-  useCloseOnBrowserBack(showBonusModal, () => setShowBonusModal(false), "history-bonus-modal");
 
   const tripTypes = ["ALL TRIPS", "Completed", "Cancelled", "Pending"];
 
@@ -136,10 +131,11 @@ export const HistoryV2 = () => {
   const extractItems = (trip) => {
     const items = trip.items || trip.orderItems || [];
     if (items.length === 0) return 'Standard Delivery';
-    const first = items[0];
-    const qty = first.quantity || first.qty || 1;
-    const name = first.name || first.itemName || 'Item';
-    return `${qty}x ${name}${items.length > 1 ? ` +${items.length - 1} more` : ''}`;
+    return items.map(item => {
+      const qty = item.quantity || item.qty || 1;
+      const name = item.name || item.itemName || 'Item';
+      return `${qty}x ${name}`;
+    }).join(', ');
   }
 
   return (
@@ -156,14 +152,7 @@ export const HistoryV2 = () => {
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">Your Milestones</p>
                </div>
              </div>
-             <button onClick={() => setShowBonusModal(true)} className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 border border-gray-200 shadow-sm relative active:scale-95 transition-all">
-                <Gift className="w-5 h-5" />
-                {bonusTransactions.length > 0 && (
-                   <span className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                      {bonusTransactions.length}
-                   </span>
-                )}
-             </button>
+             <div className="w-10" />
           </div>
 
           {/* 2. iOS Segmented Control for Tabs */}
@@ -299,7 +288,7 @@ export const HistoryV2 = () => {
                                    <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">{trip.orderId || 'ORDER-ID'}</h4>
                                 </div>
                                 <p className="text-base font-bold text-gray-800 leading-tight mb-1">{trip.restaurant || trip.restaurantName || 'Restaurant'}</p>
-                                <p className="text-xs text-gray-400 font-medium line-clamp-1">{extractItems(trip)}</p>
+                                <p className="text-xs text-gray-400 font-medium">{extractItems(trip)}</p>
                              </div>
                              <div className={`px-2.5 py-1 rounded-full border flex items-center justify-center ${isCompleted ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : isCancelled ? 'bg-red-50 border-red-100 text-red-600' : 'bg-orange-50 border-orange-100 text-orange-600'}`}>
                                 <span className="text-[9px] font-black uppercase tracking-wider">
@@ -337,62 +326,6 @@ export const HistoryV2 = () => {
           )}
        </div>
 
-       {/* Bonus Drawer (The Gift Modal) - Modernized */}
-       <AnimatePresence>
-          {showBonusModal && (
-             <div className="fixed inset-0 z-[1000] flex items-end">
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowBonusModal(false)} className="absolute inset-0 bg-gray-900/40 backdrop-blur-md" />
-                <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="relative w-full bg-white border-t border-gray-100 rounded-t-[40px] p-8 pb-12 shadow-[0_-20px_50px_rgba(0,0,0,0.1)] flex flex-col max-h-[85vh]">
-                   <button
-                      type="button"
-                      onClick={() => setShowBonusModal(false)}
-                      className="mx-auto mb-6 shrink-0 block px-6 py-3"
-                      aria-label="Close incentives popup"
-                   >
-                      <div className="w-12 h-1.5 bg-gray-200 rounded-full" />
-                   </button>
-                   
-                   <div className="text-center mb-8 shrink-0 relative">
-                      <div className="w-16 h-16 bg-emerald-50 rounded-[24px] flex items-center justify-center mx-auto mb-4 border border-emerald-100 text-emerald-500 shadow-inner">
-                         <Gift className="w-8 h-8" />
-                      </div>
-                      <h3 className="text-2xl font-black text-gray-900 tracking-tight mb-1">Incentives</h3>
-                      <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Extra bonuses from team</p>
-                   </div>
-                   
-                   <div className="flex-1 overflow-y-auto pr-1 space-y-3 no-scrollbar pb-6">
-                      {bonusLoading ? (
-                         <div className="py-12 flex flex-col items-center gap-3">
-                            <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Loading...</span>
-                         </div>
-                      ) : bonusTransactions.length > 0 ? bonusTransactions.map((tx, i) => (
-                         <div key={i} className="bg-gray-50 rounded-[24px] p-5 border border-gray-100 flex justify-between items-center relative overflow-hidden group">
-                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-400" />
-                            <div className="pl-2">
-                               <p className="text-xl font-black text-gray-900 mb-0.5">₹{Number(tx.amount || 0).toFixed(0)}</p>
-                               <p className="text-xs font-bold text-gray-500 line-clamp-1 mb-1">{tx.description || 'Bonus Payout'}</p>
-                               <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest">{new Date(tx.createdAt || tx.date).toLocaleDateString()}</p>
-                            </div>
-                            <span className="bg-white text-emerald-600 border border-emerald-100 text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-wider shadow-sm">
-                               DELIVERED
-                            </span>
-                         </div>
-                      )) : (
-                         <div className="py-12 text-center flex flex-col items-center bg-gray-50 rounded-[24px] border border-gray-100">
-                             <Search className="w-10 h-10 text-gray-300 mb-3" />
-                             <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">No Incentives Yet</p>
-                         </div>
-                      )}
-                   </div>
-                   
-                   <button onClick={() => setShowBonusModal(false)} className="w-full py-5 bg-gray-900 text-white rounded-[24px] font-black text-sm tracking-widest uppercase active:scale-[0.98] transition-all shrink-0 mt-4 shadow-xl shadow-gray-900/20">
-                      Okay, Got It
-                   </button>
-                </motion.div>
-             </div>
-          )}
-       </AnimatePresence>
     </div>
   );
 };

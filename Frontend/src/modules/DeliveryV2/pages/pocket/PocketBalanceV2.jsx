@@ -252,10 +252,8 @@ export const PocketBalanceV2 = () => {
                 <div className="bg-white rounded-[32px] p-2 border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
                    <div className="px-4">
                       <DetailRow label="Earnings" value={formatCurrency(walletState.weeklyEarnings)} />
-                      <DetailRow label="Bonus" value={formatCurrency(walletState.totalBonus)} />
                       <DetailRow label="Amount withdrawn" value={formatCurrency(walletState.totalWithdrawn)} />
                       <DetailRow label="Cash collected" value={formatCurrency(walletState.cashCollected)} />
-                      <DetailRow label="Deductions" value={formatCurrency(walletState.deductions)} />
                       <DetailRow label="Pocket balance" value={formatCurrency(walletState.pocketBalance)} />
                       <DetailRow 
                          label="Min. withdrawal amount" 

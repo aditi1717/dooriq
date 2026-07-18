@@ -30,13 +30,16 @@ const resolveDeliveryBackPath = ({ pathname, state }) => {
   if (normalizedPath === "/otp") return explicitBackPath || "/food/delivery/login"
   if (normalizedPath === "/terms") return explicitBackPath || "/food/delivery/signup"
 
+  if (normalizedPath === "/help/id-card") {
+    return "/food/delivery/profile"
+  }
+
   if (
     normalizedPath === "/profile/details" ||
     normalizedPath === "/profile/bank" ||
     normalizedPath === "/profile/documents" ||
     normalizedPath === "/profile/terms" ||
     normalizedPath === "/profile/privacy" ||
-    normalizedPath === "/help/id-card" ||
     normalizedPath === "/help/tickets" ||
     normalizedPath === "/help/order-emergency" ||
     normalizedPath === "/help/content"
@@ -54,7 +57,6 @@ const resolveDeliveryBackPath = ({ pathname, state }) => {
   if (
     normalizedPath === "/pocket/payout" ||
     normalizedPath === "/pocket/statement" ||
-    normalizedPath === "/pocket/deductions" ||
     normalizedPath === "/pocket/limit-settlement" ||
     normalizedPath === "/pocket/balance" ||
     normalizedPath === "/pocket/cash-limit" ||
