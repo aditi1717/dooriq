@@ -263,9 +263,16 @@ export const getCoinsInfo = async (userId) => {
     const now = new Date();
     const transactions = (wallet.coinTransactions || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    let totalDeductions = transactions
-        .filter((tx) => tx.type === "redeemed" || tx.type === "expired")
+    const totalRefunded = transactions
+        .filter((tx) => tx.type === "refunded")
         .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+
+    let totalDeductions = Math.max(0,
+        transactions
+            .filter((tx) => tx.type === "redeemed" || tx.type === "expired")
+            .reduce((sum, tx) => sum + (tx.amount || 0), 0)
+        - totalRefunded
+    );
 
     const earnedTx = transactions
         .filter((tx) => tx.type === "earned")

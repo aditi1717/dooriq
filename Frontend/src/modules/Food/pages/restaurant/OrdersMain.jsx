@@ -2374,9 +2374,10 @@ export default function OrdersMain() {
                         const raw = (popupOrder || newOrder)?.paymentMethod || (popupOrder || newOrder)?.payment?.method;
                         const m = raw != null ? String(raw).toLowerCase().trim() : "";
                         const isCod = m === "cash" || m === "cod";
+                        const isWallet = m === "wallet";
                         return (
-                          <p className={`text-sm font-black leading-tight ${isCod ? "text-amber-600" : "text-emerald-600"}`}>
-                            {isCod ? "Cash on Delivery" : "Online Paid"}
+                          <p className={`text-sm font-black leading-tight ${isCod ? "text-amber-600" : isWallet ? "text-blue-600" : "text-emerald-600"}`}>
+                            {isCod ? "Cash on Delivery" : isWallet ? "Wallet" : "Online Paid"}
                           </p>
                         );
                       })()}
@@ -2764,12 +2765,13 @@ export default function OrdersMain() {
                   const normalized =
                     raw != null ? String(raw).toLowerCase().trim() : "";
                   const isCod = normalized === "cash" || normalized === "cod";
+                  const isWallet = normalized === "wallet";
                   return (
                     <span>
                       Payment:{" "}
                       <span
-                        className={`font-medium ${isCod ? "text-amber-700" : "text-black"}`}>
-                        {isCod ? "Cash on Delivery" : "Paid online"}
+                        className={`font-medium ${isCod ? "text-amber-700" : isWallet ? "text-blue-600" : "text-black"}`}>
+                        {isCod ? "Cash on Delivery" : isWallet ? "Wallet" : "Paid online"}
                       </span>
                     </span>
                   );

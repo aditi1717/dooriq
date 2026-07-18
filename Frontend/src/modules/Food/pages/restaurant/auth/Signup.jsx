@@ -23,10 +23,23 @@ const countryCodes = [
 
 export default function RestaurantSignup() {
   const navigate = useNavigate()
-  const [formData, setFormData] = useState({
-    phone: "",
-    countryCode: "+91",
-    name: "",
+  const [formData, setFormData] = useState(() => {
+    try {
+      const savedPhone = sessionStorage.getItem("restaurant_signup_phone") || ""
+      const savedName = sessionStorage.getItem("restaurant_signup_name") || ""
+      const savedCode = sessionStorage.getItem("restaurant_signup_country_code") || "+91"
+      return {
+        phone: savedPhone,
+        countryCode: savedCode,
+        name: savedName,
+      }
+    } catch {
+      return {
+        phone: "",
+        countryCode: "+91",
+        name: "",
+      }
+    }
   })
   const [errors, setErrors] = useState({
     phone: "",
@@ -62,9 +75,18 @@ export default function RestaurantSignup() {
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData({
-      ...formData,
-      [name]: value,
+    setFormData((prev) => {
+      const updated = {
+        ...prev,
+        [name]: value,
+      }
+      try {
+        if (name === "phone") sessionStorage.setItem("restaurant_signup_phone", value)
+        if (name === "name") sessionStorage.setItem("restaurant_signup_name", value)
+      } catch (err) {
+        console.error(err)
+      }
+      return updated
     })
 
     // Real-time validation
@@ -76,9 +98,17 @@ export default function RestaurantSignup() {
   }
 
   const handleCountryCodeChange = (value) => {
-    setFormData({
-      ...formData,
-      countryCode: value,
+    setFormData((prev) => {
+      const updated = {
+        ...prev,
+        countryCode: value,
+      }
+      try {
+        sessionStorage.setItem("restaurant_signup_country_code", value)
+      } catch (err) {
+        console.error(err)
+      }
+      return updated
     })
   }
 

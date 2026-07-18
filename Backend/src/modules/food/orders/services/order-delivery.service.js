@@ -66,27 +66,28 @@ function emitOrderUpdate(order, deliveryPartnerId) {
     let riderBody = '';
 
     const orderId = order._id.toString();
+    const displayOrderId = order.order_id || order.orderId || orderId;
 
     if (status === 'picked_up') {
       userTitle = 'Order on the way!';
-      userBody = `Partner has picked up your order #${orderId} and is heading your way.`;
+      userBody = `Partner has picked up your order #${displayOrderId} and is heading your way.`;
       riderTitle = 'Order picked up!';
-      riderBody = `You have picked up order #${orderId}. Proceed to the customer location.`;
+      riderBody = `You have picked up order #${displayOrderId}. Proceed to the customer location.`;
     } else if (status === 'reached_drop') {
       userTitle = 'Partner nearby!';
-      userBody = `Your delivery partner has reached your location for order #${orderId}.`;
+      userBody = `Your delivery partner has reached your location for order #${displayOrderId}.`;
       riderTitle = 'Arrived at drop!';
-      riderBody = `You have reached the customer location for order #${orderId}.`;
+      riderBody = `You have reached the customer location for order #${displayOrderId}.`;
     } else if (status === 'delivered') {
-      userTitle = `Order #${orderId} delivered!`;
+      userTitle = `Order #${displayOrderId} delivered!`;
       userBody = 'Hope you enjoyed your meal! Don\'t forget to rate your experience.';
       riderTitle = 'Delivery successful!';
-      riderBody = `Order #${orderId} has been successfully delivered.`;
+      riderBody = `Order #${displayOrderId} has been successfully delivered.`;
 
       if (order.payment?.method === 'cash' || order.paymentMethod === 'cash') {
         riderTitle = 'Payment collected!';
         const amt = order.pricing?.total || order.amounts?.totalCustomerPaid || 0;
-        riderBody = `You have collected Rs ${amt} cash for Order #${orderId}.`;
+        riderBody = `You have collected Rs ${amt} cash for Order #${displayOrderId}.`;
       }
     }
 
@@ -436,7 +437,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
           { ownerType: 'DELIVERY_PARTNER', ownerId: deliveryPartnerId },
         ],
         {
-          title: `Order ${order._id.toString()} accepted`,
+          title: `Order ${order.order_id || order.orderId || order._id.toString()} accepted`,
           body: 'A delivery partner has accepted your order.',
           data: {
             type: 'delivery_accepted',
@@ -570,11 +571,9 @@ export async function confirmReachedPickupDelivery(orderId, deliveryPartnerId) {
         title: 'Rider arrived!',
         body: `${partner?.name || 'The delivery partner'} has arrived at ${
           restaurant?.restaurantName || 'your restaurant'
-        } to pick up Order .`,
-        // #${order._id.toString()}
+        } to pick up Order #${order.order_id || order.orderId || order._id.toString()}.`,
         data: {
           type: 'rider_arrived',
-          // orderId: String(order._id.toString()),
           orderMongoId: String(order._id),
           partnerName: partner?.name || '',
         },

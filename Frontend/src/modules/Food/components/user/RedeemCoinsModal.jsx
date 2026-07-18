@@ -20,9 +20,16 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
     const now = new Date();
 
     // 1. Calculate total redeemed/expired coins
-    let totalDeductions = coinsInfo.transactions
-      .filter((tx) => tx.type === "redeemed" || tx.type === "expired")
+    const totalRefunded = coinsInfo.transactions
+      .filter((tx) => tx.type === "refunded")
       .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+
+    let totalDeductions = Math.max(0,
+      coinsInfo.transactions
+        .filter((tx) => tx.type === "redeemed" || tx.type === "expired")
+        .reduce((sum, tx) => sum + (tx.amount || 0), 0)
+      - totalRefunded
+    );
 
     // 2. Get earned transactions, sorted from oldest to newest
     const earnedTx = coinsInfo.transactions
@@ -49,13 +56,16 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
     return activeCoinBatches.reduce((sum, batch) => sum + (batch.amount || 0), 0);
   }, [activeCoinBatches]);
 
-  const [coinsToRedeem, setCoinsToRedeem] = useState(0);
+  const [coinsToRedeem, setCoinsToRedeem] = useState(1);
 
   useEffect(() => {
     if (open) {
-      setCoinsToRedeem(maxCoins);
+      // Reset form to fresh state every time the modal opens
+      setCoinsToRedeem(Math.max(1, maxCoins));
+      setScreenshotFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [maxCoins, open]);
+  }, [open, maxCoins]);
 
   const formatExpiryDate = (dateString) => {
     if (!dateString) return "";
@@ -196,15 +206,23 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
               Coins to Redeem (Max: {maxCoins})
             </label>
             <input
-              type="number"
-              min="1"
-              max={maxCoins}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={coinsToRedeem}
-              onChange={(e) => setCoinsToRedeem(Number(e.target.value))}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9]/g, "")
+                if (raw === "") { setCoinsToRedeem(""); return }
+                const num = Math.min(Number(raw), maxCoins)
+                setCoinsToRedeem(num < 1 ? 1 : num)
+              }}
+              onBlur={() => {
+                if (!coinsToRedeem || Number(coinsToRedeem) < 1) setCoinsToRedeem(1)
+              }}
               className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#0a0a0a] px-3 font-semibold text-base text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none"
             />
             <p className="text-xs text-gray-500">
-              You will get <strong className="text-green-600">₹{coinsToRedeem * (coinsInfo?.settings?.coinToWalletValue || 10)}</strong> in your wallet upon approval.
+              You will get <strong className="text-green-600">₹{(Number(coinsToRedeem) || 0) * (coinsInfo?.settings?.coinToWalletValue || 10)}</strong> in your wallet upon approval.
             </p>
             {activeCoinBatches.length > 0 && (
               <div className="mt-2.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/30 p-2.5 rounded-lg flex flex-col gap-1">

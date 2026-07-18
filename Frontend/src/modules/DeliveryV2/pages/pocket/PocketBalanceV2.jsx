@@ -60,6 +60,25 @@ export const PocketBalanceV2 = () => {
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
 
+  // Lock background scroll when modal is open (works on iOS Safari + Android)
+  useEffect(() => {
+    if (!showWithdrawModal) return;
+    const scrollY = window.scrollY;
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      document.body.style.overflow = "";
+      window.scrollTo(0, scrollY);
+    };
+  }, [showWithdrawModal]);
+
   useEffect(() => {
     const fetchData = async () => {
       try {

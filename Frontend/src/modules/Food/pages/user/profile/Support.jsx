@@ -9,21 +9,58 @@ import { orderAPI, restaurantAPI, supportAPI, authAPI } from "@food/api"
 import { toast } from "sonner"
 import { ArrowLeft, Building2, HelpCircle, ShoppingBag, ChevronRight } from "lucide-react"
 
+const SESSION_KEY = "support_form_state"
+
+const readSession = () => {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+const writeSession = (data) => {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(data))
+  } catch {}
+}
+
+const clearSession = () => {
+  try {
+    sessionStorage.removeItem(SESSION_KEY)
+  } catch {}
+}
+
 export default function Support() {
-  const [step, setStep] = useState("pick")
-  const [type, setType] = useState("")
+  const _saved = readSession()
+
+  const [step, setStep] = useState(_saved?.step || "pick")
+  const [type, setType] = useState(_saved?.type || "")
   const [orders, setOrders] = useState([])
   const [restaurants, setRestaurants] = useState([])
-  const [selectedOrder, setSelectedOrder] = useState(null)
-  const [selectedRestaurant, setSelectedRestaurant] = useState(null)
-  const [issueType, setIssueType] = useState("")
-  const [subject, setSubject] = useState("")
-  const [description, setDescription] = useState("")
+  const [selectedOrder, setSelectedOrder] = useState(_saved?.selectedOrder || null)
+  const [selectedRestaurant, setSelectedRestaurant] = useState(_saved?.selectedRestaurant || null)
+  const [issueType, setIssueType] = useState(_saved?.issueType || "")
+  const [subject, setSubject] = useState(_saved?.subject || "")
+  const [description, setDescription] = useState(_saved?.description || "")
   const [submitting, setSubmitting] = useState(false)
   const [tickets, setTickets] = useState([])
   const [loadingTickets, setLoadingTickets] = useState(false)
-  const [orderSearch, setOrderSearch] = useState("")
-  const [restaurantSearch, setRestaurantSearch] = useState("")
+  const [orderSearch, setOrderSearch] = useState(_saved?.orderSearch || "")
+  const [restaurantSearch, setRestaurantSearch] = useState(_saved?.restaurantSearch || "")
+
+  // Persist form state whenever it changes
+  useEffect(() => {
+    writeSession({ step, type, selectedOrder, selectedRestaurant, issueType, subject, description, orderSearch, restaurantSearch })
+  }, [step, type, selectedOrder, selectedRestaurant, issueType, subject, description, orderSearch, restaurantSearch])
+
+  // Re-fetch list data when restoring a step that needs it
+  useEffect(() => {
+    if (step === "choose_order" || step === "order_issue") fetchOrders()
+    if (step === "choose_restaurant" || step === "restaurant_issue") fetchRestaurants()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     setLoadingTickets(true)
@@ -78,6 +115,19 @@ export default function Support() {
     }
   }
 
+  const resetForm = () => {
+    clearSession()
+    setStep("pick")
+    setType("")
+    setSelectedOrder(null)
+    setSelectedRestaurant(null)
+    setIssueType("")
+    setSubject("")
+    setDescription("")
+    setOrderSearch("")
+    setRestaurantSearch("")
+  }
+
   const submitTicket = async (payload) => {
     setSubmitting(true)
     try {
@@ -86,6 +136,7 @@ export default function Support() {
       if (!data?.success) throw new Error(data?.message || "Failed")
       toast.success("Ticket created")
       setTickets((prev) => [data?.data?.ticket, ...prev])
+      clearSession()
       setStep("pick")
       setType("")
       setSelectedOrder(null)
@@ -93,6 +144,8 @@ export default function Support() {
       setIssueType("")
       setSubject("")
       setDescription("")
+      setOrderSearch("")
+      setRestaurantSearch("")
     } catch (e) {
       const message =
         e?.response?.data?.message ||
@@ -144,24 +197,22 @@ export default function Support() {
 
   const handleOrderSearchChange = (value) => {
     setOrderSearch(value)
-    const normalized = value.trim().toLowerCase()
-    if (!normalized) return
-    const selected = filteredOrders.find((o) => getOrderLabel(o).toLowerCase() === normalized)
-    if (selected) {
-      setSelectedOrder(selected)
-      setStep("order_issue")
-    }
+  }
+
+  const selectOrder = (order) => {
+    setSelectedOrder(order)
+    setOrderSearch(getOrderLabel(order))
+    setStep("order_issue")
   }
 
   const handleRestaurantSearchChange = (value) => {
     setRestaurantSearch(value)
-    const normalized = value.trim().toLowerCase()
-    if (!normalized) return
-    const selected = filteredRestaurants.find((r) => getRestaurantLabel(r).toLowerCase() === normalized)
-    if (selected) {
-      setSelectedRestaurant(selected)
-      setStep("restaurant_issue")
-    }
+  }
+
+  const selectRestaurant = (restaurant) => {
+    setSelectedRestaurant(restaurant)
+    setRestaurantSearch(getRestaurantLabel(restaurant))
+    setStep("restaurant_issue")
   }
 
   const TicketList = () => (
@@ -259,26 +310,43 @@ export default function Support() {
               <div className="space-y-3">
                 <h3 className="font-semibold text-slate-900 dark:text-white">Select an order</h3>
                 {orders.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="flex flex-col gap-2">
+                    {/* Suggestion list — rendered ABOVE the input so it stays above the keyboard */}
+                    {filteredOrders.length > 0 && (
+                      <div
+                        className="w-full max-h-52 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e1e1e] shadow-lg divide-y divide-slate-100 dark:divide-slate-800"
+                        style={{ WebkitOverflowScrolling: "touch" }}
+                      >
+                        {filteredOrders.map((o) => (
+                          <button
+                            key={o._id || o.id}
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); selectOrder(o) }}
+                            onTouchStart={(e) => { e.preventDefault(); selectOrder(o) }}
+                            className="w-full text-left px-4 py-3 text-sm text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+                          >
+                            {getOrderLabel(o)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {filteredOrders.length === 0 && orderSearch.trim() && (
+                      <p className="text-sm text-slate-500">No matching orders found</p>
+                    )}
                     <Input
-                      list="support-order-options"
                       value={orderSearch}
                       onChange={(e) => handleOrderSearchChange(e.target.value)}
-                      placeholder="Select/search order"
+                      placeholder="Search by restaurant or order ID"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
                     />
-                    <datalist id="support-order-options">
-                      {filteredOrders.map((o) => (
-                        <option key={o._id || o.id} value={getOrderLabel(o)}>
-                          {getOrderLabel(o)}
-                        </option>
-                      ))}
-                    </datalist>
-                    {filteredOrders.length === 0 ? <p className="text-sm text-slate-500">No matching orders found</p> : null}
                   </div>
                 ) : (
                   <p className="text-sm text-slate-500">No recent orders found</p>
                 )}
-                <Button variant="outline" onClick={() => setStep("pick")}>Back</Button>
+                <Button variant="outline" onClick={resetForm}>Back</Button>
               </div>
             )}
 
@@ -295,7 +363,7 @@ export default function Support() {
                   <Button onClick={() => submitTicket({ type: "order", orderId: selectedOrder._id || selectedOrder.id, issueType, description })} disabled={!issueType || submitting} className="text-white">
                     {submitting ? "Submitting..." : "Submit Ticket"}
                   </Button>
-                  <Button variant="outline" onClick={() => setStep("pick")}>Cancel</Button>
+                  <Button variant="outline" onClick={resetForm}>Cancel</Button>
                 </div>
               </div>
             )}
@@ -304,26 +372,43 @@ export default function Support() {
               <div className="space-y-3">
                 <h3 className="font-semibold text-slate-900 dark:text-white">Select a restaurant</h3>
                 {restaurants.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="flex flex-col gap-2">
+                    {/* Suggestion list — rendered ABOVE the input so it stays above the keyboard */}
+                    {filteredRestaurants.length > 0 && (
+                      <div
+                        className="w-full max-h-52 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1e1e1e] shadow-lg divide-y divide-slate-100 dark:divide-slate-800"
+                        style={{ WebkitOverflowScrolling: "touch" }}
+                      >
+                        {filteredRestaurants.map((r) => (
+                          <button
+                            key={r._id || r.id}
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); selectRestaurant(r) }}
+                            onTouchStart={(e) => { e.preventDefault(); selectRestaurant(r) }}
+                            className="w-full text-left px-4 py-3 text-sm text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+                          >
+                            {getRestaurantLabel(r)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {filteredRestaurants.length === 0 && restaurantSearch.trim() && (
+                      <p className="text-sm text-slate-500">No matching restaurants found</p>
+                    )}
                     <Input
-                      list="support-restaurant-options"
                       value={restaurantSearch}
                       onChange={(e) => handleRestaurantSearchChange(e.target.value)}
-                      placeholder="Select/search restaurant"
+                      placeholder="Search by name or city"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
                     />
-                    <datalist id="support-restaurant-options">
-                      {filteredRestaurants.map((r) => (
-                        <option key={r._id || r.id} value={getRestaurantLabel(r)}>
-                          {getRestaurantLabel(r)}
-                        </option>
-                      ))}
-                    </datalist>
-                    {filteredRestaurants.length === 0 ? <p className="text-sm text-slate-500">No matching restaurants found</p> : null}
                   </div>
                 ) : (
                   <p className="text-sm text-slate-500">No restaurants found</p>
                 )}
-                <Button variant="outline" onClick={() => setStep("pick")}>Back</Button>
+                <Button variant="outline" onClick={resetForm}>Back</Button>
               </div>
             )}
 
@@ -340,7 +425,7 @@ export default function Support() {
                   <Button onClick={() => submitTicket({ type: "restaurant", restaurantId: selectedRestaurant._id || selectedRestaurant.id, issueType, description })} disabled={!issueType || submitting} className="text-white">
                     {submitting ? "Submitting..." : "Submit Ticket"}
                   </Button>
-                  <Button variant="outline" onClick={() => setStep("pick")}>Cancel</Button>
+                  <Button variant="outline" onClick={resetForm}>Cancel</Button>
                 </div>
               </div>
             )}
@@ -353,7 +438,7 @@ export default function Support() {
                   <Button onClick={() => submitTicket({ type: "other", issueType: subject || "Other", description })} disabled={!subject || submitting} className="text-white">
                     {submitting ? "Submitting..." : "Submit Ticket"}
                   </Button>
-                  <Button variant="outline" onClick={() => setStep("pick")}>Cancel</Button>
+                  <Button variant="outline" onClick={resetForm}>Cancel</Button>
                 </div>
               </div>
             )}

@@ -58,6 +58,10 @@ export default function ProfessionalSearch() {
   const [history, setHistory] = useState([])
   const [availabilityTick, setAvailabilityTick] = useState(Date.now())
 
+  const recognitionRef = useRef(null)
+  const isInitialVoiceSearchRef = useRef(false)
+  const hasRecognizedResultRef = useRef(false)
+
   // Refresh availability every minute
   useEffect(() => {
     const id = setInterval(() => setAvailabilityTick(Date.now()), 60000)
@@ -72,6 +76,7 @@ export default function ProfessionalSearch() {
 
     // Trigger voice search if param is present
     if (searchParams.get('voice') === 'true') {
+      isInitialVoiceSearchRef.current = true;
       handleVoiceSearch();
       // Clear the param so it doesn't trigger again on reload
       const newParams = new URLSearchParams(searchParams);
@@ -146,10 +151,24 @@ export default function ProfessionalSearch() {
 
     const recognition = new SpeechRecognition()
     recognition.lang = 'en-IN'
+    recognitionRef.current = recognition
+    hasRecognizedResultRef.current = false
+
     recognition.onstart = () => setIsListening(true)
-    recognition.onend = () => setIsListening(false)
+    recognition.onend = () => {
+      setIsListening(false)
+      recognitionRef.current = null
+      if (isInitialVoiceSearchRef.current && !hasRecognizedResultRef.current) {
+        navigate("/food/user")
+      }
+    }
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error", event.error)
+      setIsListening(false)
+    }
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript
+      hasRecognizedResultRef.current = true
       setQuery(transcript.trim())
       addToHistory(transcript.trim())
     }
@@ -444,7 +463,17 @@ export default function ProfessionalSearch() {
 
           <Button
             variant="ghost"
-            onClick={() => setIsListening(false)}
+            onClick={() => {
+              setIsListening(false);
+              if (recognitionRef.current) {
+                try {
+                  recognitionRef.current.abort();
+                } catch (e) {}
+              }
+              if (isInitialVoiceSearchRef.current) {
+                navigate("/food/user");
+              }
+            }}
             className="mt-16 text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-full px-8"
           >
             Cancel

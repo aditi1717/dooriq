@@ -584,7 +584,6 @@ export default function UserOrderDetails() {
               </div>
 
               <div className="flex items-center justify-center gap-2 pt-1 text-[#EB590E] font-bold text-sm">
-                <span>??</span>
                 <span>
                   You saved ₹{Number(savings).toFixed(2)} on this order!
                 </span>

@@ -776,7 +776,7 @@ export async function verifyPayment(userId, dto) {
   // Notify Customer about payment success
   await notifyOwnersSafely([{ ownerType: "USER", ownerId: userId }], {
     title: "Payment Successful! ✅",
-    body: `We have received your payment of ₹${order.payment.amountDue} for Order #${order._id.toString()}.`,
+    body: `We have received your payment of ₹${order.payment.amountDue} for Order #${order.order_id || order.orderId || order._id.toString()}.`,
     image: "https://i.ibb.co/5GzXz7r/Switcheats-Brand-Image.png",
     data: {
       type: "payment_success",
@@ -1344,17 +1344,17 @@ export async function updateOrderStatusRestaurant(
   }
 
   // Custom messages / titles for status updates
-  let title = `Order ${order._id.toString()} updated`;
+  let title = `Order ${order.order_id || order.orderId || order._id.toString()} updated`;
   let body = `Status changed to ${String(orderStatus).replace(/_/g, " ")}`;
 
   if (orderStatus === "confirmed") {
-    title = "Order Accepted! 🧑‍🍳";
+    title = "Order Accepted!";
     body = "The restaurant has accepted your order and is starting to prepare it.";
   } else if (orderStatus === "preparing") {
-    title = "Food is being prepared! 🍳";
+    title = "Food is being prepared!";
     body = "Your food is currently being prepared by the restaurant.";
   } else if (orderStatus === "ready_for_pickup") {
-    title = "Food is ready! 🛍️";
+    title = "Food is ready!";
     body = "Your order is ready and waiting to be picked up.";
   } else if (String(orderStatus).includes("cancel")) {
     const isOnlinePaid = order.payment.method === "razorpay" && (order.payment.status === "paid" || order.payment.status === "refunded");
@@ -1365,7 +1365,7 @@ export async function updateOrderStatusRestaurant(
         ? ` Refund of ₹${order.pricing.total} has been credited back to your wallet.`
         : "");
     
-    title = "Order Cancelled ❌";
+    title = "Order Cancelled";
     body = (note && String(note).trim()) ? note : `Unfortunately, your order has been cancelled by the restaurant.${refundDetail}`;
   }
 
@@ -1928,17 +1928,17 @@ export async function updateOrderStatusAdmin(orderId, orderStatus, note = "", ad
         notifyList.push({ ownerType: "DELIVERY_PARTNER", ownerId: order.dispatch.deliveryPartnerId });
     }
 
-    let title = `Order Status Updated 📋`;
+    let title = `Order Status Updated`;
     let body = `Order #${order.order_id || order._id} status changed to ${String(orderStatus).replace(/_/g, " ")} by support.`;
 
     if (orderStatus === "confirmed") {
-        title = "Order Accepted! 🧑‍🍳";
+        title = "Order Accepted!";
         body = "The order has been accepted and is starting to be prepared.";
     } else if (orderStatus === "preparing") {
-        title = "Food is being prepared! 🍳";
+        title = "Food is being prepared!";
         body = "Your food is currently being prepared by the restaurant.";
     } else if (orderStatus === "ready_for_pickup") {
-        title = "Food is ready! 🛍️";
+        title = "Food is ready!";
         body = "Your order is ready and waiting to be picked up.";
     } else if (String(orderStatus).includes("cancel")) {
         const finalPaymentMethod = String(order.payment?.method || "cash").toLowerCase();
@@ -1952,7 +1952,7 @@ export async function updateOrderStatusAdmin(orderId, orderStatus, note = "", ad
             ? ` Refund of ₹${order.pricing?.total || 0} has been credited back to your wallet.`
             : "");
 
-        title = "Order Cancelled ❌";
+        title = "Order Cancelled";
         body = (note && String(note).trim()) ? note : `Unfortunately, your order has been cancelled by support.${refundDetail}`;
     }
 

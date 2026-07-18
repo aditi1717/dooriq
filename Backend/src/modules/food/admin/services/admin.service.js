@@ -5133,10 +5133,23 @@ export async function getDeliveryWithdrawals(query = {}) {
         filter.status = query.status.toLowerCase();
     }
 
-    if (query.search) {
-        // Search by amount or placeholder for name (name requires join usually)
-        if (!isNaN(query.search)) {
-            filter.amount = Number(query.search);
+    if (query.search && String(query.search).trim()) {
+        const term = String(query.search).trim();
+        const searchRegex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        
+        const partners = await FoodDeliveryPartner.find({
+            $or: [
+                { name: searchRegex },
+                { phone: searchRegex }
+            ]
+        }).select('_id').lean();
+        
+        filter.$or = [
+            { deliveryPartnerId: { $in: partners.map(p => p._id) } }
+        ];
+        
+        if (!isNaN(term)) {
+            filter.$or.push({ amount: Number(term) });
         }
     }
 
@@ -5145,7 +5158,7 @@ export async function getDeliveryWithdrawals(query = {}) {
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
-            .populate('deliveryPartnerId', 'name phone profilePartnerId upiId upiQrCode')
+            .populate('deliveryPartnerId', 'name phone upiId upiQrCode')
             .lean(),
         FoodDeliveryWithdrawal.countDocuments(filter)
     ]);
@@ -5155,7 +5168,7 @@ export async function getDeliveryWithdrawals(query = {}) {
         id: w._id,
         deliveryName: w.deliveryPartnerId?.name || 'N/A',
         deliveryPhone: w.deliveryPartnerId?.phone || 'N/A',
-        deliveryIdString: w.deliveryPartnerId?.profilePartnerId || 'N/A',
+        deliveryIdString: w.deliveryPartnerId?.phone || 'N/A',
         status: w.status.charAt(0).toUpperCase() + w.status.slice(1)
     }));
 

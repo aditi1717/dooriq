@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft, IndianRupee, Plus, ArrowDownCircle, ArrowUpCircle, RefreshCw, Loader2, XCircle } from "lucide-react"
+import { ArrowLeft, IndianRupee, Plus, ArrowDownCircle, ArrowUpCircle, RefreshCw, Loader2, XCircle, X } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { Card, CardContent } from "@food/components/ui/card"
 import AnimatedPage from "@food/components/user/AnimatedPage"
@@ -46,6 +46,46 @@ export default function Wallet() {
       return []
     }
   })
+
+  const [screenshotModal, setScreenshotModal] = useState(null) // holds the URL or null
+
+  const openScreenshot = useCallback((url) => {
+    if (!url) return
+    setScreenshotModal(url)
+    // Push a dummy history entry so the back button can close the modal
+    window.history.pushState({ screenshotModal: true }, "")
+  }, [])
+
+  const closeScreenshot = useCallback(() => {
+    setScreenshotModal(null)
+  }, [])
+
+  // Lock background scroll when modal is open (works on iOS Safari + Android)
+  useEffect(() => {
+    if (!screenshotModal) return
+    const scrollY = window.scrollY
+    document.body.style.position = "fixed"
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.left = "0"
+    document.body.style.right = "0"
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.position = ""
+      document.body.style.top = ""
+      document.body.style.left = ""
+      document.body.style.right = ""
+      document.body.style.overflow = ""
+      window.scrollTo(0, scrollY)
+    }
+  }, [screenshotModal])
+
+  // Close modal on browser back
+  useEffect(() => {
+    if (!screenshotModal) return
+    const handlePop = () => closeScreenshot()
+    window.addEventListener("popstate", handlePop)
+    return () => window.removeEventListener("popstate", handlePop)
+  }, [screenshotModal, closeScreenshot])
 
   const dismissRequest = (id) => {
     const updated = [...dismissedRequests, id]
@@ -142,9 +182,16 @@ export default function Wallet() {
     const now = new Date()
 
     // 1. Calculate total redeemed/expired coins
-    let totalDeductions = coinsInfo.transactions
-      .filter((tx) => tx.type === "redeemed" || tx.type === "expired")
+    const totalRefunded = coinsInfo.transactions
+      .filter((tx) => tx.type === "refunded")
       .reduce((sum, tx) => sum + (tx.amount || 0), 0)
+
+    let totalDeductions = Math.max(0,
+      coinsInfo.transactions
+        .filter((tx) => tx.type === "redeemed" || tx.type === "expired")
+        .reduce((sum, tx) => sum + (tx.amount || 0), 0)
+      - totalRefunded
+    )
 
     // 2. Clone earned transactions and sort oldest to newest (to apply deductions FIFO)
     const earnedTx = coinsInfo.transactions
@@ -724,14 +771,17 @@ export default function Wallet() {
                                 )}
 
                                 <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-800/60 pt-2 text-xs">
-                                  <a
-                                    href={item.screenshotUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium inline-flex items-center gap-1"
-                                  >
-                                    View Screenshot ↗
-                                  </a>
+                                  {item.screenshotUrl ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openScreenshot(item.screenshotUrl)}
+                                      className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium inline-flex items-center gap-1"
+                                    >
+                                      View Screenshot ↗
+                                    </button>
+                                  ) : (
+                                    <span className="text-gray-400 text-xs">No screenshot</span>
+                                  )}
                                   {item.processedAt && (
                                     <span className="text-gray-400 dark:text-gray-500">
                                       Processed: {new Date(item.processedAt).toLocaleDateString("en-IN")}
@@ -818,6 +868,32 @@ export default function Wallet() {
           }}
         />
       )}
+      {/* Screenshot Lightbox Modal */}
+      {screenshotModal && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm"
+          onClick={closeScreenshot}
+        >
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); window.history.back() }}
+            className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/25 transition-colors"
+            aria-label="Close screenshot"
+          >
+            <X className="h-6 w-6 text-white" />
+          </button>
+
+          {/* Image — stop click from closing when tapping image itself */}
+          <img
+            src={screenshotModal}
+            alt="Redemption screenshot"
+            className="max-w-[92vw] max-h-[88vh] object-contain rounded-xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
     </AnimatedPage>
   )
 }
