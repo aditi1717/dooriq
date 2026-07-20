@@ -8,6 +8,8 @@ import { uploadImageBuffer } from '../../../../services/cloudinary.service.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { getDeliveryCashLimitSettings } from '../../admin/services/admin.service.js';
 import { isMobilePlatform } from '../../../../utils/platform.js';
+import { getIO } from '../../../../config/socket.js';
+import { notifyAdminsSafely } from '../../../../core/notifications/firebase.service.js';
 
 export const registerDeliveryPartner = async (payload, files) => {
     const { 
@@ -362,18 +364,66 @@ export const createSupportTicket = async (deliveryPartnerId, payload) => {
         ticketId = generateTicketId();
         exists = await DeliverySupportTicket.findOne({ ticketId }).lean();
     }
+    const normalizedCategory = ["payment", "account", "technical", "order", "other"].includes(category) ? category : "other";
+    const normalizedPriority = ["low", "medium", "high", "urgent"].includes(priority) ? priority : "medium";
     const ticket = await DeliverySupportTicket.create({
         deliveryPartnerId,
         ticketId,
         subject: subject.trim(),
         description: description.trim(),
-        category: ['payment', 'account', 'technical', 'order', 'other'].includes(category) ? category : 'other',
-        priority: ['low', 'medium', 'high', 'urgent'].includes(priority) ? priority : 'medium',
+        category: normalizedCategory,
+        priority: normalizedPriority,
         status: 'open'
     });
+
+    const adminPayload = {
+        title: 'New delivery support ticket received',
+        body: `${subject.trim()} support ticket submitted by delivery partner ${deliveryPartnerId}.`,
+        message: `${subject.trim()} support ticket submitted by delivery partner ${deliveryPartnerId}.`,
+        type: 'support',
+        category: 'support',
+        source: 'DELIVERY_SUPPORT_TICKET',
+        ticketId: String(ticket?._id || ""),
+        deliveryPartnerId: String(deliveryPartnerId),
+        subject: subject.trim(),
+        supportCategory: normalizedCategory,
+        priority: normalizedPriority,
+        path: '/admin/food/delivery-support-tickets',
+        adminPath: '/admin/food/delivery-support-tickets',
+        originPath: '/food/delivery/help/tickets',
+        createdAt: ticket?.createdAt || new Date().toISOString()
+    };
+
+    try {
+        const io = getIO();
+        if (io) {
+            io.to('admin:orders').emit('admin_notification', adminPayload);
+        }
+    } catch (socketError) {
+        console.error("Error emitting delivery support ticket admin notification:", socketError);
+    }
+
+    await notifyAdminsSafely({
+        title: adminPayload.title,
+        body: adminPayload.body,
+        data: {
+            type: 'DELIVERY_SUPPORT_TICKET',
+            ticketId: adminPayload.ticketId,
+            source: 'delivery',
+            deliveryPartnerId: adminPayload.deliveryPartnerId,
+            subject: adminPayload.subject,
+            category: adminPayload.supportCategory,
+            priority: adminPayload.priority,
+            path: adminPayload.adminPath,
+            adminPath: adminPayload.adminPath,
+            originPath: adminPayload.originPath
+        }
+    }).catch((pushError) => {
+        console.error("Error sending delivery support ticket push notification:", pushError);
+    });
+
     return ticket.toObject();
 };
-
 export const getSupportTicketByIdAndPartner = async (ticketId, deliveryPartnerId) => {
     const ticket = await DeliverySupportTicket.findOne({
         _id: ticketId,
@@ -923,3 +973,4 @@ export const deleteDeliveryPartnerAccount = async (partnerId) => {
 
     return { success: true };
 };
+

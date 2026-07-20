@@ -3,6 +3,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { AppShellSkeleton } from '@food/components/ui/loading-skeletons'
 import LandingPage from './LandingPage'
 import { adminAPI } from '@/services/api'
+import { registerWebPushForCurrentModule } from '@food/utils/firebaseMessaging'
 
 const NATIVE_LAST_ROUTE_KEY = 'native_last_route'
 
@@ -103,6 +104,12 @@ const AppRoutes = () => {
       localStorage.setItem(NATIVE_LAST_ROUTE_KEY, route)
     }
   }, [location.pathname, location.search])
+
+  useEffect(() => {
+    if (!location.pathname.startsWith('/admin')) return
+    registerWebPushForCurrentModule(location.pathname)
+  }, [location.pathname])
+
 
   return (
     <Routes>

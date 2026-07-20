@@ -3,6 +3,7 @@ import { adminAPI } from "@food/api";
 
 const STORAGE_KEY = "admin_notifications_dismissed_v1";
 const UPDATE_EVENT = "adminNotificationsUpdated";
+const LIVE_ORDER_STORAGE_KEY = "admin_live_notifications_v1";
 
 const safeParse = (value, fallback) => {
   try {
@@ -21,6 +22,12 @@ const getDismissedIds = () => {
 const saveDismissedIds = (ids) => {
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.isArray(ids) ? ids : []));
+};
+
+const getLiveOrderNotifications = () => {
+  if (typeof localStorage === "undefined") return [];
+  const parsed = safeParse(localStorage.getItem(LIVE_ORDER_STORAGE_KEY) || "[]", []);
+  return Array.isArray(parsed) ? parsed : [];
 };
 
 export const dispatchAdminNotificationsUpdated = () => {
@@ -54,7 +61,7 @@ const uniqueById = (items = []) => {
   return [...map.values()];
 };
 
-const joinMeta = (...parts) => parts.filter(Boolean).join(" • ");
+const joinMeta = (...parts) => parts.filter(Boolean).join(" ");
 
 const mapPendingRestaurants = (rows = []) =>
   (Array.isArray(rows) ? rows : []).map((item) => ({
@@ -142,6 +149,7 @@ const mapUserRestaurantSupport = (response) => {
         type: "support",
         category: "support",
         path: "/admin/food/support-tickets",
+        originPath: "/food/restaurant/help-centre/support",
         createdAt: item?.createdAt || item?.updatedAt,
         timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
         metaLabel,
@@ -167,6 +175,7 @@ const mapDeliverySupport = (response) => {
       type: "support",
       category: "delivery_support",
       path: "/admin/food/delivery-support-tickets",
+      originPath: "/food/delivery/help/tickets",
       createdAt: item?.createdAt || item?.updatedAt,
       timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
       metaLabel: joinMeta(item?.deliveryPartner?.name, item?.deliveryPartner?.phone, item?.priority, item?.status),
@@ -197,44 +206,49 @@ export default function useAdminNotifications(options = {}) {
   const [loading, setLoading] = useState(Boolean(options?.autoload !== false));
 
   const loadNotifications = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const dismissed = new Set(getDismissedIds());
 
-      const [
-        restaurantsRes,
-        deliveryJoinRes,
-        foodApprovalRes,
-        supportRes,
-        deliverySupportRes,
-        fssaiExpiredRes,
-      ] = await Promise.all([
-        adminAPI.getPendingRestaurants(),
-        adminAPI.getDeliveryPartnerJoinRequests({ page: 1, limit: 50 }),
-        adminAPI.getPendingFoodApprovals({ page: 1, limit: 50 }),
-        adminAPI.getSupportTicketsAdmin({ page: 1, limit: 50, source: "all" }),
-        adminAPI.getDeliverySupportTickets({ page: 1, limit: 50 }),
-        adminAPI.getExpiredFssaiNotifications(),
-      ]);
+      const [restaurantsRes, deliveryJoinRes, foodApprovalRes, supportRes, deliverySupportRes, fssaiExpiredRes] =
+        await Promise.allSettled([
+          adminAPI.getPendingRestaurants(),
+          adminAPI.getDeliveryPartnerJoinRequests({ page: 1, limit: 50 }),
+          adminAPI.getPendingFoodApprovals({ page: 1, limit: 50 }),
+          adminAPI.getSupportTicketsAdmin({ page: 1, limit: 50, source: "all" }),
+          adminAPI.getDeliverySupportTickets({ page: 1, limit: 50 }),
+          adminAPI.getExpiredFssaiNotifications(),
+        ]);
+
+      const unwrap = (result, label) => {
+        if (result?.status === "fulfilled") return result.value;
+        if (result?.reason) {
+          console.error(`[admin-notifications] ${label} failed`, result.reason);
+        }
+        return null;
+      };
 
       const restaurantRows =
-        restaurantsRes?.data?.data ||
-        restaurantsRes?.data?.restaurants ||
+        unwrap(restaurantsRes, "pending restaurants")?.data?.data ||
+        unwrap(restaurantsRes, "pending restaurants")?.data?.restaurants ||
         [];
 
+      const liveOrderRows = getLiveOrderNotifications();
       const aggregated = uniqueById([
+        ...liveOrderRows,
         ...mapPendingRestaurants(restaurantRows),
-        ...mapDeliveryJoinRequests(deliveryJoinRes),
-        ...mapFoodApprovals(foodApprovalRes),
-        ...mapUserRestaurantSupport(supportRes),
-        ...mapDeliverySupport(deliverySupportRes),
-        ...mapExpiredFssai(fssaiExpiredRes),
+        ...mapDeliveryJoinRequests(unwrap(deliveryJoinRes, "delivery join requests")),
+        ...mapFoodApprovals(unwrap(foodApprovalRes, "food approvals")),
+        ...mapUserRestaurantSupport(unwrap(supportRes, "support tickets")),
+        ...mapDeliverySupport(unwrap(deliverySupportRes, "delivery support tickets")),
+        ...mapExpiredFssai(unwrap(fssaiExpiredRes, "expired fssai notifications")),
       ])
         .filter((item) => !dismissed.has(item.id))
         .sort((a, b) => toDateValue(b.createdAt) - toDateValue(a.createdAt));
 
       setItems(aggregated);
-    } catch {
+    } catch (error) {
+      console.error("[admin-notifications] loadNotifications failed", error);
       setItems([]);
     } finally {
       setLoading(false);
@@ -289,3 +303,9 @@ export default function useAdminNotifications(options = {}) {
     [clearAll, dismissOne, items, loadNotifications, loading]
   );
 }
+
+
+
+
+
+

@@ -209,6 +209,32 @@ export const adminAPI = {
       { currentPassword, newPassword },
       { contextModule: "admin" },
     ),
+  saveFcmToken: (token, options = {}) => {
+    if (!token) return Promise.reject(new Error("FCM token is required"));
+    const platform = options?.platform === "mobile" ? "mobile" : "web";
+    const path =
+      platform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save";
+    return apiClient.post(
+      path,
+      { token: String(token), platform },
+      { contextModule: "admin" },
+    );
+  },
+  removeFcmToken: (token, options = {}) => {
+    if (!token) return Promise.reject(new Error("FCM token is required"));
+    const platform = options?.platform === "mobile" ? "mobile" : "web";
+    return apiClient.delete(
+      `/fcm-tokens/remove/${encodeURIComponent(String(token))}`,
+      {
+        data: { token: String(token), platform },
+        contextModule: "admin",
+      },
+    );
+  },
+  testFcmNotification: (options = {}) => {
+    const platform = options?.platform === "mobile" ? "mobile" : "web";
+    return apiClient.post("/fcm-tokens/test", { platform }, { contextModule: "admin" });
+  },
   logout: (refreshToken) => {
     const token =
       refreshToken ||
@@ -3002,3 +3028,5 @@ export const diningAPI = {
 };
 export const heroBannerAPI = createStubAPI();
 export const publicAPI = createStubAPI();
+
+

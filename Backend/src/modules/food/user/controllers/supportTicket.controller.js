@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import { FoodSupportTicket } from '../models/supportTicket.model.js';
 import { sendResponse, sendError } from '../../../../utils/response.js';
+import { getIO } from '../../../../config/socket.js';
+import { notifyAdminsSafely } from '../../../../core/notifications/firebase.service.js';
 
 export async function createSupportTicketController(req, res, next) {
     try {
@@ -42,6 +44,51 @@ export async function createSupportTicketController(req, res, next) {
             doc.restaurantId = new mongoose.Types.ObjectId(body.restaurantId);
         }
         const created = await FoodSupportTicket.create(doc);
+
+        const ticketId = String(created?._id || '');
+        const adminPayload = {
+            title: 'New support ticket received',
+            body: `${type === 'order' ? 'Order' : type === 'restaurant' ? 'Restaurant' : 'General'} support ticket raised for ${issueType}.`,
+            message: `${type === 'order' ? 'Order' : type === 'restaurant' ? 'Restaurant' : 'General'} support ticket raised for ${issueType}.`,
+            type: 'support',
+            category: 'support',
+            source: 'SUPPORT_TICKET',
+            ticketId,
+            userId: String(userId),
+            issueType,
+            ticketType: type,
+            orderId: body.orderId ? String(body.orderId) : null,
+            restaurantId: doc.restaurantId ? String(doc.restaurantId) : null,
+            path: '/admin/food/support-tickets',
+            createdAt: created?.createdAt || new Date().toISOString()
+        };
+
+        try {
+            const io = getIO();
+            if (io) {
+                io.to('admin:orders').emit('admin_notification', adminPayload);
+            }
+        } catch (socketError) {
+            console.error('Error emitting admin support ticket socket notification:', socketError);
+        }
+
+        await notifyAdminsSafely({
+            title: adminPayload.title,
+            body: adminPayload.body,
+            data: {
+                type: 'SUPPORT_TICKET',
+                ticketId,
+                source: 'user',
+                ticketType: type,
+                issueType,
+                orderId: adminPayload.orderId || undefined,
+                restaurantId: adminPayload.restaurantId || undefined,
+                path: adminPayload.path
+            }
+        }).catch((pushError) => {
+            console.error('Error sending admin support ticket push notification:', pushError);
+        });
+
         return sendResponse(res, 201, 'Ticket created', { ticket: created.toObject() });
     } catch (e) {
         next(e);

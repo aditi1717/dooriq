@@ -3,6 +3,7 @@ import { logger } from '../../../../utils/logger.js';
 import {
   sendNotificationToOwner,
   sendNotificationToOwners,
+  notifyAdminsSafely,
 } from "../../../../core/notifications/firebase.service.js";
 import { getIO, rooms } from '../../../../config/socket.js';
 import { addOrderJob } from '../../../../queues/producers/order.producer.js';
@@ -272,39 +273,66 @@ export function canExposeOrderToRestaurant(orderLike) {
 
 export async function notifyRestaurantNewOrder(orderDoc) {
   try {
-    if (!orderDoc || !canExposeOrderToRestaurant(orderDoc)) return;
+    if (!orderDoc) return;
 
     const io = getIO();
-    if (io) {
-      const payload = {
-        ...orderDoc.toObject(),
-        orderMongoId: orderDoc._id?.toString?.() || undefined,
-        orderId: orderDoc.order_id || orderDoc._id?.toString?.(),
-      };
-      logger.info(
-        `[RestaurantOrders] Emitting new_order to ${rooms.restaurant(orderDoc.restaurantId)} for order ${orderDoc._id?.toString?.() || ''}`,
-      );
+    const payload = {
+      ...orderDoc.toObject(),
+      orderMongoId: orderDoc._id?.toString?.() || undefined,
+      orderId: orderDoc.order_id || orderDoc._id?.toString?.(),
+    };
+    const canExposeToRestaurant = canExposeOrderToRestaurant(orderDoc);
+
+    if (io && canExposeToRestaurant) {
+      logger.info("[RestaurantOrders] Emitting new_order to " + rooms.restaurant(orderDoc.restaurantId) + " for order " + (orderDoc._id?.toString?.() || ""));
       io.to(rooms.restaurant(orderDoc.restaurantId)).emit("new_order", payload);
+      io.to("admin:orders").emit("admin_new_order", {
+        ...payload,
+        source: "restaurant_order",
+      });
     }
 
-    await notifyOwnersSafely(
-      [{ ownerType: "RESTAURANT", ownerId: orderDoc.restaurantId }],
-      {
+    if (io) {
+      io.to("admin:orders").emit("admin_notification", {
+        id: String(orderDoc._id),
         title: "New order received",
-        body: `Order #${orderDoc.order_id || orderDoc._id} is waiting for review.`,
-        data: {
-          type: "new_order",
-          orderId: orderDoc._id.toString(),
-          orderMongoId: orderDoc._id?.toString?.() || "",
-          link: `/restaurant/orders/${orderDoc._id?.toString?.() || ""}`,
+        message: `Order #${orderDoc.order_id || orderDoc._id} is waiting for review.`,
+        link: `/admin/food/orders/all?orderId=${orderDoc._id?.toString?.() || ""}`,
+        targetType: "ADMIN",
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    if (canExposeToRestaurant) {
+      await notifyOwnersSafely(
+        [{ ownerType: "RESTAURANT", ownerId: orderDoc.restaurantId }],
+        {
+          title: "New order received",
+          body: `Order #${orderDoc.order_id || orderDoc._id} is waiting for review.`,
+          data: {
+            type: "new_order",
+            orderId: orderDoc._id.toString(),
+            orderMongoId: orderDoc._id?.toString?.() || "",
+            link: `/restaurant/orders/${orderDoc._id?.toString?.() || ""}`,
+          },
         },
+      );
+    }
+
+    await notifyAdminsSafely({
+      title: "New order received",
+      body: `Order #${orderDoc.order_id || orderDoc._id} is waiting for review.`,
+      data: {
+        type: "admin_new_order",
+        orderId: String(orderDoc._id),
+        orderMongoId: String(orderDoc._id),
+        link: `/admin/food/orders/all?orderId=${orderDoc._id?.toString?.() || ""}`,
       },
-    );
+    });
   } catch {
     // Do not block order/payment flow if notification fails.
   }
 }
-
 export const STATUS_PRIORITY = {
   created: 10,
   confirmed: 20,
@@ -424,4 +452,6 @@ export async function checkRestaurantOpenStatus(restaurantId, checkDate = new Da
 
   return { isOpen: true };
 }
+
+
 

@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import { FoodRestaurantSupportTicket } from '../models/supportTicket.model.js';
 import { sendError, sendResponse } from '../../../../utils/response.js';
+import { getIO } from '../../../../config/socket.js';
+import { notifyAdminsSafely } from '../../../../core/notifications/firebase.service.js';
 
 const ALLOWED_CATEGORIES = ['orders', 'payments', 'menu', 'restaurant', 'technical', 'other'];
 const ALLOWED_PRIORITIES = ['low', 'medium', 'high'];
@@ -39,6 +41,54 @@ export const createRestaurantSupportTicketController = async (req, res, next) =>
             description,
             orderRef,
             priority
+        });
+
+        const adminPayload = {
+            title: 'New restaurant support ticket received',
+            body: `${subject || issueType} support ticket submitted by restaurant ${restaurantId}.`,
+            message: `${subject || issueType} support ticket submitted by restaurant ${restaurantId}.`,
+            type: 'support',
+            category: 'support',
+            source: 'RESTAURANT_SUPPORT_TICKET',
+            ticketId: String(created?._id || ''),
+            restaurantId: String(restaurantId),
+            issueType,
+            subject,
+            priority,
+            orderRef: orderRef || null,
+            path: '/admin/food/support-tickets',
+            adminPath: '/admin/food/support-tickets',
+            originPath: '/food/restaurant/help-centre/support',
+            createdAt: created?.createdAt || new Date().toISOString()
+        };
+
+        try {
+            const io = getIO();
+            if (io) {
+                io.to('admin:orders').emit('admin_notification', adminPayload);
+            }
+        } catch (socketError) {
+            console.error('Error emitting restaurant support ticket admin notification:', socketError);
+        }
+
+        await notifyAdminsSafely({
+            title: adminPayload.title,
+            body: adminPayload.body,
+            data: {
+                type: 'RESTAURANT_SUPPORT_TICKET',
+                ticketId: adminPayload.ticketId,
+                source: 'restaurant',
+                restaurantId: adminPayload.restaurantId,
+                issueType,
+                subject,
+                priority,
+                orderRef: orderRef || undefined,
+                path: adminPayload.adminPath,
+                adminPath: adminPayload.adminPath,
+                originPath: adminPayload.originPath
+            }
+        }).catch((pushError) => {
+            console.error('Error sending restaurant support ticket push notification:', pushError);
         });
 
         return sendResponse(res, 201, 'Support ticket created successfully', {
@@ -96,3 +146,4 @@ export const listRestaurantSupportTicketsController = async (req, res, next) => 
         next(error);
     }
 };
+

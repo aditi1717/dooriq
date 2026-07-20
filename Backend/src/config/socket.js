@@ -21,12 +21,6 @@ function getTokenFromHandshake(socket) {
     return null;
 }
 
-function maskToken(token) {
-    if (!token || typeof token !== 'string') return null;
-    const trimmed = token.trim();
-    if (!trimmed) return null;
-    return `${trimmed.slice(0, 12)}...${trimmed.slice(-6)}`;
-}
 
 const roomNames = {
     restaurant: (id) => `restaurant:${String(id)}`,
@@ -34,6 +28,14 @@ const roomNames = {
     delivery: (id) => `delivery:${String(id)}`,
     tracking: (orderId) => `tracking:${String(orderId)}`
 };
+
+function maskToken(token) {
+    if (!token || typeof token !== 'string') return null;
+    const trimmed = token.trim();
+    if (!trimmed) return null;
+    return `${trimmed.slice(0, 12)}...${trimmed.slice(-6)}`;
+}
+
 
 /**
  * Initializes Socket.IO with the provided HTTP server.
@@ -127,6 +129,10 @@ export const initSocket = async (server) => {
                     room: roomNames.delivery(userId),
                 });
             }
+            if (role === 'ADMIN') {
+                socket.join('admin:orders');
+                logger.info(`Admin socket auto-joined room admin:orders for socket ${socket.id}`);
+            }
         }
 
         // Explicit join (used by existing restaurant client hook).
@@ -167,6 +173,13 @@ export const initSocket = async (server) => {
                 roomSize,
             });
             socket.emit('delivery-room-joined', { room, deliveryPartnerId: String(deliveryPartnerId) });
+        });
+
+        socket.on('join-admin-orders', () => {
+            if (socket.user?.role !== 'ADMIN') return;
+            socket.join('admin:orders');
+            logger.info(`Admin socket joined room admin:orders for socket ${socket.id}`);
+            socket.emit('admin-orders-room-joined', { room: 'admin:orders' });
         });
 
         // ─── Live Tracking Events ───────────────────────────────────────
@@ -380,3 +393,7 @@ export const getIO = () => {
 };
 
 export const rooms = roomNames;
+
+
+
+

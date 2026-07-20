@@ -3,12 +3,14 @@ import { Outlet, useLocation } from "react-router-dom"
 import AdminSidebar from "./AdminSidebar"
 import AdminNavbar from "./AdminNavbar"
 import { API_BASE_URL } from "@food/api/config"
+import useAdminOrderNotifications from "@food/hooks/useAdminOrderNotifications"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 
 export default function AdminLayout() {
+  useAdminOrderNotifications()
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -97,3 +99,5 @@ export default function AdminLayout() {
     </div>
   );
 }
+
+
