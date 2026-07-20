@@ -432,6 +432,18 @@ function isFoodOrderCancelledStatus(statusRaw) {
   return s === "cancelled" || s.includes("cancelled")
 }
 
+function extractOrderFromResponse(res) {
+  if (!res?.data) return null;
+  const resData = res.data;
+  if (resData.success && resData.data?.order) return resData.data.order;
+  if (resData.data?.order) return resData.data.order;
+  if (resData.order && typeof resData.order === "object") return resData.order;
+  if (resData.data && typeof resData.data === "object" && !Array.isArray(resData.data) && (resData.data._id || resData.data.orderId || resData.data.id)) return resData.data;
+  if (resData.success && resData.order) return resData.order;
+  if (resData._id || resData.orderId) return resData;
+  return null;
+}
+
 function normalizeLookupId(value) {
   if (value == null) return ""
   const raw = String(value).trim()
@@ -660,7 +672,12 @@ export default function OrderTracking() {
       return null
     },
     fetchOrderDetailsWithFallback: async (options = {}) => {
-      const lookupIds = lookupIdsRef.current
+      const candidateIds = [
+        ...(lookupIdsRef.current || []),
+        normalizeLookupId(orderId),
+        normalizeLookupId(resolvedLookupId)
+      ].filter(Boolean)
+      const lookupIds = Array.from(new Set(candidateIds))
       if (lookupIds.length === 0) throw new Error("Order id required")
       let lastError = null
       for (const id of lookupIds) {
@@ -915,11 +932,9 @@ export default function OrderTracking() {
         const response = await fetchOrderDetailsWithFallback({ force: isInitial });
         if (!isSubscribed) return;
 
-        let finalOrderData = null;
+        let finalOrderData = extractOrderFromResponse(response);
 
-        if (response.data?.success && response.data.data?.order) {
-          finalOrderData = response.data.data.order;
-        } else if (isInitial) {
+        if (!finalOrderData && isInitial) {
           const matchedOrder = await resolveOrderFromList(orderId);
           if (matchedOrder) finalOrderData = matchedOrder;
         }
@@ -953,7 +968,7 @@ export default function OrderTracking() {
             }
           } catch { }
           if (!isSubscribed) return;
-          setError(err.response?.data?.message || 'Failed to fetch order details');
+          setError(err.response?.data?.message || err.message || 'Failed to fetch order details');
           terminalPollStopRef.current = true;
         }
       } finally {
@@ -974,6 +989,29 @@ export default function OrderTracking() {
       isSubscribed = false;
     };
   }, [orderId, fetchOrderDetailsWithFallback, resolveOrderFromList]);
+
+  // Immediately refresh on focus, online reconnect, or tab becoming visible
+  useEffect(() => {
+    if (!orderId) return;
+
+    const handleFocusOrOnline = () => {
+      if (terminalPollStopRef.current) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (pollRef.current) {
+        pollRef.current(true);
+      }
+    };
+
+    window.addEventListener('focus', handleFocusOrOnline);
+    window.addEventListener('online', handleFocusOrOnline);
+    document.addEventListener('visibilitychange', handleFocusOrOnline);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusOrOnline);
+      window.removeEventListener('online', handleFocusOrOnline);
+      document.removeEventListener('visibilitychange', handleFocusOrOnline);
+    };
+  }, [orderId]);
 
   // Interval Manager (dynamically adapts based on socket connection state independently)
   useEffect(() => {
@@ -1177,8 +1215,8 @@ export default function OrderTracking() {
         setCancellationReason("");
         // Refresh order data
         const orderResponse = await fetchOrderDetailsWithFallback({ force: true });
-        if (orderResponse.data?.success && orderResponse.data.data?.order) {
-          const apiOrder = orderResponse.data.data.order;
+        const apiOrder = extractOrderFromResponse(orderResponse);
+        if (apiOrder) {
           setOrder(transformOrderForTracking(apiOrder, order));
         }
       } else {
@@ -1199,7 +1237,7 @@ export default function OrderTracking() {
       if (response.data?.success) {
         toast.success("Delivery instructions updated");
         setIsInstructionsModalOpen(false);
-        const updatedOrder = response.data.data?.order;
+        const updatedOrder = extractOrderFromResponse(response);
         if (updatedOrder) {
           setOrder(prev => transformOrderForTracking(updatedOrder, prev));
         } else {
@@ -1219,8 +1257,8 @@ export default function OrderTracking() {
     setIsRefreshing(true)
     try {
       const response = await fetchOrderDetailsWithFallback({ force: true })
-      if (response.data?.success && response.data.data?.order) {
-        const apiOrder = response.data.data.order
+      const apiOrder = extractOrderFromResponse(response)
+      if (apiOrder) {
 
         // Extract restaurant location coordinates with multiple fallbacks
         let restaurantCoords = null;

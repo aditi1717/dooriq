@@ -43,7 +43,14 @@ export function OrdersProvider({ children }) {
   }
 
   const getOrderById = useCallback((orderId) => {
-    return orders.find(order => order.id === orderId)
+    if (!orderId) return null
+    const target = String(orderId).trim()
+    return orders.find(order => 
+      String(order.id || "").trim() === target ||
+      String(order._id || "").trim() === target ||
+      String(order.orderId || "").trim() === target ||
+      String(order.mongoId || "").trim() === target
+    ) || null
   }, [orders])
 
   const getAllOrders = useCallback(() => {
