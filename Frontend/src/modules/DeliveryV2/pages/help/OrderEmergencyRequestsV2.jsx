@@ -52,6 +52,21 @@ export const OrderEmergencyRequestsV2 = () => {
 
   useEffect(() => {
     void loadData();
+
+    const handleFocusOrOnline = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void loadData();
+    };
+
+    window.addEventListener('focus', handleFocusOrOnline);
+    window.addEventListener('online', handleFocusOrOnline);
+    document.addEventListener('visibilitychange', handleFocusOrOnline);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusOrOnline);
+      window.removeEventListener('online', handleFocusOrOnline);
+      document.removeEventListener('visibilitychange', handleFocusOrOnline);
+    };
   }, [loadData]);
 
   const orderStatus = String(activeOrder?.orderStatus || "").toLowerCase();

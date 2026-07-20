@@ -28,12 +28,26 @@ export default function ReportSafetyEmergency() {
   const [selectedHistoryItem, setSelectedHistoryItem] = useState(null)
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
 
+  const extractReportsList = (res) => {
+    if (!res?.data) return []
+    const resData = res.data
+    const innerData = resData.data ?? resData
+    if (Array.isArray(innerData)) return innerData
+    if (Array.isArray(innerData.safetyEmergencies)) return innerData.safetyEmergencies
+    if (Array.isArray(innerData.reports)) return innerData.reports
+    if (Array.isArray(innerData.docs)) return innerData.docs
+    if (Array.isArray(innerData.items)) return innerData.items
+    if (Array.isArray(resData.safetyEmergencies)) return resData.safetyEmergencies
+    if (Array.isArray(resData.reports)) return resData.reports
+    return []
+  }
+
   const fetchHistory = async () => {
     try {
       setHistoryLoading(true)
       const res = await userAPI.getMySafetyEmergencyReports({ page: 1, limit: 20 })
-      const list = res?.data?.data?.safetyEmergencies ?? []
-      setHistory(Array.isArray(list) ? list : [])
+      const list = extractReportsList(res)
+      setHistory(list)
     } catch (err) {
       debugError("Error fetching safety emergency history:", err)
       setHistory([])
@@ -44,7 +58,21 @@ export default function ReportSafetyEmergency() {
 
   useEffect(() => {
     fetchHistory()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    const handleFocusOrOnline = () => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      void fetchHistory()
+    }
+
+    window.addEventListener('focus', handleFocusOrOnline)
+    window.addEventListener('online', handleFocusOrOnline)
+    document.addEventListener('visibilitychange', handleFocusOrOnline)
+
+    return () => {
+      window.removeEventListener('focus', handleFocusOrOnline)
+      window.removeEventListener('online', handleFocusOrOnline)
+      document.removeEventListener('visibilitychange', handleFocusOrOnline)
+    }
   }, [])
 
   const historySorted = useMemo(() => {
