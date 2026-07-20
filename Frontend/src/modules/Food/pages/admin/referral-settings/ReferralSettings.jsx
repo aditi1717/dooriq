@@ -11,7 +11,9 @@ export default function ReferralSettings() {
   const [saving, setSaving] = useState(false)
   const [settings, setSettings] = useState({
     referralRewardUser: "",
+    referredRewardUser: "",
     referralRewardDelivery: "",
+    referredRewardDelivery: "",
     referralLimitUser: "",
     referralLimitDelivery: "",
   })
@@ -24,14 +26,18 @@ export default function ReferralSettings() {
       if (res?.data?.success && s) {
         setSettings({
           referralRewardUser: s.referralRewardUser ?? "",
+          referredRewardUser: s.referredRewardUser ?? "",
           referralRewardDelivery: s.referralRewardDelivery ?? "",
+          referredRewardDelivery: s.referredRewardDelivery ?? "",
           referralLimitUser: s.referralLimitUser ?? "",
           referralLimitDelivery: s.referralLimitDelivery ?? "",
         })
       } else {
         setSettings({
           referralRewardUser: "",
+          referredRewardUser: "",
           referralRewardDelivery: "",
+          referredRewardDelivery: "",
           referralLimitUser: "",
           referralLimitDelivery: "",
         })
@@ -53,7 +59,9 @@ export default function ReferralSettings() {
       setSaving(true)
       const body = {
         referralRewardUser: settings.referralRewardUser === "" ? 0 : Number(settings.referralRewardUser),
+        referredRewardUser: settings.referredRewardUser === "" ? 0 : Number(settings.referredRewardUser),
         referralRewardDelivery: settings.referralRewardDelivery === "" ? 0 : Number(settings.referralRewardDelivery),
+        referredRewardDelivery: settings.referredRewardDelivery === "" ? 0 : Number(settings.referredRewardDelivery),
         referralLimitUser: settings.referralLimitUser === "" ? 0 : Number(settings.referralLimitUser),
         referralLimitDelivery: settings.referralLimitDelivery === "" ? 0 : Number(settings.referralLimitDelivery),
         isActive: true,
@@ -65,7 +73,9 @@ export default function ReferralSettings() {
         if (saved) {
           setSettings({
             referralRewardUser: saved.referralRewardUser ?? "",
+            referredRewardUser: saved.referredRewardUser ?? "",
             referralRewardDelivery: saved.referralRewardDelivery ?? "",
+            referredRewardDelivery: saved.referredRewardDelivery ?? "",
             referralLimitUser: saved.referralLimitUser ?? "",
             referralLimitDelivery: saved.referralLimitDelivery ?? "",
           })
@@ -98,7 +108,7 @@ export default function ReferralSettings() {
           <h1 className="text-2xl font-bold text-slate-900">Referral Settings</h1>
         </div>
         <p className="text-sm text-slate-600">
-          Configure referral reward amounts and maximum credits per referrer.
+          Configure distinct referral reward amounts for referrers and referred users/captains, plus maximum credits per referrer.
         </p>
       </div>
 
@@ -135,45 +145,79 @@ export default function ReferralSettings() {
               <Loader2 className="w-6 h-6 animate-spin text-orange-600" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="border border-slate-200 rounded-xl p-4">
-                <h3 className="font-semibold text-slate-900 mb-3">User Referral</h3>
-                <label className="block text-sm text-slate-600 mb-1">Reward amount (₹)</label>
-                <input
-                  value={settings.referralRewardUser}
-                  onChange={onChange("referralRewardUser")}
-                  inputMode="numeric"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
-                  placeholder="e.g. 50"
-                />
-                <label className="block text-sm text-slate-600 mb-1 mt-3">Max credits per referrer</label>
-                <input
-                  value={settings.referralLimitUser}
-                  onChange={onChange("referralLimitUser")}
-                  inputMode="numeric"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
-                  placeholder="e.g. 10"
-                />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* User Referral Card */}
+              <div className="border border-slate-200 rounded-xl p-5 bg-slate-50/50">
+                <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-3">
+                  <div className="w-3 h-3 rounded-full bg-orange-500" />
+                  <h3 className="font-bold text-slate-900 text-base">User Referral Program</h3>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Referrer User Amount (₹)
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-1">Credited to existing user who shares their invite code</p>
+                    <input
+                      value={settings.referralRewardUser}
+                      onChange={onChange("referralRewardUser")}
+                      inputMode="numeric"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
+                      placeholder="e.g. 50"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Referred User Amount (₹)
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-1">Credited to new user who registers using an invite code</p>
+                    <input
+                      value={settings.referredRewardUser}
+                      onChange={onChange("referredRewardUser")}
+                      inputMode="numeric"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
+                      placeholder="e.g. 25"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="border border-slate-200 rounded-xl p-4">
-                <h3 className="font-semibold text-slate-900 mb-3">Delivery Partner Referral</h3>
-                <label className="block text-sm text-slate-600 mb-1">Reward amount (₹)</label>
-                <input
-                  value={settings.referralRewardDelivery}
-                  onChange={onChange("referralRewardDelivery")}
-                  inputMode="numeric"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
-                  placeholder="e.g. 2000"
-                />
-                <label className="block text-sm text-slate-600 mb-1 mt-3">Max credits per referrer</label>
-                <input
-                  value={settings.referralLimitDelivery}
-                  onChange={onChange("referralLimitDelivery")}
-                  inputMode="numeric"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
-                  placeholder="e.g. 5"
-                />
+              {/* Delivery Partner Referral Card */}
+              <div className="border border-slate-200 rounded-xl p-5 bg-slate-50/50">
+                <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-3">
+                  <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                  <h3 className="font-bold text-slate-900 text-base">Delivery Captain Referral Program</h3>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Referrer Captain Amount (₹)
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-1">Credited to existing captain who shares their invite code</p>
+                    <input
+                      value={settings.referralRewardDelivery}
+                      onChange={onChange("referralRewardDelivery")}
+                      inputMode="numeric"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
+                      placeholder="e.g. 500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Referred Captain Amount (₹)
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-1">Credited to new captain who registers using an invite code</p>
+                    <input
+                      value={settings.referredRewardDelivery}
+                      onChange={onChange("referredRewardDelivery")}
+                      inputMode="numeric"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
+                      placeholder="e.g. 200"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}

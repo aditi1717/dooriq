@@ -28,7 +28,7 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
     const partner = await FoodDeliveryPartner.findById(partnerId).lean();
     if (!partner) throw new ValidationError('Delivery partner not found');
 
-    const [cashLimitSettings, earningsAgg, cashCollectedAgg, cashDepositsAgg, bonusAgg, withdrawalAgg, withdrawalsList, depositList, walletDoc] = await Promise.all([
+    const [cashLimitSettings, earningsAgg, cashCollectedAgg, cashDepositsAgg, bonusAgg, withdrawalAgg, withdrawalsList, depositList, bonusesList, walletDoc] = await Promise.all([
         getDeliveryCashLimitSettings(),
         // 1. Total Earnings from Delivered Orders
         FoodOrder.aggregate([
@@ -78,6 +78,10 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
             .limit(50)
             .lean(),
         FoodDeliveryCashDeposit.find({ deliveryPartnerId: partnerId })
+            .sort({ createdAt: -1 })
+            .limit(50)
+            .lean(),
+        DeliveryBonusTransaction.find({ deliveryPartnerId: partnerId })
             .sort({ createdAt: -1 })
             .limit(50)
             .lean(),
@@ -133,6 +137,14 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
             date: o.createdAt,
             description: o.payment?.method === 'cash' ? 'COD delivery earning' : 'Online delivery earning',
             orderId: o.orderId
+        })),
+        ...(bonusesList || []).map(b => ({
+            id: b._id,
+            type: 'bonus',
+            amount: b.amount,
+            status: 'Completed',
+            date: b.createdAt,
+            description: b.reference || 'Referral Bonus'
         })),
         ...(withdrawalsList || []).map(w => ({
             id: w._id,

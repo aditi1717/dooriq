@@ -147,8 +147,7 @@ export const verifyUserOtpAndLogin = async (
 
             if (
               reward > 0 &&
-              limit > 0 &&
-              Number(referrer.referralCount || 0) < limit
+              (limit === 0 || Number(referrer.referralCount || 0) < limit)
             ) {
               userDoc.referredBy = referrerId;
               await userDoc.save();
@@ -161,7 +160,8 @@ export const verifyUserOtpAndLogin = async (
                 status: "credited",
               });
 
-              await Promise.all([
+              const referredReward = Math.max(0, Number(settingsDoc.referredRewardUser) || 0);
+              const creditPromises = [
                 FoodUser.updateOne(
                   { _id: referrerId },
                   { $inc: { referralCount: 1 } },
@@ -171,7 +171,19 @@ export const verifyUserOtpAndLogin = async (
                   refereeId: String(userDoc._id),
                   referralLogId: String(log._id),
                 }),
-              ]);
+              ];
+
+              if (referredReward > 0) {
+                creditPromises.push(
+                  creditReferralReward(userDoc._id, referredReward, {
+                    role: "USER",
+                    refereeId: String(userDoc._id),
+                    referralLogId: String(log._id),
+                  })
+                );
+              }
+
+              await Promise.all(creditPromises);
             } else {
               await FoodReferralLog.create({
                 referrerId,

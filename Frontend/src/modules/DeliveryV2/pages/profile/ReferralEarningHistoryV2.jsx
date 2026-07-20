@@ -60,7 +60,7 @@ export const ReferralEarningHistoryV2 = () => {
   }, []);
 
   const refId = profile?._id || profile?.id || profile?.referralCode || "";
-  const referralLink = refId ? `${window.location.origin}/food/delivery/signup?ref=${encodeURIComponent(String(refId))}` : "";
+  const referralLink = refId ? `${window.location.origin}/invite/delivery?ref=${encodeURIComponent(String(refId))}` : "";
 
   const handleCopyCode = () => {
     if (!refId) return;
@@ -69,16 +69,23 @@ export const ReferralEarningHistoryV2 = () => {
   };
 
   const handleShareReferral = async () => {
-    if (!referralLink) return;
+    if (!referralLink) {
+      toast.error("Referral link unavailable");
+      return;
+    }
     const rewardText = stats.rewardAmount > 0 ? `₹${stats.rewardAmount}` : "rewards";
     const shareText = `Join as a delivery partner and earn ${rewardText}.`;
     try {
       if (navigator.share) {
         await navigator.share({ title: "Delivery Referral", text: shareText, url: referralLink });
-      } else {
-        const fallbackUrl = `https://wa.me/?text=${encodeURIComponent(`${shareText} ${referralLink}`)}`;
-        window.open(fallbackUrl, "_blank", "noopener,noreferrer");
+        return;
       }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(`${shareText} ${referralLink}`);
+        toast.success("Referral link copied to clipboard");
+      }
+      const fallbackUrl = `https://wa.me/?text=${encodeURIComponent(`${shareText} ${referralLink}`)}`;
+      window.open(fallbackUrl, "_blank", "noopener,noreferrer");
     } catch (e) {
       // Ignore abort errors
     }
@@ -210,3 +217,4 @@ export const ReferralEarningHistoryV2 = () => {
     </div>
   );
 };
+

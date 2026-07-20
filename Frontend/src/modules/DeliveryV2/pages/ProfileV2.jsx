@@ -56,19 +56,26 @@ export const ProfileV2 = () => {
   }, [])
 
   const refId = profile?._id || profile?.id || profile?.referralCode || ""
-  const referralLink = refId ? `${window.location.origin}/food/delivery/signup?ref=${encodeURIComponent(String(refId))}` : ""
+  const referralLink = refId ? `${window.location.origin}/invite/delivery?ref=${encodeURIComponent(String(refId))}` : ""
 
   const handleShareReferral = async () => {
-    if (!referralLink) return
+    if (!referralLink) {
+      toast.error("Referral link unavailable")
+      return
+    }
     const rewardText = referralReward > 0 ? `₹${referralReward}` : "rewards"
     const shareText = `Join as a delivery partner and earn ${rewardText}.`
     try {
       if (navigator.share) {
-        await navigator.share({ title: "Delivery referral", text: shareText, url: referralLink })
-      } else {
-        const fallbackUrl = `https://wa.me/?text=${encodeURIComponent(`${shareText} ${referralLink}`)}`
-        window.open(fallbackUrl, "_blank", "noopener,noreferrer")
+        await navigator.share({ title: "Delivery Referral", text: shareText, url: referralLink })
+        return
       }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(`${shareText} ${referralLink}`)
+        toast.success("Referral link copied to clipboard")
+      }
+      const fallbackUrl = `https://wa.me/?text=${encodeURIComponent(`${shareText} ${referralLink}`)}`
+      window.open(fallbackUrl, "_blank", "noopener,noreferrer")
     } catch (e) {}
   }
 
@@ -348,3 +355,4 @@ export const ProfileV2 = () => {
 };
 
 export default ProfileV2;
+

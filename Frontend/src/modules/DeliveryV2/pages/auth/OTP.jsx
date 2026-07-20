@@ -183,9 +183,10 @@ export default function DeliveryOTP() {
       }
       if (data.needsRegistration === true) {
         useDeliveryOnboardingStore.getState().clearOnboardingState()
+        const inviteRef = authData?.referralCode || localStorage.getItem("food_delivery_invite_ref") || ""
         sessionStorage.removeItem("deliveryAuthData")
         sessionStorage.setItem("deliveryNeedsRegistration", "true")
-        sessionStorage.setItem("deliverySignupDetails", JSON.stringify({ name: "", phone: phone.replace(/\D/g, "").slice(-10), countryCode: "+91" }))
+        sessionStorage.setItem("deliverySignupDetails", JSON.stringify({ name: "", phone: phone.replace(/\D/g, "").slice(-10), countryCode: "+91", ref: inviteRef }))
         setIsLoading(false); navigate("/food/delivery/signup/details", { replace: true });
         return
       }

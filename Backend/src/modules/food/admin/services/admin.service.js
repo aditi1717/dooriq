@@ -1912,7 +1912,9 @@ export async function upsertReferralSettings(body = {}) {
         const $set = {};
 
         if (body.referralRewardUser !== undefined) $set.referralRewardUser = Math.max(0, Number(body.referralRewardUser) || 0);
+        if (body.referredRewardUser !== undefined) $set.referredRewardUser = Math.max(0, Number(body.referredRewardUser) || 0);
         if (body.referralRewardDelivery !== undefined) $set.referralRewardDelivery = Math.max(0, Number(body.referralRewardDelivery) || 0);
+        if (body.referredRewardDelivery !== undefined) $set.referredRewardDelivery = Math.max(0, Number(body.referredRewardDelivery) || 0);
         if (body.referralLimitUser !== undefined) $set.referralLimitUser = Math.max(0, Number(body.referralLimitUser) || 0);
         if (body.referralLimitDelivery !== undefined) $set.referralLimitDelivery = Math.max(0, Number(body.referralLimitDelivery) || 0);
         if (body.isActive !== undefined) $set.isActive = Boolean(body.isActive);
@@ -1924,7 +1926,9 @@ export async function upsertReferralSettings(body = {}) {
 
     const created = await FoodReferralSettings.create({
         referralRewardUser: Math.max(0, Number(body.referralRewardUser) || 0),
+        referredRewardUser: Math.max(0, Number(body.referredRewardUser) || 0),
         referralRewardDelivery: Math.max(0, Number(body.referralRewardDelivery) || 0),
+        referredRewardDelivery: Math.max(0, Number(body.referredRewardDelivery) || 0),
         referralLimitUser: Math.max(0, Number(body.referralLimitUser) || 0),
         referralLimitDelivery: Math.max(0, Number(body.referralLimitDelivery) || 0),
         isActive: body.isActive !== false
@@ -4892,7 +4896,7 @@ export async function approveDeliveryPartner(id) {
                 const limit = Math.max(0, Number(settingsDoc?.referralLimitDelivery) || 0);
                 const referrer = await FoodDeliveryPartner.findById(referrerId).select('_id referralCount status').lean();
 
-                if (referrer && referrer.status === 'approved' && reward > 0 && limit > 0 && Number(referrer.referralCount || 0) < limit) {
+                if (referrer && referrer.status === 'approved' && reward > 0 && (limit === 0 || Number(referrer.referralCount || 0) < limit)) {
                     const log = await FoodReferralLog.create({
                         referrerId: referrer._id,
                         refereeId: partner._id,
@@ -4901,13 +4905,25 @@ export async function approveDeliveryPartner(id) {
                         status: 'credited'
                     });
 
-                    await Promise.all([
+                    const referredReward = Math.max(0, Number(settingsDoc?.referredRewardDelivery) || 0);
+                    const bonusPromises = [
                         FoodDeliveryPartner.updateOne({ _id: referrer._id }, { $inc: { referralCount: 1 } }),
                         addDeliveryPartnerBonus(
                             { deliveryPartnerId: String(referrer._id), amount: reward, reference: 'Referral bonus' },
                             null
                         )
-                    ]);
+                    ];
+
+                    if (referredReward > 0) {
+                        bonusPromises.push(
+                            addDeliveryPartnerBonus(
+                                { deliveryPartnerId: String(partner._id), amount: referredReward, reference: 'Referral signup bonus' },
+                                null
+                            )
+                        );
+                    }
+
+                    await Promise.all(bonusPromises);
                 } else {
                     await FoodReferralLog.create({
                         referrerId: new mongoose.Types.ObjectId(referrerId),

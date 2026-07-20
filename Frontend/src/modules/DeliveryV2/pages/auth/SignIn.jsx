@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { useNavigate, Link } from "react-router-dom"
+import { useNavigate, Link, useSearchParams } from "react-router-dom"
 import { deliveryAPI } from "@food/api"
 import { clearModuleAuth } from "@food/utils/auth"
 import { useCompanyName } from "@food/hooks/useCompanyName"
@@ -11,7 +11,15 @@ import { getCachedSettings, getModuleLogoUrl, loadBusinessSettings } from "@food
 export default function DeliverySignIn() {
   const companyName = useCompanyName()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const phoneInputRef = useRef(null)
+
+  useEffect(() => {
+    const ref = String(searchParams.get("ref") || "").trim()
+    if (ref) {
+      localStorage.setItem("food_delivery_invite_ref", ref)
+    }
+  }, [searchParams])
   const [formData, setFormData] = useState({
     phone: "",
     countryCode: "+91",
@@ -83,12 +91,14 @@ export default function DeliverySignIn() {
       setIsSending(true)
       clearModuleAuth("delivery")
       await deliveryAPI.sendOTP(fullPhone, "login")
+      const ref = String(searchParams.get("ref") || "").trim() || localStorage.getItem("food_delivery_invite_ref") || ""
       sessionStorage.setItem("deliveryAuthData", JSON.stringify({
         method: "phone",
         phone: fullPhone,
         isSignUp: false,
         purpose: "login",
         module: "delivery",
+        referralCode: ref || null,
       }))
       sessionStorage.removeItem("deliveryDraftPhone")
       navigate("/food/delivery/otp")

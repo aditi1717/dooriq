@@ -81,6 +81,8 @@ const RootEntryRoute = () => {
 
 
 const AdminRouter = lazy(() => import('../modules/Food/components/admin/AdminRouter'))
+const ReferralInvitePage = lazy(() => import('./ReferralInvitePage'))
+const DeliveryReferralInvitePage = lazy(() => import('./DeliveryReferralInvitePage'))
 
 const AppRoutes = () => {
   const location = useLocation()
@@ -115,6 +117,8 @@ const AppRoutes = () => {
     <Routes>
       {/* Root → Master Landing Page */}
       <Route path="/" element={<RootEntryRoute />} />
+      <Route path="/invite" element={<ReferralInvitePage />} />
+      <Route path="/invite/delivery" element={<DeliveryReferralInvitePage />} />
 
       {/* Auth Module */}
 
@@ -152,3 +156,7 @@ const AppRoutes = () => {
 }
 
 export default AppRoutes
+
+
+
+

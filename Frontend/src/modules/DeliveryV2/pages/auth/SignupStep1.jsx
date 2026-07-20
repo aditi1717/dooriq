@@ -14,11 +14,12 @@ export default function SignupStep1() {
   const goBack = useDeliveryBackNavigation()
   const [formData, setFormData] = useState(() => {
     const saved = sessionStorage.getItem("deliverySignupDetails")
+    const inviteRef = localStorage.getItem("food_delivery_invite_ref") || ""
     const base = {
       name: "",
       phone: "",
       countryCode: "+91",
-      ref: "",
+      ref: inviteRef,
       email: "",
       address: "",
       city: "",
@@ -32,7 +33,8 @@ export default function SignupStep1() {
     }
     if (saved) {
       try {
-        return { ...base, ...JSON.parse(saved) }
+        const parsed = JSON.parse(saved)
+        return { ...base, ...parsed, ref: parsed.ref || inviteRef }
       } catch (e) {
         debugError("Error parsing saved details:", e)
       }

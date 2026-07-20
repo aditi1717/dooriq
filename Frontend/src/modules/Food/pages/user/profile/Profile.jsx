@@ -275,7 +275,7 @@ export default function Profile() {
   const refId =
     userProfile?._id || userProfile?.id || userProfile?.referralCode || "";
   const referralLink = refId
-    ? `${window.location.origin}/food/food/user/auth/login?ref=${encodeURIComponent(String(refId))}`
+    ? `${window.location.origin}/invite?ref=${encodeURIComponent(String(refId))}`
     : "";
 
   const handleShareReferral = async () => {
@@ -1180,3 +1180,4 @@ export default function Profile() {
     </AnimatedPage>
   );
 }
+
