@@ -336,7 +336,9 @@ export default function Cart() {
 
   useEffect(() => {
     if (!isCodEnabled && selectedPaymentMethod === "cash") {
-      setSelectedPaymentMethod("razorpay")
+      setSelectedPaymentMethod("wallet")
+    } else if (selectedPaymentMethod === "razorpay") {
+      setSelectedPaymentMethod(isCodEnabled ? "cash" : "wallet")
     }
   }, [isCodEnabled, selectedPaymentMethod])
 
@@ -3042,15 +3044,6 @@ export default function Cart() {
 
                     <div className="space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-4 flex-1 min-h-0">
                       {[
-                        {
-                          id: 'razorpay',
-                          name: 'Online Payment',
-                          description: 'UPI, Cards, Netbanking',
-                          icon: <Zap className="w-5 h-5" />,
-                          color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400',
-                          selectedColor: 'bg-emerald-500 text-white',
-                          badge: 'SECURE'
-                        },
                         {
                           id: 'wallet',
                           name: 'Quick Wallet',
