@@ -370,6 +370,9 @@ apiClient.interceptors.response.use(
     const refreshToken = getRefreshToken(module);
     if (!refreshToken) {
       clearModuleAuth(module);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("authRefreshFailed", { detail: { module } }));
+      }
       return Promise.reject(err);
     }
 

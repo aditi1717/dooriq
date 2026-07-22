@@ -64,14 +64,42 @@ const openOnboardingFilesDB = () => {
   return new Promise((resolve, reject) => {
     try {
       const request = indexedDB.open(ONBOARDING_FILES_DB, 1)
+      let resolved = false;
+
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          reject(new Error("IndexedDB open timeout"));
+        }
+      }, 3000);
+
       request.onupgradeneeded = (e) => {
         const db = e.target.result
         if (!db.objectStoreNames.contains(FILES_STORE)) {
           db.createObjectStore(FILES_STORE)
         }
       }
-      request.onsuccess = (e) => resolve(e.target.result)
-      request.onerror = (e) => reject(e.target.error)
+      request.onsuccess = (e) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          resolve(e.target.result);
+        }
+      }
+      request.onerror = (e) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          reject(e.target.error || new Error("IndexedDB open error"));
+        }
+      }
+      request.onblocked = () => {
+         if (!resolved) {
+           resolved = true;
+           clearTimeout(timeout);
+           reject(new Error("IndexedDB blocked"));
+         }
+      }
     } catch (err) {
       reject(err)
     }

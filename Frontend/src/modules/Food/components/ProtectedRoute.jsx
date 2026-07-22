@@ -20,8 +20,20 @@ export default function ProtectedRoute({ children, requiredRole, loginPath = "/f
   const [isSubscriptionCheckDone, setIsSubscriptionCheckDone] = useState(!isRestaurantRoute);
   const [serverRequiresPayment, setServerRequiresPayment] = useState(false);
 
+  const [authFailedEvent, setAuthFailedEvent] = useState(false);
+
+  useEffect(() => {
+    const handleAuthFailure = (e) => {
+      if (e.detail?.module === requiredRole) {
+        setAuthFailedEvent(true);
+      }
+    };
+    window.addEventListener("authRefreshFailed", handleAuthFailure);
+    return () => window.removeEventListener("authRefreshFailed", handleAuthFailure);
+  }, [requiredRole]);
+
   // If not authenticated for this module, redirect to login
-  if (!isAuthenticated) {
+  if (!isAuthenticated || authFailedEvent) {
     return <Navigate to={loginPath} state={{ from: location.pathname }} replace />;
   }
 
