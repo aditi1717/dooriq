@@ -21,7 +21,7 @@ import { determineStepToShow } from "@food/utils/onboardingUtils"
 import { toast } from "sonner"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
-import { clearModuleAuth, clearAuthData, getModuleToken } from "@food/utils/auth"
+import { clearModuleAuth, clearAuthData } from "@food/utils/auth"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -62,20 +62,7 @@ const FILES_STORE = "files"
 
 const openOnboardingFilesDB = () => {
   return new Promise((resolve, reject) => {
-    let settled = false
-    const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true
-        reject(new Error("IndexedDB open timeout"))
-      }
-    }, 1500)
-
     try {
-      if (typeof window === "undefined" || !window.indexedDB) {
-        clearTimeout(timer)
-        settled = true
-        return reject(new Error("IndexedDB not supported"))
-      }
       const request = indexedDB.open(ONBOARDING_FILES_DB, 1)
       request.onupgradeneeded = (e) => {
         const db = e.target.result
@@ -83,26 +70,10 @@ const openOnboardingFilesDB = () => {
           db.createObjectStore(FILES_STORE)
         }
       }
-      request.onsuccess = (e) => {
-        if (!settled) {
-          settled = true
-          clearTimeout(timer)
-          resolve(e.target.result)
-        }
-      }
-      request.onerror = (e) => {
-        if (!settled) {
-          settled = true
-          clearTimeout(timer)
-          reject(e.target.error)
-        }
-      }
+      request.onsuccess = (e) => resolve(e.target.result)
+      request.onerror = (e) => reject(e.target.error)
     } catch (err) {
-      if (!settled) {
-        settled = true
-        clearTimeout(timer)
-        reject(err)
-      }
+      reject(err)
     }
   })
 }
@@ -1020,11 +991,8 @@ export default function RestaurantOnboarding() {
         // 1. Fetch backend profile data if available
         let backendData = null
         try {
-          const token = getModuleToken("restaurant")
-          if (token) {
-            const res = await restaurantAPI.getCurrentRestaurant()
-            backendData = res?.data?.data?.restaurant || res?.data?.restaurant
-          }
+          const res = await restaurantAPI.getCurrentRestaurant()
+          backendData = res?.data?.data?.restaurant || res?.data?.restaurant
         } catch (err) {
           debugError("Error fetching backend onboarding data:", err)
         }

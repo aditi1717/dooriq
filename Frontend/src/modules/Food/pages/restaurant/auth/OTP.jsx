@@ -7,9 +7,7 @@ import {
   setAuthData as setRestaurantAuthData,
   setRestaurantPendingPhone,
   clearRestaurantSessionCache,
-  clearModuleAuth,
 } from "@food/utils/auth"
-import { isRestaurantOnboardingComplete } from "@food/utils/onboardingUtils"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { motion, AnimatePresence } from "framer-motion"
 import { getCachedSettings, getModuleLogoUrl, loadBusinessSettings } from "@food/utils/businessSettings"
@@ -53,10 +51,7 @@ export default function RestaurantOTP() {
   }, [])
 
   useEffect(() => {
-    let stored = sessionStorage.getItem("restaurantAuthData")
-    if (!stored) {
-      stored = localStorage.getItem("restaurantAuthData")
-    }
+    const stored = sessionStorage.getItem("restaurantAuthData")
     if (stored) {
       const data = JSON.parse(stored)
       setAuthData(data)
@@ -170,17 +165,13 @@ export default function RestaurantOTP() {
       const email = authData.method === "email" ? authData.email : null
       const purpose = authData.isSignUp ? "register" : "login"
 
-      const platform = (typeof window !== "undefined" && window.flutter_inappwebview) ? "mobile" : "web"
-      const fcmToken = (typeof window !== "undefined") ? (localStorage.getItem("fcm_web_registered_token_restaurant") || null) : null
-
-      const response = await restaurantAPI.verifyOTP(phone, code, purpose, null, email, fcmToken, platform)
+      const response = await restaurantAPI.verifyOTP(phone, code, purpose, null, email)
       const data = response?.data?.data || response?.data
       const needsRegistration = data?.needsRegistration === true
       const normalizedPhone = data?.phone || phone
 
       if (needsRegistration) {
         clearRestaurantSessionCache()
-        clearModuleAuth("restaurant")
         setRestaurantPendingPhone(normalizedPhone)
         sessionStorage.removeItem("restaurantAuthData")
         sessionStorage.removeItem("restaurantLoginPhone")
@@ -218,25 +209,6 @@ export default function RestaurantOTP() {
 
         if (shouldGoToOnboardingPayment) {
           navigate("/food/restaurant/onboarding-payment", { replace: true })
-          return
-        }
-
-        // If restaurant registration is pending approval
-        if (restaurant.status === "pending" && !restaurant.approvedAt) {
-          const pendingPhone = restaurant.ownerPhone || restaurant.primaryContactNumber || normalizedPhone
-          if (pendingPhone) setRestaurantPendingPhone(pendingPhone)
-          navigate("/food/restaurant/pending-verification", {
-            replace: true,
-            state: { phone: pendingPhone || "" }
-          })
-          return
-        }
-
-        // If restaurant onboarding profile is incomplete
-        if (!isRestaurantOnboardingComplete(restaurant)) {
-          clearModuleAuth("restaurant")
-          setRestaurantPendingPhone(normalizedPhone)
-          navigate("/food/restaurant/onboarding", { replace: true })
           return
         }
 
