@@ -106,10 +106,10 @@ const openOnboardingFilesDB = () => {
   })
 }
 
-const saveFileToDB = async (key, file) => {
+const saveFileToDB = async (key, file, existingDb = null) => {
   if (!file || !isUploadableFile(file)) return
   try {
-    const db = await openOnboardingFilesDB()
+    const db = existingDb || await openOnboardingFilesDB()
     const tx = db.transaction(FILES_STORE, "readwrite")
     tx.objectStore(FILES_STORE).put(file, key)
     await new Promise((resolve, reject) => {
@@ -148,9 +148,9 @@ const saveFileToDB = async (key, file) => {
   }
 }
 
-const getFileFromDB = async (key) => {
+const getFileFromDB = async (key, existingDb = null) => {
   try {
-    const db = await openOnboardingFilesDB()
+    const db = existingDb || await openOnboardingFilesDB()
     const tx = db.transaction(FILES_STORE, "readonly")
     const request = tx.objectStore(FILES_STORE).get(key)
     return new Promise((resolve) => {
@@ -183,9 +183,9 @@ const getFileFromDB = async (key) => {
   }
 }
 
-const deleteFileFromDB = async (key) => {
+const deleteFileFromDB = async (key, existingDb = null) => {
   try {
-    const db = await openOnboardingFilesDB()
+    const db = existingDb || await openOnboardingFilesDB()
     const tx = db.transaction(FILES_STORE, "readwrite")
     tx.objectStore(FILES_STORE).delete(key)
     await new Promise((resolve, reject) => {
@@ -270,16 +270,31 @@ const getUploadableMenuFiles = (menuImages = []) =>
     .filter((img) => isUploadableFile(img))
     .slice(0, 10)
 
-const persistMenuImagesToDB = async (menuImages = []) => {
+const persistMenuImagesToDB = async (menuImages = [], existingDb = null) => {
   const uploadableMenuFiles = getUploadableMenuFiles(menuImages)
+  
+  let dbInstance = existingDb;
+  if (!dbInstance) {
+    try {
+      dbInstance = await openOnboardingFilesDB();
+    } catch (e) {
+      debugError("Failed to open IndexedDB for menu images:", e);
+      return;
+    }
+  }
+
+  const promises = []
+  
   for (let i = 0; i < 10; i++) {
     const file = uploadableMenuFiles[i]
     if (file) {
-      await saveFileToDB(`menuImage_${i}`, file)
+      promises.push(saveFileToDB(`menuImage_${i}`, file, dbInstance))
     } else {
-      await deleteFileFromDB(`menuImage_${i}`)
+      promises.push(deleteFileFromDB(`menuImage_${i}`, dbInstance))
     }
   }
+  
+  await Promise.all(promises)
 }
 
 const isUploadableFile = (value) => {
@@ -1235,13 +1250,37 @@ export default function RestaurantOnboarding() {
           normalizePhoneDigits(localData.step1.ownerPhone).slice(-10) !== normalizePhoneDigits(currentPhone).slice(-10))
 
         if (shouldRestoreFiles) {
-          restoredProfileImage = await getFileFromDB("profileImage")
-          restoredPanImage = await getFileFromDB("panImage")
-          restoredGstImage = await getFileFromDB("gstImage")
-          restoredFssaiImage = await getFileFromDB("fssaiImage")
-          for (let i = 0; i < 10; i++) {
-            const img = await getFileFromDB(`menuImage_${i}`)
-            if (img) restoredMenuImages.push(img)
+          // Open database once instead of 14 times concurrently to prevent mobile browser freezes
+          let dbInstance = null;
+          try {
+            dbInstance = await openOnboardingFilesDB();
+          } catch (e) {
+            debugError("Failed to open IndexedDB for parallel reads:", e);
+          }
+          
+          if (dbInstance) {
+            // Run in parallel to avoid long sequential timeouts if IndexedDB is stalling
+            const promises = [
+              getFileFromDB("profileImage", dbInstance),
+              getFileFromDB("panImage", dbInstance),
+              getFileFromDB("gstImage", dbInstance),
+              getFileFromDB("fssaiImage", dbInstance)
+            ];
+            for (let i = 0; i < 10; i++) {
+              promises.push(getFileFromDB(`menuImage_${i}`, dbInstance));
+            }
+            
+            const results = await Promise.all(promises);
+            
+            restoredProfileImage = results[0];
+            restoredPanImage = results[1];
+            restoredGstImage = results[2];
+            restoredFssaiImage = results[3];
+            
+            for (let i = 0; i < 10; i++) {
+              const img = results[4 + i];
+              if (img) restoredMenuImages.push(img);
+            }
           }
         }
 
@@ -1360,20 +1399,21 @@ export default function RestaurantOnboarding() {
   }, [verifiedPhoneNumber])
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.visualViewport) return undefined
-
     const updateInset = () => {
+      if (typeof window === "undefined" || !window.visualViewport) return undefined
       const vv = window.visualViewport
       const inset = Math.max(0, Math.round(window.innerHeight - vv.height))
       setKeyboardInset(inset > 120 ? inset : 0)
     }
 
-    updateInset()
-    window.visualViewport.addEventListener("resize", updateInset)
-    window.visualViewport.addEventListener("scroll", updateInset)
-    return () => {
-      window.visualViewport.removeEventListener("resize", updateInset)
-      window.visualViewport.removeEventListener("scroll", updateInset)
+    if (typeof window !== "undefined" && window.visualViewport) {
+      updateInset()
+      window.visualViewport.addEventListener("resize", updateInset)
+      window.visualViewport.addEventListener("scroll", updateInset)
+      return () => {
+        window.visualViewport.removeEventListener("resize", updateInset)
+        window.visualViewport.removeEventListener("scroll", updateInset)
+      }
     }
   }, [])
 
@@ -1385,22 +1425,30 @@ export default function RestaurantOnboarding() {
     
     // Save images to IndexedDB
     const saveFiles = async () => {
+      let dbInstance = null;
+      try {
+        dbInstance = await openOnboardingFilesDB();
+      } catch (e) {
+        debugError("Failed to open IndexedDB for saveFiles:", e);
+        return;
+      }
+
       if (step2.profileImage && isUploadableFile(step2.profileImage)) {
-        await saveFileToDB("profileImage", step2.profileImage)
+        await saveFileToDB("profileImage", step2.profileImage, dbInstance)
       } else if (!step2.profileImage) {
-        await deleteFileFromDB("profileImage")
+        await deleteFileFromDB("profileImage", dbInstance)
       }
       if (step3.panImage && isUploadableFile(step3.panImage)) {
-        await saveFileToDB("panImage", step3.panImage)
+        await saveFileToDB("panImage", step3.panImage, dbInstance)
       }
       if (step3.gstImage && isUploadableFile(step3.gstImage)) {
-        await saveFileToDB("gstImage", step3.gstImage)
+        await saveFileToDB("gstImage", step3.gstImage, dbInstance)
       }
       if (step3.fssaiImage && isUploadableFile(step3.fssaiImage)) {
-        await saveFileToDB("fssaiImage", step3.fssaiImage)
+        await saveFileToDB("fssaiImage", step3.fssaiImage, dbInstance)
       }
       
-      await persistMenuImagesToDB(step2.menuImages || [])
+      await persistMenuImagesToDB(step2.menuImages || [], dbInstance)
     }
     saveFiles()
   }, [isOnboardingHydrated, step1, step2, step3, step, step4State])
