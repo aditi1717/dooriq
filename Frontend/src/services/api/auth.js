@@ -185,7 +185,8 @@ export function verifyRestaurantOtp(phone, otp, fcmToken = null, platform = "web
   return apiClient.post(AUTH.RESTAURANT_VERIFY_OTP, {
     phone: normalized,
     otp: otpStr,
-    ...(fcmToken ? { fcmToken, platform } : {}),
+    platform: platform || "web",
+    ...(fcmToken ? { fcmToken } : {}),
   });
 }
 

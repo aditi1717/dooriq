@@ -21,7 +21,7 @@ import { determineStepToShow } from "@food/utils/onboardingUtils"
 import { toast } from "sonner"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
-import { clearModuleAuth, clearAuthData } from "@food/utils/auth"
+import { clearModuleAuth, clearAuthData, getModuleToken } from "@food/utils/auth"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -991,8 +991,11 @@ export default function RestaurantOnboarding() {
         // 1. Fetch backend profile data if available
         let backendData = null
         try {
-          const res = await restaurantAPI.getCurrentRestaurant()
-          backendData = res?.data?.data?.restaurant || res?.data?.restaurant
+          const token = getModuleToken("restaurant")
+          if (token) {
+            const res = await restaurantAPI.getCurrentRestaurant()
+            backendData = res?.data?.data?.restaurant || res?.data?.restaurant
+          }
         } catch (err) {
           debugError("Error fetching backend onboarding data:", err)
         }
