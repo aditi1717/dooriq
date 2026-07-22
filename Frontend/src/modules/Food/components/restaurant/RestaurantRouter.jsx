@@ -94,12 +94,12 @@ export default function RestaurantRouter() {
         <Route path="otp" element={<AuthRedirect module="restaurant"><OTP /></AuthRedirect>} />
         <Route path="signup" element={<AuthRedirect module="restaurant"><Signup /></AuthRedirect>} />
         <Route path="forgot-password" element={<AuthRedirect module="restaurant"><ForgotPassword /></AuthRedirect>} />
-        <Route path="pending-verification" element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><VerificationPending /></ProtectedRoute>} />
+        <Route path="pending-verification" element={<VerificationPending />} />
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><PostApprovalPayment /></ProtectedRoute>} path="onboarding-payment" />
 
         {/* Protected Routes */}
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><OrdersMain /></ProtectedRoute>} path="" />
-        <Route path="onboarding" element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><RestaurantOnboarding /></ProtectedRoute>} />
+        <Route path="onboarding" element={<RestaurantOnboarding />} />
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><RestaurantNotifications /></ProtectedRoute>} path="notifications" />
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><AllOrdersPage /></ProtectedRoute>} path="orders/all" />
         <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><OrderDetailPage /></ProtectedRoute>} path="orders/:id" />
