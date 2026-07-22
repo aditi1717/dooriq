@@ -73,12 +73,14 @@ export default function RestaurantLogin() {
     try {
       setIsSending(true)
       await restaurantAPI.sendOTP(fullPhone, "login")
-      sessionStorage.setItem("restaurantAuthData", JSON.stringify({
+      const authPayload = JSON.stringify({
         method: "phone",
         phone: fullPhone,
         isSignUp: false,
         module: "restaurant",
-      }))
+      })
+      sessionStorage.setItem("restaurantAuthData", authPayload)
+      localStorage.setItem("restaurantAuthData", authPayload)
       navigate("/food/restaurant/otp")
     } catch (apiErr) {
       setError(apiErr?.response?.data?.message || "Failed to send OTP")
