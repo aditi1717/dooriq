@@ -71,7 +71,7 @@ const openOnboardingFilesDB = () => {
           resolved = true;
           reject(new Error("IndexedDB open timeout"));
         }
-      }, 3000);
+      }, 1000); // Reduced to 1s for faster fallback on broken mobile browsers
 
       request.onupgradeneeded = (e) => {
         const db = e.target.result
@@ -119,7 +119,7 @@ const saveFileToDB = async (key, file, existingDb = null) => {
           resolved = true;
           reject(new Error("IndexedDB write timeout"));
         }
-      }, 3000);
+      }, 1500); // 1.5s timeout
 
       tx.oncomplete = () => {
         if (!resolved) {
@@ -160,7 +160,8 @@ const getFileFromDB = async (key, existingDb = null) => {
           resolved = true;
           resolve(null); // Return null on timeout
         }
-      }, 2000); // 2 second timeout per file read
+      }, 1000); // Reduced to 1s per file read
+
 
       request.onsuccess = () => {
         if (!resolved) {
