@@ -113,9 +113,35 @@ const saveFileToDB = async (key, file) => {
     const tx = db.transaction(FILES_STORE, "readwrite")
     tx.objectStore(FILES_STORE).put(file, key)
     await new Promise((resolve, reject) => {
-      tx.oncomplete = () => resolve(true)
-      tx.onerror = () => reject(tx.error || new Error("IndexedDB write transaction failed"))
-      tx.onabort = () => reject(tx.error || new Error("IndexedDB write transaction aborted"))
+      let resolved = false;
+      const timeoutId = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          reject(new Error("IndexedDB write timeout"));
+        }
+      }, 3000);
+
+      tx.oncomplete = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          resolve(true);
+        }
+      };
+      tx.onerror = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          reject(tx.error || new Error("IndexedDB write transaction failed"));
+        }
+      };
+      tx.onabort = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          reject(tx.error || new Error("IndexedDB write transaction aborted"));
+        }
+      };
     })
   } catch (err) {
     debugError("IndexedDB save failed:", err)
@@ -128,8 +154,28 @@ const getFileFromDB = async (key) => {
     const tx = db.transaction(FILES_STORE, "readonly")
     const request = tx.objectStore(FILES_STORE).get(key)
     return new Promise((resolve) => {
-      request.onsuccess = () => resolve(request.result)
-      request.onerror = () => resolve(null)
+      let resolved = false;
+      const timeoutId = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve(null); // Return null on timeout
+        }
+      }, 2000); // 2 second timeout per file read
+
+      request.onsuccess = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          resolve(request.result);
+        }
+      };
+      request.onerror = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          resolve(null);
+        }
+      };
     })
   } catch (err) {
     debugError("IndexedDB load failed:", err)
@@ -143,9 +189,35 @@ const deleteFileFromDB = async (key) => {
     const tx = db.transaction(FILES_STORE, "readwrite")
     tx.objectStore(FILES_STORE).delete(key)
     await new Promise((resolve, reject) => {
-      tx.oncomplete = () => resolve(true)
-      tx.onerror = () => reject(tx.error || new Error("IndexedDB delete transaction failed"))
-      tx.onabort = () => reject(tx.error || new Error("IndexedDB delete transaction aborted"))
+      let resolved = false;
+      const timeoutId = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          reject(new Error("IndexedDB delete timeout"));
+        }
+      }, 3000);
+
+      tx.oncomplete = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          resolve(true);
+        }
+      };
+      tx.onerror = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          reject(tx.error || new Error("IndexedDB delete transaction failed"));
+        }
+      };
+      tx.onabort = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          reject(tx.error || new Error("IndexedDB delete transaction aborted"));
+        }
+      };
     })
   } catch (err) {
     debugError("IndexedDB delete failed:", err)
@@ -158,9 +230,35 @@ const clearAllFilesFromDB = async () => {
     const tx = db.transaction(FILES_STORE, "readwrite")
     tx.objectStore(FILES_STORE).clear()
     await new Promise((resolve, reject) => {
-      tx.oncomplete = () => resolve(true)
-      tx.onerror = () => reject(tx.error || new Error("IndexedDB clear transaction failed"))
-      tx.onabort = () => reject(tx.error || new Error("IndexedDB clear transaction aborted"))
+      let resolved = false;
+      const timeoutId = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          reject(new Error("IndexedDB clear timeout"));
+        }
+      }, 3000);
+
+      tx.oncomplete = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          resolve(true);
+        }
+      };
+      tx.onerror = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          reject(tx.error || new Error("IndexedDB clear transaction failed"));
+        }
+      };
+      tx.onabort = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          reject(tx.error || new Error("IndexedDB clear transaction aborted"));
+        }
+      };
     })
   } catch (err) {
     debugError("IndexedDB clear failed:", err)
