@@ -66,21 +66,6 @@ export const HistoryV2 = () => {
     fetchTrips();
   }, [selectedDate, activeTab, selectedTripType]);
 
-  // Bonus Logic
-  useEffect(() => {
-     if (showBonusModal) {
-        const fetchBonus = async () => {
-           setBonusLoading(true);
-           try {
-              const res = await deliveryAPI.getWalletTransactions({ type: 'bonus', limit: 50 });
-              if (res.data?.success) setBonusTransactions(res.data.data.transactions || []);
-           } catch (e) { toast.error("Failed to load bonuses"); }
-           finally { setBonusLoading(false); }
-        };
-        fetchBonus();
-     }
-  }, [showBonusModal]);
-
   // COD feature control
   useEffect(() => {
     const loadFeatureSettings = async () => {
