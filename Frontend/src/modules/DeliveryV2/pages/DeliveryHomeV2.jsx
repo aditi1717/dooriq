@@ -697,7 +697,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                   onClick={() => navigate('/food/delivery/profile')}
                   className="w-10 h-10 rounded-full overflow-hidden cursor-pointer active:scale-95 transition-all bg-[#222]"
                 >
-                  <img src={profileImage || "https://i.ibb.co/3m2Yh7r/SwitchEats-Brand-Image.png"} alt="Profile" className="w-full h-full object-cover" />
+                  <img src={profileImage || "https://cdn-icons-png.flaticon.com/512/3135/3135715.png"} alt="Profile" className="w-full h-full object-cover" />
                 </div>
 
                 <button
