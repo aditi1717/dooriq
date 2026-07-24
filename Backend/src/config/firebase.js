@@ -64,10 +64,15 @@ export const initializeFirebaseRealtime = () => {
             databaseURL: databaseURL || undefined
         });
 
-        db = admin.database();
+        if (databaseURL) {
+            db = admin.database();
+            logger.info('✅ Firebase Realtime Database Initialized Successfully');
+        } else {
+            logger.warn('⚠️ Firebase Database URL not configured. Realtime database features will not be available.');
+        }
+        
         messaging = admin.messaging();
 
-        logger.info('✅ Firebase Realtime Database Initialized Successfully');
         return { db, messaging };
     } catch (error) {
         logger.error(`❌ Firebase Initialization Error: ${error.message}`);
