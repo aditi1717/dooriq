@@ -55,10 +55,23 @@ const DeliveryTrackingMap = ({
   const socketRef = useRef(null);
   const interpStateRef = useRef({ lastPos: null, nextPos: null, startTime: 0 });
 
-  const { isLoaded } = useJsApiLoader({
+  const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
     libraries: LIBRARIES,
   });
+
+  useEffect(() => {
+    console.log('[DeliveryTrackingMap] VITE_GOOGLE_MAPS_API_KEY:', import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? `Provided (length: ${import.meta.env.VITE_GOOGLE_MAPS_API_KEY.length})` : 'MISSING');
+  }, []);
+
+  useEffect(() => {
+    if (isLoaded) {
+      console.log('[DeliveryTrackingMap] Google Maps API loaded successfully.');
+    }
+    if (loadError) {
+      console.error('[DeliveryTrackingMap] Google Maps API failed to load:', loadError);
+    }
+  }, [isLoaded, loadError]);
 
   const trackingIds = useMemo(() => {
     const ids = [orderId, ...(Array.isArray(orderTrackingIds) ? orderTrackingIds : [])]

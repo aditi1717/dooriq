@@ -113,6 +113,19 @@ export default function GoogleMapsTracking({
     libraries: [],
   })
 
+  useEffect(() => {
+    console.log('[GoogleMapsTracking] VITE_GOOGLE_MAPS_API_KEY:', apiKey ? `Provided (length: ${apiKey.length})` : 'MISSING');
+  }, [apiKey]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      console.log('[GoogleMapsTracking] Google Maps API loaded successfully.');
+    }
+    if (loadError) {
+      console.error('[GoogleMapsTracking] Google Maps API failed to load:', loadError);
+    }
+  }, [isLoaded, loadError]);
+
   // Combine storeLocation with sellerLocations
   const allSellers = storeLocation ? [storeLocation, ...sellerLocations] : sellerLocations;
 

@@ -48,6 +48,19 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
     libraries: LIBRARIES
   });
 
+  useEffect(() => {
+    console.log('[LiveMap] VITE_GOOGLE_MAPS_API_KEY:', import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? `Provided (length: ${import.meta.env.VITE_GOOGLE_MAPS_API_KEY.length})` : 'MISSING');
+  }, []);
+
+  useEffect(() => {
+    if (isLoaded) {
+      console.log('[LiveMap] Google Maps API loaded successfully.');
+    }
+    if (loadError) {
+      console.error('[LiveMap] Google Maps API failed to load:', loadError);
+    }
+  }, [isLoaded, loadError]);
+
   const [directions, setDirections] = useState(null);
   const [map, setMapInternal] = useState(null);
   const [zones, setZones] = useState([]);
