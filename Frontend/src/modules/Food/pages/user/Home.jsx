@@ -220,7 +220,7 @@ const RestaurantImageCarousel = React.memo(
 
       // Fallback if list is empty
       if (list.length === 0) {
-        list.push("/placeholder-restaurant.jpg");
+        list.push("/b21d38723599c4c6bbab33960b36d5d2.jpg");
       }
 
       return list;
@@ -416,9 +416,11 @@ const RestaurantImageCarousel = React.memo(
         </div>
 
         {isImageUnavailable && (
-          <div className="absolute inset-0 z-[2] flex items-center justify-center bg-gray-100">
-            <span className="text-xs text-gray-500">Image unavailable</span>
-          </div>
+          <img
+            src="/b21d38723599c4c6bbab33960b36d5d2.jpg"
+            alt="Default Food Placeholder"
+            className="w-full h-full absolute inset-0 object-cover"
+          />
         )}
 
         {/* Image Indicators - only show if more than 1 image */}

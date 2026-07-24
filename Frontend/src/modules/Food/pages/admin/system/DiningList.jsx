@@ -15,6 +15,14 @@ const normalizeImageUrl = (image) => {
 }
 
 const getPrimaryRestaurantImage = (restaurant, fallback = "") => {
+    const profileImg =
+        normalizeImageUrl(restaurant?.profileImage) ||
+        normalizeImageUrl(restaurant?.logo) ||
+        normalizeImageUrl(restaurant?.restaurantImage) ||
+        normalizeImageUrl(restaurant?.profileImageUrl) ||
+        normalizeImageUrl(restaurant?.onboarding?.step2?.profileImageUrl?.url)
+    if (profileImg) return profileImg
+
     const coverImages = Array.isArray(restaurant?.coverImages) ? restaurant.coverImages : []
     const firstCoverImage = coverImages.map(normalizeImageUrl).find(Boolean)
     if (firstCoverImage) return firstCoverImage
@@ -23,11 +31,7 @@ const getPrimaryRestaurantImage = (restaurant, fallback = "") => {
     const firstMenuImage = menuImages.map(normalizeImageUrl).find(Boolean)
     if (firstMenuImage) return firstMenuImage
 
-    return (
-        normalizeImageUrl(restaurant?.profileImage) ||
-        normalizeImageUrl(restaurant?.logo) ||
-        fallback
-    )
+    return fallback
 }
 
 

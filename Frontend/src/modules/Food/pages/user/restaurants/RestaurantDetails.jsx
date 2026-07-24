@@ -64,7 +64,7 @@ const debugError = (...args) => {}
 
 
 
-const FOOD_IMAGE_FALLBACK = "https://picsum.photos/seed/food-fallback/800/600"
+const FOOD_IMAGE_FALLBACK = "/b21d38723599c4c6bbab33960b36d5d2.jpg"
 const RUPEE_SYMBOL = "\u20B9"
 const RESTAURANT_DETAILS_FILTERS_STORAGE_KEY = "food-restaurant-details-filters"
 
@@ -3430,17 +3430,11 @@ function RestaurantDetailsContent() {
 
                   {/* Image Section */}
                   <div className="relative w-full h-64 overflow-hidden rounded-t-3xl">
-                    {selectedItem.image ? (
-                      <img
-                        src={selectedItem.image}
-                        alt={selectedItem.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                        <span className="text-sm text-gray-400">No image available</span>
-                      </div>
-                    )}
+                    <img
+                      src={selectedItem.image || FOOD_IMAGE_FALLBACK}
+                      alt={selectedItem.name}
+                      className="w-full h-full object-cover"
+                    />
                     {/* Bookmark Icon Overlay */}
                     <div className="absolute bottom-4 right-4 flex items-center">
                       <button

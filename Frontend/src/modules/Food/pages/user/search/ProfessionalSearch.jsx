@@ -305,7 +305,7 @@ export default function ProfessionalSearch() {
                            <img 
                             src={getMediaUrl(r.matchedDishImage || r.profileImage || r.image || (Array.isArray(r.images) && r.images[0]))} 
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform"
-                            onError={(e) => (e.target.src = "/placeholder-dish.jpg")}
+                            onError={(e) => (e.target.src = "/b21d38723599c4c6bbab33960b36d5d2.jpg")}
                           />
                           {r.pureVegRestaurant && (
                             <div className="absolute top-1 left-1 w-4 h-4 border border-green-600 p-[1px] bg-white rounded-sm">
@@ -362,7 +362,7 @@ export default function ProfessionalSearch() {
                          <img 
                           src={getMediaUrl(r.profileImage || r.image || (Array.isArray(r.images) && r.images[0]))} 
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          onError={(e) => (e.target.src = "/placeholder-restaurant.jpg")}
+                          onError={(e) => (e.target.src = "/b21d38723599c4c6bbab33960b36d5d2.jpg")}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                         <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
