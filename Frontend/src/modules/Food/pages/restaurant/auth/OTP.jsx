@@ -168,7 +168,7 @@ export default function RestaurantOTP() {
       const response = await restaurantAPI.verifyOTP(phone, code, purpose, null, email)
       const data = response?.data?.data || response?.data
       
-      const hasRestaurantProfile = Boolean(data?.restaurant || (data?.user && data?.user?.role === 'restaurant'))
+      const hasRestaurantProfile = Boolean(data?.restaurant || (data?.user && (data?.user?.role === 'restaurant' || data?.user?.restaurantName || data?.user?.ownerPhone)))
       const needsRegistration = data?.needsRegistration === true || !hasRestaurantProfile
       const normalizedPhone = data?.phone || phone
 

@@ -364,6 +364,11 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
     }
   }
 
+  const userObj = {
+    ...(restaurant.toObject ? restaurant.toObject() : restaurant),
+    role: ROLES.RESTAURANT
+  };
+
   const isRestaurantSubscriptionEnabled = await isFeatureEnabled(FEATURE_KEYS.RESTAURANT_SUBSCRIPTION, true);
   if (isRestaurantSubscriptionEnabled && (!restaurant.onboardingFeePaid || isSubscriptionExpired(restaurant))) {
     const settings = await getRestaurantSubscriptionSettings();
@@ -391,7 +396,7 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
       paymentRequired: true,
       paymentReason: needsOnboardingPayment ? "onboarding_fee_pending" : "subscription_expired",
       needsRegistration: false,
-      user: restaurant,
+      user: userObj,
       accessToken,
       refreshToken,
       paymentSummary: {
@@ -426,7 +431,7 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
   return {
     accessToken,
     refreshToken,
-    user: restaurant,
+    user: userObj,
     needsRegistration: false,
   };
 };
@@ -616,6 +621,7 @@ export const getProfile = async (userId, role) => {
         profile = {
           id: doc._id,
           _id: doc._id,
+          role: ROLES.RESTAURANT,
           // Frontend expects "name" and "location" for restaurant screens.
           name: doc.restaurantName || "",
           restaurantName: doc.restaurantName || "",
