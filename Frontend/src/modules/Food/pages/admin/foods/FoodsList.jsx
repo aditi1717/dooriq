@@ -126,10 +126,19 @@ export default function FoodsList() {
       ;(Array.isArray(list) ? list : []).forEach((restaurant) => {
         const restaurantId = getEntityId(restaurant)
         if (!restaurantId || restaurantsMap.has(restaurantId)) return
+        const isPureVeg = Boolean(
+          restaurant.pureVegRestaurant === true ||
+          String(restaurant.pureVegRestaurant).toLowerCase() === "true" ||
+          restaurant.vegType === "veg" ||
+          restaurant.isVeg === true ||
+          restaurant.vegNonVeg === "veg" ||
+          restaurant.foodType === "veg" ||
+          restaurant.pureVeg === true
+        )
         restaurantsMap.set(restaurantId, {
           id: restaurantId,
           name: getRestaurantName(restaurant) || "Unknown Restaurant",
-          pureVegRestaurant: restaurant.pureVegRestaurant === true,
+          pureVegRestaurant: isPureVeg,
         })
       })
 
@@ -280,19 +289,39 @@ export default function FoodsList() {
     let list = categoryOptions
 
     if (foodForm.restaurantId) {
-      const selectedRestaurantObj = restaurantOptions.find(r => r.id === foodForm.restaurantId)
-      const isPureVeg = selectedRestaurantObj?.pureVegRestaurant === true
+      const selectedRestaurantObj = restaurantOptions.find(r => String(r.id) === String(foodForm.restaurantId))
+      const isPureVeg = Boolean(
+        selectedRestaurantObj?.pureVegRestaurant === true ||
+        String(selectedRestaurantObj?.pureVegRestaurant).toLowerCase() === "true" ||
+        selectedRestaurantObj?.vegType === "veg" ||
+        selectedRestaurantObj?.isVeg === true ||
+        selectedRestaurantObj?.vegNonVeg === "veg" ||
+        selectedRestaurantObj?.foodType === "veg" ||
+        selectedRestaurantObj?.pureVeg === true
+      )
 
       list = list.filter((c) => {
         const isGlobal = !c.restaurantId
-        const isMatchingRestro = c.restaurantId === foodForm.restaurantId
+        const isMatchingRestro = String(c.restaurantId) === String(foodForm.restaurantId)
         const isScopeMatch = isGlobal || isMatchingRestro
 
         if (!isScopeMatch) return false
 
         if (isPureVeg) {
-          const scope = String(c.foodTypeScope || "Both").toLowerCase()
-          return scope !== "non-veg"
+          const scope = String(c.foodTypeScope || "").trim().toLowerCase()
+          // Pure veg restaurants can ONLY use categories that are strictly "Veg" (excludes "Non-Veg" and "Both")
+          if (scope !== "veg") return false
+
+          const type = String(c.type || "").toLowerCase()
+          if (type === "non-veg" || type === "both") return false
+
+          const catName = String(c.name || "").toLowerCase()
+          const nonVegKeywords = [
+            "nonveg", "non-veg", "non veg", "chicken", "mutton", "fish", "egg", "meat", "pork", "beef", "seafood", "kebab"
+          ]
+          if (nonVegKeywords.some((keyword) => catName.includes(keyword))) {
+            return false
+          }
         }
 
         return true
@@ -321,8 +350,19 @@ export default function FoodsList() {
     if (!ensureActionAccess("edit")) return
     setFoodFormMode("edit")
     setEditingFood(food)
+    const restId = String(food.restaurantId || "")
+    const selectedRestaurantObj = restaurantOptions.find(r => String(r.id) === restId)
+    const isPureVeg = Boolean(
+      selectedRestaurantObj?.pureVegRestaurant === true ||
+      String(selectedRestaurantObj?.pureVegRestaurant).toLowerCase() === "true" ||
+      selectedRestaurantObj?.vegType === "veg" ||
+      selectedRestaurantObj?.isVeg === true ||
+      selectedRestaurantObj?.vegNonVeg === "veg" ||
+      selectedRestaurantObj?.foodType === "veg" ||
+      selectedRestaurantObj?.pureVeg === true
+    )
     setFoodForm({
-      restaurantId: String(food.restaurantId || ""),
+      restaurantId: restId,
       categoryId: String(food.categoryId || ""),
       categoryName: String(food.categoryName || ""),
       name: String(food.name || ""),
@@ -330,7 +370,7 @@ export default function FoodsList() {
       variants: getFoodVariants(food).map(createVariantDraft),
       description: String(food.description || ""),
       image: String(food.image || ""),
-      foodType: String(food.foodType || "Non-Veg"),
+      foodType: isPureVeg ? "Veg" : String(food.foodType || "Non-Veg"),
       isAvailable: food.isAvailable !== false,
       preparationTime: String(food.preparationTime || ""),
     })

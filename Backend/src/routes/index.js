@@ -12,6 +12,7 @@ import paymentRoutes from '../core/payments/payment.routes.js';
 import fcmRoutes from '../core/notifications/fcm.routes.js';
 import notificationRoutes from '../core/notifications/notification.routes.js';
 import { authMiddleware } from '../core/auth/auth.middleware.js';
+import { privateRateLimiter } from '../middleware/rateLimit.js';
 import * as businessSettingsController from '../modules/food/admin/controllers/businessSettings.controller.js';
 import * as adminController from '../modules/food/admin/controllers/admin.controller.js';
 import { requireRoles } from '../core/roles/role.middleware.js';
@@ -46,15 +47,15 @@ router.get('/v1/food/admin/restaurant-subscription-settings/public', adminContro
 router.get('/v1/food/admin/feature-settings/public', adminController.getFeatureSettings);
 router.get('/v1/food/admin/fee-settings/public', adminController.getFeeSettings);
 
-router.use('/v1/food/admin', authMiddleware, requireRoles('ADMIN'), restaurantAdminRoutes);
-router.use('/v1/food/user', authMiddleware, requireRoles('USER'), userRoutes);
-router.use('/v1/food/notifications', authMiddleware, requireRoles('USER', 'RESTAURANT', 'DELIVERY_PARTNER'), notificationRoutes);
-router.use('/v1/food/orders', authMiddleware, requireRoles('USER'), orderUserRoutes);
-router.use('/v1/food/payments', authMiddleware, paymentRoutes);
+router.use('/v1/food/admin', authMiddleware, privateRateLimiter, requireRoles('ADMIN'), restaurantAdminRoutes);
+router.use('/v1/food/user', authMiddleware, privateRateLimiter, requireRoles('USER'), userRoutes);
+router.use('/v1/food/notifications', authMiddleware, privateRateLimiter, requireRoles('USER', 'RESTAURANT', 'DELIVERY_PARTNER'), notificationRoutes);
+router.use('/v1/food/orders', authMiddleware, privateRateLimiter, requireRoles('USER'), orderUserRoutes);
+router.use('/v1/food/payments', authMiddleware, privateRateLimiter, paymentRoutes);
 router.use('/v1/payments/webhook', webhookRoutes); // ✅ NEW: Public Webhook
-router.use('/v1/fcm-tokens', fcmRoutes);
-router.use('/fcm-tokens', fcmRoutes);
+router.use('/v1/fcm-tokens', authMiddleware, privateRateLimiter, fcmRoutes);
+router.use('/fcm-tokens', authMiddleware, privateRateLimiter, fcmRoutes);
 
-router.get('/v1/admin/queues', authMiddleware, requireRoles('ADMIN'), getQueuesController);
+router.get('/v1/admin/queues', authMiddleware, privateRateLimiter, requireRoles('ADMIN'), getQueuesController);
 
 export default router;

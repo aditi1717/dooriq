@@ -1,5 +1,5 @@
 import TopBanner from '../models/topBanner.model.js';
-import { v2 as cloudinary } from 'cloudinary';
+import { uploadImageBuffer, deleteImageFile } from '../../../../services/cloudinary.service.js';
 
 export const listTopBannersController = async (req, res) => {
     try {
@@ -21,24 +21,15 @@ export const uploadTopBannersController = async (req, res) => {
 
         for (const file of req.files) {
             try {
-                const uploadResult = await new Promise((resolve, reject) => {
-                    const stream = cloudinary.uploader.upload_stream(
-                        { folder: 'food/top-banners', resource_type: 'image' },
-                        (error, result) => {
-                            if (error) return reject(error);
-                            return resolve(result);
-                        }
-                    );
-                    stream.end(file.buffer);
-                });
+                const imagePath = await uploadImageBuffer(file.buffer);
 
                 // Find max order
                 const maxOrderBanner = await TopBanner.findOne().sort('-order');
                 const nextOrder = maxOrderBanner ? maxOrderBanner.order + 1 : 0;
 
                 const newBanner = new TopBanner({
-                    image: uploadResult.secure_url,
-                    publicId: uploadResult.public_id,
+                    image: imagePath,
+                    publicId: imagePath,
                     order: nextOrder,
                     isActive: true
                 });
@@ -67,12 +58,8 @@ export const deleteTopBannerController = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Banner not found' });
         }
 
-        if (banner.publicId) {
-            try {
-                await cloudinary.uploader.destroy(banner.publicId);
-            } catch (err) {
-                console.error("Cloudinary deletion failed:", err.message);
-            }
+        if (banner.image || banner.publicId) {
+            await deleteImageFile(banner.image || banner.publicId);
         }
 
         await TopBanner.findByIdAndDelete(req.params.id);

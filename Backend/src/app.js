@@ -6,11 +6,11 @@ import mongoSanitize from 'mongo-sanitize';
 import xssClean from 'xss-clean';
 import routes from './routes/index.js';
 import errorHandler from './middleware/errorHandler.js';
-import { apiRateLimiter } from './middleware/rateLimit.js';
 import { responseTimeLogger } from './middleware/responseTimeLogger.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { healthCheck } from './config/health.js';
 import { config } from './config/env.js';
+import { getUploadStorageDir } from './services/imageStorage.service.js';
 
 const app = express();
 
@@ -62,8 +62,11 @@ app.use((req, _res, next) => {
 });
 app.use(xssClean());
 
-// Global rate limiting for API routes
-app.use('/api', apiRateLimiter);
+// Serve static uploaded images directly from root storage directory
+app.use('/uploads', express.static(getUploadStorageDir(), {
+    maxAge: '30d',
+    immutable: true
+}));
 
 // Optional: log API response time (method, path, status, duration) - no sensitive data
 app.use('/api', responseTimeLogger);

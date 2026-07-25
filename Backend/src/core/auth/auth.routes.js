@@ -16,7 +16,7 @@ import {
     resetAdminPasswordWithOtpController
 } from './auth.controller.js';
 import { authMiddleware, requireAdmin } from './auth.middleware.js';
-import { authRateLimiter } from '../../middleware/rateLimit.js';
+import { authRateLimiter, privateRateLimiter } from '../../middleware/rateLimit.js';
 
 const router = express.Router();
 
@@ -48,11 +48,11 @@ router.post('/refresh-token', refreshTokenController);
 router.post('/logout', logoutController);
 
 // Authenticated user profile (requires Bearer token)
-router.get('/me', authMiddleware, getMeController);
+router.get('/me', authMiddleware, privateRateLimiter, getMeController);
 
 // Admin-only: profile update & change password (Bearer + ADMIN role)
-router.patch('/admin/profile', authMiddleware, requireAdmin, updateAdminProfileController);
-router.post('/admin/change-password', authMiddleware, requireAdmin, changeAdminPasswordController);
+router.patch('/admin/profile', authMiddleware, privateRateLimiter, requireAdmin, updateAdminProfileController);
+router.post('/admin/change-password', authMiddleware, privateRateLimiter, requireAdmin, changeAdminPasswordController);
 
 export default router;
 
