@@ -1364,6 +1364,7 @@ export default function ExploreMore() {
                   onClick={() => {
                     setLogoutType("single")
                     setLogoutConfirmOpen(true)
+                    setProfileOpen(false)
                   }}
                   disabled={isLoggingOut}
                   className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors"
@@ -1376,6 +1377,7 @@ export default function ExploreMore() {
                   onClick={() => {
                     setLogoutType("all")
                     setLogoutConfirmOpen(true)
+                    setProfileOpen(false)
                   }}
                   disabled={isLoggingOut}
                   className="w-full bg-white border-2 border-red-600 text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold py-3 px-4 rounded-lg transition-colors"
@@ -1385,7 +1387,10 @@ export default function ExploreMore() {
 
                 {/* Delete Account Button */}
                 <button
-                  onClick={() => setDeleteModalOpen(true)}
+                  onClick={() => {
+                    setDeleteModalOpen(true)
+                    setProfileOpen(false)
+                  }}
                   className="w-full flex items-center justify-center gap-2 text-red-500 hover:text-red-700 font-bold py-3 text-sm transition-all hover:bg-red-50 rounded-lg mt-1"
                 >
                   <Trash2 className="w-4 h-4" />

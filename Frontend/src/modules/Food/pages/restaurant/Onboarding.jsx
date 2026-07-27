@@ -310,34 +310,88 @@ const isUploadableFile = (value) => {
   )
 }
 
+const isMaskedPhone = (value) => {
+  const str = String(value || "").trim()
+  return str.length === 10 && /[XY*]/.test(str)
+}
+
 const normalizePhoneDigits = (value) => {
-  const digits = String(value || "").replace(/\D/g, "")
+  const str = String(value || "").trim()
+  if (/[XY*]/.test(str)) {
+    return str
+  }
+  const digits = str.replace(/\D/g, "")
   return digits.length > 10 ? digits.slice(-10) : digits
 }
 
 const getVerifiedPhoneFromStoredRestaurant = () => {
   try {
+    // 1. Check pending phone in localStorage
     const pending = localStorage.getItem("restaurant_pendingPhone")
     if (pending && pending.trim()) {
       return pending.trim()
     }
 
-    const storedUser = localStorage.getItem("restaurant_user")
-    if (!storedUser) return ""
-    const user = JSON.parse(storedUser)
-    const candidates = [
-      user?.ownerPhone,
-      user?.primaryContactNumber,
-      user?.phone,
-      user?.phoneNumber,
-      user?.mobile,
-      user?.contactNumber,
-      user?.contact?.phone,
-      user?.owner?.phone,
-      user?.restaurant?.phone,
-    ]
-    const phone = candidates.find((value) => typeof value === "string" && value.trim())
-    return phone ? phone.trim() : ""
+    // 2. Check signup phone in sessionStorage
+    const signupPhone = sessionStorage.getItem("restaurant_signup_phone")
+    if (signupPhone && signupPhone.trim()) {
+      return signupPhone.trim()
+    }
+
+    // 3. Check login phone in sessionStorage
+    const loginPhone = sessionStorage.getItem("restaurantLoginPhone")
+    if (loginPhone && loginPhone.trim()) {
+      return loginPhone.trim()
+    }
+
+    // Helper to extract phone candidates from any parsed user object
+    const getPhoneFromObject = (obj) => {
+      if (!obj) return null
+      const candidates = [
+        obj.ownerPhone,
+        obj.primaryContactNumber,
+        obj.phone,
+        obj.phoneNumber,
+        obj.mobile,
+        obj.contactNumber,
+        obj.username,
+        obj.contact?.phone,
+        obj.owner?.phone,
+        obj.restaurant?.phone,
+      ]
+      const found = candidates.find((val) => typeof val === "string" && val.trim())
+      return found ? found.trim() : null
+    }
+
+    // 4. Check restaurant user
+    const restUserStr = localStorage.getItem("restaurant_user")
+    if (restUserStr) {
+      const p = getPhoneFromObject(JSON.parse(restUserStr))
+      if (p) return p
+    }
+
+    // 5. Check customer user
+    const customerUserStr = localStorage.getItem("user_user")
+    if (customerUserStr) {
+      const p = getPhoneFromObject(JSON.parse(customerUserStr))
+      if (p) return p
+    }
+
+    // 6. Check userProfile
+    const userProfileStr = localStorage.getItem("userProfile")
+    if (userProfileStr) {
+      const p = getPhoneFromObject(JSON.parse(userProfileStr))
+      if (p) return p
+    }
+
+    // 7. Check admin user
+    const adminUserStr = localStorage.getItem("admin_user")
+    if (adminUserStr) {
+      const p = getPhoneFromObject(JSON.parse(adminUserStr))
+      if (p) return p
+    }
+
+    return ""
   } catch {
     return ""
   }
@@ -1128,7 +1182,36 @@ export default function RestaurantOnboarding() {
       try {
         setLoading(true)
         isRestoringOnboardingRef.current = true
-        setVerifiedPhoneNumber(getVerifiedPhoneFromStoredRestaurant())
+
+        // 0. Fetch logged-in user profile from API to retrieve verified phone number
+        let apiPhone = ""
+        try {
+          const meRes = await restaurantAPI.getMe()
+          const meData = meRes?.data?.data || meRes?.data
+          if (meData) {
+            const candidates = [
+              meData.ownerPhone,
+              meData.primaryContactNumber,
+              meData.phone,
+              meData.phoneNumber,
+              meData.mobile,
+              meData.contactNumber,
+              meData.username,
+              meData.contact?.phone,
+              meData.owner?.phone,
+              meData.restaurant?.phone,
+            ]
+            const found = candidates.find((value) => typeof value === "string" && value.trim())
+            if (found) {
+              apiPhone = found.trim()
+            }
+          }
+        } catch (err) {
+          debugError("Error fetching auth me profile:", err)
+        }
+
+        const currentPhone = normalizePhoneDigits(apiPhone || getVerifiedPhoneFromStoredRestaurant())
+        setVerifiedPhoneNumber(currentPhone)
 
         // 1. Fetch backend profile data if available
         let backendData = null
@@ -1141,7 +1224,6 @@ export default function RestaurantOnboarding() {
 
         // 2. Load local storage onboarding data
         const localData = loadOnboardingFromLocalStorage()
-        const currentPhone = getVerifiedPhoneFromStoredRestaurant()
 
         // 3. Hydrate state
         if (backendData) {
@@ -1177,15 +1259,17 @@ export default function RestaurantOnboarding() {
                 : null,
             ownerName: localData?.step1?.ownerName || step1Data.ownerName || backendData?.ownerName || "",
             ownerEmail: localData?.step1?.ownerEmail || step1Data.ownerEmail || backendData?.ownerEmail || backendData?.email || "",
-            ownerPhone: localData?.step1?.ownerPhone || step1Data.ownerPhone || backendData?.ownerPhone || backendData?.phone || "",
+            ownerPhone: normalizePhoneDigits(localData?.step1?.ownerPhone || step1Data.ownerPhone || backendData?.ownerPhone || backendData?.phone || currentPhone || ""),
             zoneId: localData?.step1?.zoneId || step1Data.zoneId || backendData?.zoneId || "",
             primaryContactNumber:
-              localData?.step1?.primaryContactNumber ||
-              step1Data.primaryContactNumber ||
-              backendData?.primaryContactNumber ||
-              backendData?.ownerPhone ||
-              backendData?.phone ||
-              "",
+              normalizePhoneDigits(
+                localData?.step1?.primaryContactNumber ||
+                step1Data.primaryContactNumber ||
+                backendData?.primaryContactNumber ||
+                backendData?.ownerPhone ||
+                backendData?.phone ||
+                ""
+              ),
             location: {
               formattedAddress:
                 localData?.step1?.location?.formattedAddress ||
@@ -1522,12 +1606,12 @@ export default function RestaurantOnboarding() {
     }
     if (!step1.ownerPhone?.trim()) {
       errors.push("Owner phone number is required")
-    } else if (!INDIAN_PHONE_REGEX.test(step1.ownerPhone.trim())) {
+    } else if (!isMaskedPhone(step1.ownerPhone) && !INDIAN_PHONE_REGEX.test(step1.ownerPhone.trim())) {
       errors.push("Please enter a valid 10-digit Indian phone number for owner")
     }
     if (!step1.primaryContactNumber?.trim()) {
       errors.push("Primary contact number is required")
-    } else if (!INDIAN_PHONE_REGEX.test(step1.primaryContactNumber.trim())) {
+    } else if (!isMaskedPhone(step1.primaryContactNumber) && !INDIAN_PHONE_REGEX.test(step1.primaryContactNumber.trim())) {
       errors.push("Please enter a valid 10-digit Indian phone number for restaurant")
     }
     if (!step1.zoneId?.trim()) {
@@ -1882,22 +1966,32 @@ export default function RestaurantOnboarding() {
               <button
                 type="button"
                 onClick={() => isEditing && setStep1({ ...step1, pureVegRestaurant: true })}
-                className={`px-3 py-1.5 text-xs rounded-full border ${
+                className={`px-3 py-1.5 text-xs rounded-full border transition-all ${
                   step1.pureVegRestaurant === true
-                    ? "bg-gray-900 text-white border-gray-900"
+                    ? "text-white"
                     : "bg-white text-gray-700 border-gray-200"
                 } ${!isEditing ? "opacity-70 cursor-not-allowed" : ""}`}
+                style={
+                  step1.pureVegRestaurant === true
+                    ? { backgroundColor: "#16A34A", borderColor: "#16A34A", color: "#ffffff" }
+                    : undefined
+                }
               >
                 Yes, Pure Veg
               </button>
               <button
                 type="button"
                 onClick={() => isEditing && setStep1({ ...step1, pureVegRestaurant: false })}
-                className={`px-3 py-1.5 text-xs rounded-full border ${
+                className={`px-3 py-1.5 text-xs rounded-full border transition-all ${
                   step1.pureVegRestaurant === false
-                    ? "bg-gray-900 text-white border-gray-900"
+                    ? "text-white"
                     : "bg-white text-gray-700 border-gray-200"
                 } ${!isEditing ? "opacity-70 cursor-not-allowed" : ""}`}
+                style={
+                  step1.pureVegRestaurant === false
+                    ? { backgroundColor: "#111827", borderColor: "#111827", color: "#ffffff" }
+                    : undefined
+                }
               >
                 No, Mixed Menu
               </button>
@@ -1964,6 +2058,11 @@ export default function RestaurantOnboarding() {
               readOnly={Boolean(verifiedPhoneNumber)}
               inputMode="numeric"
               className="mt-1 bg-white text-sm text-black placeholder-black"
+              style={
+                Boolean(verifiedPhoneNumber)
+                  ? { color: "#000000", WebkitTextFillColor: "#000000", opacity: 1 }
+                  : { color: "#000000", WebkitTextFillColor: "#000000" }
+              }
               placeholder="98XXXXXX"
               disabled={!isEditing}
             />
