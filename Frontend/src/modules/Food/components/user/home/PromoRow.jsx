@@ -5,31 +5,48 @@ import gourmetPromoIcon from "@food/assets/explore more icons/gourmet.png";
 import pricePromoIcon from "@food/assets/category-icons/price_promo.png";
 import collectionPromoIcon from "@food/assets/explore more icons/collection.png";
 
-export default function PromoRow({ handleVegModeChange, navigate, isVegMode, toggleRef }) {
+// Labels that each card may be stored under in the admin (case-insensitive)
+const LABEL_ALIASES = {
+  offers:      ['offers', 'coupons', 'coupon', 'discount', 'discounts'],
+  gourmet:     ['gourmet'],
+  'under-250': ['switch 99', 'switch99', 'under 99', 'under-99', 'under 250', 'under-250'],
+  collections: ['collections', 'collection', 'favorites', 'favourite', 'favourites'],
+};
+
+export default function PromoRow({ handleVegModeChange, navigate, isVegMode, toggleRef, exploreItems = [] }) {
+  // Build a lookup: for each card id, find the matching API item (if any) by label alias
+  const getApiIcon = (cardId) => {
+    const aliases = LABEL_ALIASES[cardId] || [];
+    const apiItem = exploreItems.find(
+      (it) => aliases.includes((it.label || '').toLowerCase())
+    );
+    return apiItem?.imageUrl || apiItem?.iconUrl || null;
+  };
+
   const promoCardsData = [
     {
       id: 'offers',
       title: "Discounts",
       value: "Coupons",
-      icon: discountPromoIcon,
+      icon: getApiIcon('offers') || discountPromoIcon,
     },
     {
       id: 'gourmet',
       title: "Premium",
       value: "Gourmet",
-      icon: gourmetPromoIcon,
+      icon: getApiIcon('gourmet') || gourmetPromoIcon,
     },
     {
       id: 'under-250',
       title: "Under ₹99",
       value: "Switch 99",
-      icon: pricePromoIcon,
+      icon: getApiIcon('under-250') || pricePromoIcon,
     },
     {
       id: 'collections',
       title: "Favorites",
       value: "Collections",
-      icon: collectionPromoIcon,
+      icon: getApiIcon('collections') || collectionPromoIcon,
     },
   ];
 

@@ -3041,6 +3041,7 @@ export default function Home() {
           navigate={navigate}
           isVegMode={vegMode}
           toggleRef={vegModeToggleRef}
+          exploreItems={landingExploreMore}
         />
 
         <PromotionBannerCarousel zoneId={zoneId} />
