@@ -3,7 +3,7 @@ import { sendResponse } from '../../../../utils/response.js';
 import { uploadImageBufferDetailed } from '../../../../services/cloudinary.service.js';
 
 const POWER_SCANNING_DEFAULT = {
-    user: { themeColor: '#FA0272', fontFamily: 'Poppins' },
+    user: { themeColor: '#2B04C1', fontFamily: 'Poppins' },
     restaurant: { themeColor: '#2563EB', fontFamily: 'Poppins' },
     delivery: { themeColor: '#00B761', fontFamily: 'Poppins' }
 };
