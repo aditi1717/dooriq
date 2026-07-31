@@ -1183,11 +1183,16 @@ export default function RestaurantOnboarding() {
         setLoading(true)
         isRestoringOnboardingRef.current = true
 
-        // 0. Fetch logged-in user profile from API to retrieve verified phone number
+        // 0. Fetch logged-in user profile and backend profile in parallel to reduce wait time.
         let apiPhone = ""
+        let backendData = null
         try {
-          const meRes = await restaurantAPI.getMe()
-          const meData = meRes?.data?.data || meRes?.data
+          const [meRes, restaurantRes] = await Promise.allSettled([
+            restaurantAPI.getMe(),
+            restaurantAPI.getCurrentRestaurant(),
+          ])
+
+          const meData = meRes.status === "fulfilled" ? (meRes.value?.data?.data || meRes.value?.data) : null
           if (meData) {
             const candidates = [
               meData.ownerPhone,
@@ -1206,21 +1211,14 @@ export default function RestaurantOnboarding() {
               apiPhone = found.trim()
             }
           }
+
+          backendData = restaurantRes.status === "fulfilled" ? (restaurantRes.value?.data?.data?.restaurant || restaurantRes.value?.data?.restaurant) : null
         } catch (err) {
-          debugError("Error fetching auth me profile:", err)
+          debugError("Error fetching onboarding bootstrap data:", err)
         }
 
         const currentPhone = normalizePhoneDigits(apiPhone || getVerifiedPhoneFromStoredRestaurant())
         setVerifiedPhoneNumber(currentPhone)
-
-        // 1. Fetch backend profile data if available
-        let backendData = null
-        try {
-          const res = await restaurantAPI.getCurrentRestaurant()
-          backendData = res?.data?.data?.restaurant || res?.data?.restaurant
-        } catch (err) {
-          debugError("Error fetching backend onboarding data:", err)
-        }
 
         // 2. Load local storage onboarding data
         const localData = loadOnboardingFromLocalStorage()

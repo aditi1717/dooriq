@@ -89,6 +89,14 @@ export default function SignupStep1() {
     sessionStorage.setItem("deliverySignupDetails", JSON.stringify(formData))
   }, [formData])
 
+  useEffect(() => {
+    const prefetchTimer = window.setTimeout(() => {
+      void import("./SignupStep2")
+    }, 0)
+
+    return () => window.clearTimeout(prefetchTimer)
+  }, [])
+
   // Scroll focused input into view when keyboard opens on mobile
   useEffect(() => {
     const handleFocusIn = (e) => {

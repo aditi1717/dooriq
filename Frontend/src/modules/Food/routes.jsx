@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
-import { useEffect, Suspense, lazy } from "react"
+import { useEffect, useRef, Suspense, lazy } from "react"
 import ProtectedRoute from "@food/components/ProtectedRoute"
 import AuthRedirect from "@food/components/AuthRedirect"
 import Loader from "@food/components/Loader"
@@ -79,6 +79,7 @@ function RestaurantGlobalNotificationListener() {
 
 export default function App() {
   const location = useLocation()
+  const hasWarmedBusinessSettingsRef = useRef(false)
 
   useEffect(() => {
     registerWebPushForCurrentModule(location.pathname)
@@ -91,25 +92,46 @@ export default function App() {
       return "user"
     }
 
-    const applyPowerScanning = async () => {
+    const applyPowerScanning = () => {
       const moduleName = resolveModule()
       const cached = getCachedSettings()
       if (cached) {
         applyModulePowerScanning(moduleName, cached)
       }
 
-      // Always revalidate from server so theme updates propagate across browsers/devices
-      // even when an older localStorage cache exists.
-      const settings = await loadBusinessSettings()
-      if (settings) {
-        applyModulePowerScanning(moduleName, settings)
+      const shouldWarmSettings = !cached || !hasWarmedBusinessSettingsRef.current
+      if (!shouldWarmSettings) {
+        return
       }
+
+      hasWarmedBusinessSettingsRef.current = true
+
+      const refresh = () => {
+        void loadBusinessSettings().then((settings) => {
+          if (settings) {
+            applyModulePowerScanning(moduleName, settings)
+          }
+        })
+      }
+
+      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+        const idleId = window.requestIdleCallback(refresh, { timeout: 1500 })
+        return () => window.cancelIdleCallback(idleId)
+      }
+
+      const timerId = window.setTimeout(() => {
+        void refresh()
+      }, 300)
+      return () => window.clearTimeout(timerId)
     }
 
-    applyPowerScanning()
+    const cleanup = applyPowerScanning()
     const handleSettingsUpdate = () => applyPowerScanning()
     window.addEventListener("businessSettingsUpdated", handleSettingsUpdate)
-    return () => window.removeEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    return () => {
+      if (typeof cleanup === "function") cleanup()
+      window.removeEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    }
   }, [location.pathname])
 
   return (

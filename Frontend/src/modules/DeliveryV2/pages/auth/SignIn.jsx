@@ -66,7 +66,17 @@ export default function DeliverySignIn() {
 
     loadLogo()
     window.addEventListener("businessSettingsUpdated", syncLogo)
-    return () => window.removeEventListener("businessSettingsUpdated", syncLogo)
+
+    const prefetchTimer = window.setTimeout(() => {
+      void import("./Signup")
+      void import("./SignupStep1")
+      void import("./OTP")
+    }, 0)
+
+    return () => {
+      window.removeEventListener("businessSettingsUpdated", syncLogo)
+      window.clearTimeout(prefetchTimer)
+    }
   }, [])
 
   const validatePhone = (phone) => {

@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom"
+import { useEffect } from "react"
 import UserLayout from "./UserLayout"
 import { Suspense, lazy } from "react"
 import Loader from "@food/components/Loader"
@@ -92,6 +93,24 @@ const Wallet = lazy(() => import("@food/pages/user/Wallet"))
 const SubmitComplaint = lazy(() => import("@food/pages/user/complaints/SubmitComplaint"))
 
 export default function UserRouter() {
+  useEffect(() => {
+    const warmChunks = () => {
+      void import("@food/pages/user/auth/SignIn")
+      void import("@food/pages/user/auth/OTP")
+      void import("@food/pages/user/restaurants/Restaurants")
+      void import("@food/pages/user/cart/Cart")
+      void import("@food/pages/user/profile/Profile")
+    }
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(warmChunks, { timeout: 2000 })
+      return () => window.cancelIdleCallback(idleId)
+    }
+
+    const timerId = window.setTimeout(warmChunks, 0)
+    return () => window.clearTimeout(timerId)
+  }, [])
+
   return (
     <Suspense fallback={<Loader />}>
       <Routes>

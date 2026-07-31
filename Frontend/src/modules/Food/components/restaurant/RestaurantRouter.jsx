@@ -152,6 +152,27 @@ export default function RestaurantRouter() {
   }, [])
 
 
+
+  useEffect(() => {
+    const warmChunks = () => {
+      void import("@food/pages/restaurant/auth/Login")
+      void import("@food/pages/restaurant/auth/OTP")
+      void import("@food/pages/restaurant/auth/Signup")
+      void import("@food/pages/restaurant/auth/ForgotPassword")
+      void import("@food/pages/restaurant/Onboarding")
+      void import("@food/pages/restaurant/auth/VerificationPending")
+      void import("@food/pages/restaurant/auth/PostApprovalPayment")
+    }
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(warmChunks, { timeout: 2000 })
+      return () => window.cancelIdleCallback(idleId)
+    }
+
+    const timerId = window.setTimeout(warmChunks, 0)
+    return () => window.clearTimeout(timerId)
+  }, [])
+
   return (
 
     <Suspense fallback={<Loader />}>
