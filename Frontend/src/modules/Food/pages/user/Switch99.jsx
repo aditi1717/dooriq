@@ -190,6 +190,8 @@ export default function Under250() {
   const [bannerImages, setBannerImages] = useState([])
   const [loadingBanner, setLoadingBanner] = useState(true)
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0)
+  const [aspectRatios, setAspectRatios] = useState({})
+  const activeAspectRatio = aspectRatios[currentBannerIndex] || 2.35
   const [under250Restaurants, setUnder250Restaurants] = useState([])
   const [loadingRestaurants, setLoadingRestaurants] = useState(true)
   const [availabilityTick, setAvailabilityTick] = useState(Date.now())
@@ -1157,7 +1159,8 @@ export default function Under250() {
       <div
         ref={bannerShellRef}
         data-banner-shell="true"
-        className="relative w-full overflow-hidden h-[clamp(240px,40vw,520px)] bg-white"
+        className="relative w-full overflow-hidden bg-transparent transition-[aspect-ratio] duration-350"
+        style={{ aspectRatio: activeAspectRatio }}
       >
         <div
           className="absolute inset-0 z-0 overflow-hidden"
@@ -1175,9 +1178,15 @@ export default function Under250() {
                   src={bannerSrc}
                   alt={`Switch 99 Banner ${index + 1}`}
                   className="w-full h-full"
-                  objectFit="contain"
+                  objectFit="cover"
                   priority={index === 0}
                   sizes="100vw"
+                  onLoad={(e) => {
+                    const img = e.target;
+                    if (img && img.naturalWidth && img.naturalHeight) {
+                      setAspectRatios(prev => ({ ...prev, [index]: img.naturalWidth / img.naturalHeight }));
+                    }
+                  }}
                 />
               </div>
             ))}
@@ -1186,7 +1195,7 @@ export default function Under250() {
 
         {/* Dynamic Pagination Indicators */}
         {displayBanners.length > 1 && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 px-3 py-1.5 bg-black/20 backdrop-blur-md rounded-full border border-white/10 z-10">
             {displayBanners.map((_, index) => (
               <button
                 key={`banner-dot-${index}`}
@@ -1194,9 +1203,10 @@ export default function Under250() {
                   setCurrentBannerIndex(index)
                   resetBannerAutoSlide()
                 }}
-                className={`transition-all duration-300 rounded-full h-1.5 ${
-                  currentBannerIndex === index ? "w-6 bg-[#FA0272]" : "w-1.5 bg-black/20"
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  currentBannerIndex === index ? "bg-white w-5" : "bg-white/40 w-1.5"
                 }`}
+                aria-label={`Go to slide ${index + 1}`}
               />
             ))}
           </div>

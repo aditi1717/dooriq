@@ -114,6 +114,8 @@ export default function HomeHeader({
   };
 
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [aspectRatios, setAspectRatios] = useState({});
+  const activeAspectRatio = aspectRatios[currentSlide] || 2.35;
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsHistoryPushedRef = useRef(false);
   const touchStartXRef = useRef(0);
@@ -190,12 +192,18 @@ export default function HomeHeader({
   const displayBanners = hasDynamicBanners
     ? topBanners.map((banner, index) => ({
         id: index,
-        bg: "bg-gray-100 dark:bg-gray-800",
+        bg: "bg-transparent",
         content: (
           <img 
             src={banner.image || banner.imageUrl} 
             alt={`Banner ${index + 1}`} 
             className="absolute inset-0 w-full h-full object-cover" 
+            onLoad={(e) => {
+              const { naturalWidth, naturalHeight } = e.target;
+              if (naturalWidth && naturalHeight) {
+                setAspectRatios(prev => ({ ...prev, [index]: naturalWidth / naturalHeight }));
+              }
+            }}
           />
         )
       }))
@@ -203,38 +211,15 @@ export default function HomeHeader({
 
   return (
     <>
+      {/* Location row header container */}
       <div
-        className="relative h-[340px] w-full overflow-hidden rounded-b-[2rem] shadow-[0_10px_40px_rgba(250,2,114,0.15)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.45)]"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        className="relative w-full overflow-hidden bg-gradient-to-br from-[#ff2d8d] via-[#FA0272] to-[#ff6a00] rounded-b-[2rem] shadow-[0_10px_30px_rgba(250,2,114,0.15)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
       >
-        
-        {/* Sliding Background Track */}
-        {hasDynamicBanners ? (
-          <div 
-            className="absolute inset-0 flex transition-transform duration-700 ease-in-out z-0"
-            style={{ transform: `translateX(-${currentSlide * 100}%)` }}
-          >
-            {displayBanners.map((banner) => (
-              <div key={banner.id} className={`relative w-full h-full shrink-0 ${banner.bg}`}>
-                {banner.content}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div
-            className={`absolute inset-0 z-0 transition-opacity duration-300 ${
-              topBannersLoaded ? "bg-[#FA0272]" : "bg-gradient-to-br from-[#ff2d8d] via-[#FA0272] to-[#ff6a00] animate-pulse"
-            }`}
-          >
-            <div className="absolute top-0 left-1/4 w-32 h-32 bg-white/20 blur-[60px] rounded-full pointer-events-none" />
-            <div className="absolute bottom-0 right-1/4 w-40 h-40 bg-white/10 blur-[80px] rounded-full pointer-events-none" />
-          </div>
-        )}
+        <div className="absolute top-0 left-1/4 w-32 h-32 bg-white/20 blur-[60px] rounded-full pointer-events-none" />
+        <div className="absolute bottom-0 right-1/4 w-40 h-40 bg-white/10 blur-[80px] rounded-full pointer-events-none" />
 
-        {/* Static Overlay Location Row */}
-        <div className="absolute top-0 inset-x-0 z-20 px-4 pt-5 flex items-center justify-between gap-3">
+        {/* Static Location Row */}
+        <div className="relative z-20 px-4 pt-5 pb-12 flex items-center justify-between gap-3">
           <div 
             className="flex items-center gap-1.5 cursor-pointer group min-w-0 flex-1"
             onClick={handleLocationClick}
@@ -296,21 +281,6 @@ export default function HomeHeader({
             </div>
           </div>
         </div>
-        
-        {/* Carousel Pager Dots */}
-        {hasDynamicBanners && displayBanners.length > 1 && (
-          <div className="absolute bottom-2 inset-x-0 flex justify-center gap-1.5 z-20">
-            {displayBanners.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                aria-label={`Go to slide ${i + 1}`}
-                onClick={() => setCurrentSlide(i)}
-                className={`h-1 rounded-full transition-all duration-300 ${i === currentSlide ? 'bg-black/60 w-3 dark:bg-white/80' : 'bg-black/20 w-1.5 dark:bg-white/30'}`}
-              />
-            ))}
-          </div>
-        )}
       </div>
 
       <AnimatePresence>
@@ -411,7 +381,7 @@ export default function HomeHeader({
 
       {/* Sticky Search Bar wrapper — position adjusts when categories are also stuck */}
       <div
-        className={`relative sticky z-[60] px-3 pb-0 -mt-[256px] mb-[210px] pointer-events-none ${
+        className={`relative sticky z-[60] px-3 pb-0 -mt-7 mb-4 pointer-events-none ${
           isCategoryStuck ? 'top-0 pt-2' : 'top-2'
         }`}
       >
@@ -469,6 +439,48 @@ export default function HomeHeader({
           </div>
         </div>
       </div>
+
+      {/* Top Banner Carousel (Beneath the Search Bar) */}
+      {hasDynamicBanners && (
+        <div className="px-4 py-2">
+          <div
+            className="relative w-full overflow-hidden rounded-2xl shadow-sm bg-transparent transition-[aspect-ratio] duration-350"
+            style={{ aspectRatio: activeAspectRatio }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* Sliding Background Track */}
+            <div 
+              className="absolute inset-0 flex transition-transform duration-700 ease-in-out z-0"
+              style={{ transform: `translateX(-${currentSlide * 100}%)` }}
+            >
+              {displayBanners.map((banner) => (
+                <div key={banner.id} className={`relative w-full h-full shrink-0 ${banner.bg}`}>
+                  {banner.content}
+                </div>
+              ))}
+            </div>
+
+            {/* Carousel Pager Dots */}
+            {displayBanners.length > 1 && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 px-3 py-1.5 bg-black/20 backdrop-blur-md rounded-full border border-white/10 z-30">
+                {displayBanners.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`Go to slide ${i + 1}`}
+                    onClick={() => setCurrentSlide(i)}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${
+                      i === currentSlide ? 'bg-white w-5' : 'bg-white/40 w-1.5'
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
