@@ -2750,8 +2750,8 @@ export default function Home() {
   const HeroBannerSection = useMemo(() => {
     if (showBannerSkeleton) {
       return (
-        <div className="w-full py-2">
-          <HeroBannerSkeleton className="h-28 sm:h-36 lg:h-44 w-full" />
+        <div className="px-3.5 py-2">
+          <HeroBannerSkeleton className="h-28 sm:h-36 lg:h-44 w-full rounded-[1.25rem]" />
         </div>
       );
     }
@@ -2759,11 +2759,11 @@ export default function Home() {
     if (heroBannerImages.length === 0) return null;
 
     return (
-      <div className="w-full py-2">
+      <div className="px-3.5 py-2">
         <div
           ref={heroShellRef}
           data-home-hero-shell="true"
-          className="relative w-full overflow-hidden shadow-sm group cursor-pointer bg-white"
+          className="relative w-full overflow-hidden rounded-[1.25rem] shadow-sm group cursor-pointer bg-white"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}

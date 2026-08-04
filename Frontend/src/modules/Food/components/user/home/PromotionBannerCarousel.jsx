@@ -69,8 +69,8 @@ const PromotionBannerCarousel = ({ zoneId: propZoneId }) => {
 
   if (loading) {
     return (
-      <div className="w-full py-2">
-        <div className="w-full h-32 sm:h-40 md:h-48 bg-gray-100 animate-pulse" />
+      <div className="px-3.5 py-2">
+        <div className="w-full h-32 sm:h-40 md:h-48 rounded-[1.25rem] bg-gray-100 animate-pulse" />
       </div>
     );
   }
@@ -78,8 +78,8 @@ const PromotionBannerCarousel = ({ zoneId: propZoneId }) => {
   if (!banners.length) return null;
 
   return (
-    <div className="w-full py-2 relative group">
-      <div className="relative overflow-hidden w-full shadow-sm">
+    <div className="px-3.5 py-2 relative group">
+      <div className="relative overflow-hidden w-full rounded-[1.25rem] shadow-sm">
         <AnimatePresence mode="wait">
           <motion.div
             key={banners[currentIndex]?._id?.$oid || banners[currentIndex]?._id || currentIndex}
