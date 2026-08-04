@@ -84,13 +84,21 @@ export default function Gourmet() {
   
   const showGourmetSkeleton = useDelayedLoading(loading || zoneStatus === 'loading' || zoneLoading)
 
-  const backendOrigin = (API_BASE_URL || "").replace(/\/api\/v1\/?$/, "")
+  const backendOrigin = (() => {
+    try {
+      return new URL(API_BASE_URL).origin;
+    } catch {
+      return (API_BASE_URL || "").replace(/\/api\/v1\/?$/, "").replace(/\/api\/?$/, "");
+    }
+  })();
 
   const resolveImageUrl = (url) => {
     if (typeof url !== "string") return ""
     const trimmed = url.trim()
     if (!trimmed) return ""
     if (/^(https?:|\/\/|data:|blob:)/i.test(trimmed)) return trimmed
+    const isWebView = typeof window !== "undefined" && (Boolean(window.ReactNativeWebView) || window.location.pathname.includes("webview"));
+    if (!isWebView && trimmed.startsWith("/uploads")) return trimmed
     if (!backendOrigin) return trimmed
     return `${backendOrigin.replace(/\/$/, "")}${trimmed.startsWith("/") ? trimmed : `/${trimmed}`}`
   }

@@ -2750,8 +2750,8 @@ export default function Home() {
   const HeroBannerSection = useMemo(() => {
     if (showBannerSkeleton) {
       return (
-        <div className="px-4 py-2">
-          <HeroBannerSkeleton className="h-28 sm:h-36 lg:h-44 rounded-2xl" />
+        <div className="w-full py-2">
+          <HeroBannerSkeleton className="h-28 sm:h-36 lg:h-44 w-full" />
         </div>
       );
     }
@@ -2759,11 +2759,11 @@ export default function Home() {
     if (heroBannerImages.length === 0) return null;
 
     return (
-      <div className="px-4 py-2">
+      <div className="w-full py-2">
         <div
           ref={heroShellRef}
           data-home-hero-shell="true"
-          className="relative w-full overflow-hidden aspect-[1.85/1] rounded-2xl shadow-sm group cursor-pointer bg-white"
+          className="relative w-full overflow-hidden shadow-sm group cursor-pointer bg-white"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -2772,7 +2772,7 @@ export default function Home() {
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
-          <div className="absolute inset-0 z-0">
+          <div className="w-full">
             {/* Shining Glint Effect */}
             <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
               <motion.div 
@@ -2791,16 +2791,17 @@ export default function Home() {
             {heroBannerImages.map((image, index) => (
               <div
                 key={`${index}-${image}`}
-                className="absolute inset-0 transition-opacity duration-700 ease-in-out"
+                className={index === currentBannerIndex ? "relative w-full h-auto" : "absolute inset-0"}
                 style={{
                   opacity: currentBannerIndex === index ? 1 : 0,
                   zIndex: currentBannerIndex === index ? 2 : 1,
-                  pointerEvents: "none",
+                  pointerEvents: currentBannerIndex === index ? "auto" : "none",
+                  transition: "opacity 700ms ease-in-out",
                 }}>
                 <img
                   src={image}
                   alt={`Hero Banner ${index + 1}`}
-                  className="h-full w-full object-cover"
+                  className="w-full h-auto block"
                   loading={index === currentBannerIndex ? "eager" : "lazy"}
                   fetchPriority={index === currentBannerIndex ? "high" : "low"}
                   draggable={false}

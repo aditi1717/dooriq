@@ -69,8 +69,8 @@ const PromotionBannerCarousel = ({ zoneId: propZoneId }) => {
 
   if (loading) {
     return (
-      <div className="px-4 py-2">
-        <div className="w-full h-32 sm:h-40 md:h-48 rounded-[24px] bg-gray-100 animate-pulse" />
+      <div className="w-full py-2">
+        <div className="w-full h-32 sm:h-40 md:h-48 bg-gray-100 animate-pulse" />
       </div>
     );
   }
@@ -78,8 +78,8 @@ const PromotionBannerCarousel = ({ zoneId: propZoneId }) => {
   if (!banners.length) return null;
 
   return (
-    <div className="px-4 py-4 relative group">
-      <div className="relative overflow-hidden rounded-[24px] shadow-lg aspect-[21/9] sm:aspect-[24/9]">
+    <div className="w-full py-2 relative group">
+      <div className="relative overflow-hidden w-full shadow-sm">
         <AnimatePresence mode="wait">
           <motion.div
             key={banners[currentIndex]?._id?.$oid || banners[currentIndex]?._id || currentIndex}
@@ -87,11 +87,11 @@ const PromotionBannerCarousel = ({ zoneId: propZoneId }) => {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.5, ease: "easeInOut" }}
-            className="w-full h-full"
+            className="w-full h-auto"
           >
             <a 
               href={banners[currentIndex]?.ctaLink || "#"} 
-              className="block w-full h-full"
+              className="block w-full h-auto"
               onClick={(e) => {
                 if (!banners[currentIndex]?.ctaLink) e.preventDefault();
               }}
@@ -99,7 +99,7 @@ const PromotionBannerCarousel = ({ zoneId: propZoneId }) => {
               <img 
                 src={banners[currentIndex]?.imageUrl} 
                 alt={banners[currentIndex]?.title || "Promotion"} 
-                className="w-full h-full object-cover"
+                className="w-full h-auto block"
               />
             </a>
           </motion.div>
@@ -110,13 +110,13 @@ const PromotionBannerCarousel = ({ zoneId: propZoneId }) => {
           <>
             <button
               onClick={handlePrev}
-              className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/30 backdrop-blur-md text-white opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/30 backdrop-blur-md text-white opacity-0 group-hover:opacity-100 transition-opacity z-25"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <button
               onClick={handleNext}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/30 backdrop-blur-md text-white opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/30 backdrop-blur-md text-white opacity-0 group-hover:opacity-100 transition-opacity z-25"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
@@ -125,7 +125,7 @@ const PromotionBannerCarousel = ({ zoneId: propZoneId }) => {
 
         {/* Indicators */}
         {banners.length > 1 && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-25">
             {banners.map((_, idx) => (
               <div
                 key={idx}
