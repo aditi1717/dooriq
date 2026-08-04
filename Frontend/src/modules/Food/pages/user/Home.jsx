@@ -781,8 +781,6 @@ export default function Home() {
   const vegModeToggleRef = useRef(null);
 
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
-  const [heroAspectRatios, setHeroAspectRatios] = useState({});
-  const activeHeroAspectRatio = heroAspectRatios[currentBannerIndex] || 2.35;
   const [topBannersData, setTopBannersData] = useState([]);
   const [topBannersLoaded, setTopBannersLoaded] = useState(false);
 
@@ -2754,8 +2752,7 @@ export default function Home() {
         <div
           ref={heroShellRef}
           data-home-hero-shell="true"
-          className="relative w-full overflow-hidden rounded-2xl shadow-sm group cursor-pointer bg-transparent transition-[aspect-ratio] duration-350"
-          style={{ aspectRatio: activeHeroAspectRatio }}
+          className="relative w-full overflow-hidden aspect-[1.85/1] rounded-2xl shadow-sm group cursor-pointer bg-white"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -2796,12 +2793,6 @@ export default function Home() {
                   loading={index === currentBannerIndex ? "eager" : "lazy"}
                   fetchPriority={index === currentBannerIndex ? "high" : "low"}
                   draggable={false}
-                  onLoad={(e) => {
-                    const img = e.target;
-                    if (img && img.naturalWidth && img.naturalHeight) {
-                      setHeroAspectRatios(prev => ({ ...prev, [index]: img.naturalWidth / img.naturalHeight }));
-                    }
-                  }}
                 />
               </div>
             ))}

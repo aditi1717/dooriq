@@ -6,8 +6,6 @@ import api, { publicGetOnce } from "@food/api";
 const PromotionBannerCarousel = ({ zoneId: propZoneId }) => {
   const [banners, setBanners] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [aspectRatios, setAspectRatios] = useState({});
-  const activeAspectRatio = aspectRatios[currentIndex] || 2.35;
   const [loading, setLoading] = useState(true);
   const autoSlideIntervalRef = useRef(null);
 
@@ -81,7 +79,7 @@ const PromotionBannerCarousel = ({ zoneId: propZoneId }) => {
 
   return (
     <div className="px-4 py-4 relative group">
-      <div className="relative overflow-hidden rounded-[24px] shadow-lg bg-transparent transition-[aspect-ratio] duration-350" style={{ aspectRatio: activeAspectRatio }}>
+      <div className="relative overflow-hidden rounded-[24px] shadow-lg aspect-[21/9] sm:aspect-[24/9]">
         <AnimatePresence mode="wait">
           <motion.div
             key={banners[currentIndex]?._id?.$oid || banners[currentIndex]?._id || currentIndex}
@@ -102,12 +100,6 @@ const PromotionBannerCarousel = ({ zoneId: propZoneId }) => {
                 src={banners[currentIndex]?.imageUrl} 
                 alt={banners[currentIndex]?.title || "Promotion"} 
                 className="w-full h-full object-cover"
-                onLoad={(e) => {
-                  const img = e.target;
-                  if (img && img.naturalWidth && img.naturalHeight) {
-                    setAspectRatios(prev => ({ ...prev, [currentIndex]: img.naturalWidth / img.naturalHeight }));
-                  }
-                }}
               />
             </a>
           </motion.div>
