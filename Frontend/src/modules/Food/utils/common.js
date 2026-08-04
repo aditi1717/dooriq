@@ -38,6 +38,10 @@ export const normalizeImageUrl = (imageUrl, backendOrigin = "") => {
     }
   }
 
+  if (import.meta.env.DEV && normalized.startsWith("/uploads")) {
+    return normalized;
+  }
+
   const absolutePath = normalized.startsWith("/")
     ? `${backendOrigin}${normalized}`
     : `${backendOrigin}/${normalized.replace(/^\.?\/*/, "")}`;

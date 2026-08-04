@@ -919,6 +919,10 @@ export default function Home() {
         }
       }
 
+      if (import.meta.env.DEV && normalizedInput.startsWith("/uploads")) {
+        return normalizedInput;
+      }
+
       const absolutePath = normalizedInput.startsWith("/")
         ? `${BACKEND_ORIGIN}${normalizedInput}`
         : `${BACKEND_ORIGIN}/${normalizedInput.replace(/^\.?\/*/, "")}`;

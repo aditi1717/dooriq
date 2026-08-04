@@ -34,6 +34,10 @@ export default function Categories() {
 
     if (/^(https?:)?\/\//i.test(normalizedInput)) return normalizedInput;
 
+    if (import.meta.env.DEV && normalizedInput.startsWith("/uploads")) {
+      return normalizedInput;
+    }
+
     return normalizedInput.startsWith("/")
       ? `${BACKEND_ORIGIN}${normalizedInput}`
       : `${BACKEND_ORIGIN}/${normalizedInput.replace(/^\.?\/*/, "")}`;

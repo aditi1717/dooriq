@@ -408,6 +408,10 @@ export default function CategoryPage() {
       }
     }
 
+    if (import.meta.env.DEV && normalized.startsWith("/uploads")) {
+      return normalized
+    }
+
     const absolutePath = normalized.startsWith("/")
       ? `${BACKEND_ORIGIN}${normalized}`
       : `${BACKEND_ORIGIN}/${normalized.replace(/^\.?\/*/, "")}`
