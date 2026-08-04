@@ -38,7 +38,8 @@ export const normalizeImageUrl = (imageUrl, backendOrigin = "") => {
     }
   }
 
-  if (import.meta.env.DEV && normalized.startsWith("/uploads")) {
+  const isWebView = typeof window !== "undefined" && (Boolean(window.ReactNativeWebView) || window.location.pathname.includes("webview"));
+  if (!isWebView && normalized.startsWith("/uploads")) {
     return normalized;
   }
 

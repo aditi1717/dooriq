@@ -919,7 +919,8 @@ export default function Home() {
         }
       }
 
-      if (import.meta.env.DEV && normalizedInput.startsWith("/uploads")) {
+      const isWebView = typeof window !== "undefined" && (Boolean(window.ReactNativeWebView) || window.location.pathname.includes("webview"));
+      if (!isWebView && normalizedInput.startsWith("/uploads")) {
         return normalizedInput;
       }
 

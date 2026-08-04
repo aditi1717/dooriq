@@ -23,7 +23,8 @@ const normalizeImageUrl = (imageUrl) => {
   if (/^(https?:)?\/\//i.test(trimmed) || /^data:/i.test(trimmed) || /^blob:/i.test(trimmed)) {
     return trimmed
   }
-  if (import.meta.env.DEV && trimmed.startsWith("/uploads")) {
+  const isWebView = typeof window !== "undefined" && (Boolean(window.ReactNativeWebView) || window.location.pathname.includes("webview"));
+  if (!isWebView && trimmed.startsWith("/uploads")) {
     return trimmed
   }
   return trimmed.startsWith("/")
