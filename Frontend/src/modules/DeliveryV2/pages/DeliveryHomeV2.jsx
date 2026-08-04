@@ -402,14 +402,81 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     deliveryAPI.updateOnlineStatus(isOnline).catch(() => { });
   }, [isOnline]);
 
-  // 3. Location logic (Smart Frequency Tracking)
+  // 3. Location logic (Smart Frequency Tracking) - MOCKED TO FIXED POINT FOR NOW
   useEffect(() => {
     if (!isOnline) {
       return;
     }
 
+    // Fixed mock coordinates (Indore, India)
+    const lat = 22.7196;
+    const lng = 75.8577;
+    const heading = 0;
+    const speed = 0;
+    const now = Date.now();
+
+    const currentRiderPos = { lat, lng, heading: 0 };
+    setRiderLocation(currentRiderPos);
+    lastCoordRef.current = { lat, lng };
+
+    const syncMockLocation = () => {
+      const payload = {
+        lat,
+        lng,
+        heading: 0,
+        speed: 0,
+        accuracy: 10,
+        orderId: activeOrder?.orderId || activeOrder?._id,
+        status: 'on_the_way',
+        polyline: activePolyline
+      };
+
+      // A. HTTP Backup
+      deliveryAPI.updateLocation(lat, lng, true, {
+        heading: 0,
+        speed: 0,
+        accuracy: 10
+      }).catch(() => { });
+
+      // B. ADMIN LIVE TRACKING NODE
+      const deliveryPartnerId = deliveryPartnerIdRef.current || getStoredDeliveryPartnerId();
+      deliveryPartnerIdRef.current = deliveryPartnerId;
+      if (deliveryPartnerId) {
+        writeDeliveryLocation({
+          deliveryId: deliveryPartnerId,
+          lat,
+          lng,
+          heading: 0,
+          speed: 0,
+          accuracy: 10,
+          isOnline: true,
+          activeOrderId: payload.orderId || null,
+          timestamp: Date.now()
+        }).catch(() => { });
+      }
+
+      // C. SOCKET LIVE
+      if (payload.orderId) emitLocation(payload);
+
+      // D. FIREBASE REALTIME DB
+      if (payload.orderId) {
+        writeOrderTracking(payload.orderId, {
+          lat,
+          lng,
+          heading: 0,
+          polyline: activePolyline,
+          status: tripStatus,
+          eta: eta
+        }).catch(() => { });
+      }
+    };
+
+    syncMockLocation();
+    const intervalId = setInterval(syncMockLocation, 10000);
+
+    /*
+    // ORIGINAL LIVE LOCATION TRACKING (COMMENTED OUT FOR TESTING)
     const watchId = navigator.geolocation.watchPosition((pos) => {
-      // CRITICAL: In Simulation Mode, we disable actual GPS to prevent overwriting our test position
       if (isSimMode) return;
 
       const { latitude: lat, longitude: lng, heading, speed } = pos.coords;
@@ -418,39 +485,31 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       const currentRiderPos = { lat, lng, heading: heading || 0 };
       setRiderLocation(currentRiderPos);
 
-      // Calculate Rolling Average Speed for Smart ETA
       if (speed && speed > 0) {
-        rollingSpeedRef.current = [...rollingSpeedRef.current.slice(-4), speed]; // keep last 5 points
+        rollingSpeedRef.current = [...rollingSpeedRef.current.slice(-4), speed];
       }
 
       const avgSpeed = rollingSpeedRef.current.length > 0
         ? rollingSpeedRef.current.reduce((a, b) => a + b, 0) / rollingSpeedRef.current.length
         : speed || 0;
 
-      // ETA update is now handled by a separate globally-synchronized effect
-
-      // Phase 11: Geo-fencing Auto-arrival (within 100m) - Disabled in DEV so UI steps can be tested manually
       if (!isSimMode && !import.meta.env.DEV && distanceToTarget && distanceToTarget <= 100 && !lastAutoArrivalRef.current[tripStatus]) {
         if (tripStatus === 'PICKING_UP') {
           lastAutoArrivalRef.current[tripStatus] = true;
           reachPickup().catch(() => { lastAutoArrivalRef.current[tripStatus] = false; });
-          // toast.success('Auto-arrived at Restaurant');
         } else if (tripStatus === 'PICKED_UP') {
           lastAutoArrivalRef.current[tripStatus] = true;
           reachDrop().catch(() => { lastAutoArrivalRef.current[tripStatus] = false; });
-          // toast.success('Auto-arrived at Customer');
         }
       }
 
-      // Reset auto-arrival flag if we move away or status resets (usually handled by component mount, but for safety)
       if (distanceToTarget > 200) {
         lastAutoArrivalRef.current[tripStatus] = false;
       }
 
-      // Check threshold for Sync (distance-based or 7s time-based)
       const distMoved = lastCoordRef.current
         ? getHaversineDistance(lat, lng, lastCoordRef.current.lat, lastCoordRef.current.lng)
-        : 1000; // assume huge distance if first update
+        : 1000;
 
       if (distMoved >= 25 || (now - lastLocationSentAt.current >= 7000)) {
         lastLocationSentAt.current = now;
@@ -467,14 +526,12 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
           polyline: activePolyline
         };
 
-        // A. HTTP Backup
         deliveryAPI.updateLocation(lat, lng, true, {
           heading: heading || 0,
           speed: speed || 0,
           accuracy: pos.coords.accuracy
         }).catch(() => { });
 
-        // B. ADMIN LIVE TRACKING NODE
         const deliveryPartnerId = deliveryPartnerIdRef.current || getStoredDeliveryPartnerId();
         deliveryPartnerIdRef.current = deliveryPartnerId;
         if (deliveryPartnerId) {
@@ -491,10 +548,8 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
           }).catch(() => { });
         }
 
-        // C. SOCKET LIVE (SILKY SMOOTH)
         if (payload.orderId) emitLocation(payload);
 
-        // D. FIREBASE REALTIME DB (Persistent)
         if (payload.orderId) {
           writeOrderTracking(payload.orderId, {
             lat,
@@ -502,18 +557,32 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
             heading: heading || 0,
             polyline: activePolyline,
             status: tripStatus,
-            eta: eta // Publish live ETA to Firebase for customer
+            eta: eta
           }).catch(() => { });
         }
       }
-    }, () => toast.error('GPS Needed!'), {
+    }, (error) => {
+      if (error.code === error.PERMISSION_DENIED) {
+        toast.error('GPS Permission Denied! Please enable location access in settings.');
+      } else if (error.code === error.POSITION_UNAVAILABLE) {
+        toast.error('GPS Position Unavailable!');
+      } else if (error.code === error.TIMEOUT) {
+        console.warn('GPS location request timed out. Retrying...');
+      } else {
+        toast.error('GPS Needed!');
+      }
+    }, {
       enableHighAccuracy: true,
-      maximumAge: 0,
-      timeout: 5000
+      maximumAge: 3000,
+      timeout: 10000
     });
+    */
 
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, [isOnline, setRiderLocation, isSimMode]);
+    return () => {
+      clearInterval(intervalId);
+      // if (watchId) navigator.geolocation.clearWatch(watchId);
+    };
+  }, [isOnline, setRiderLocation, activeOrder, activePolyline, tripStatus, eta]);
 
   // 3.5. Background Ping / Heartbeat
   // If watchPosition stops firing (e.g. app in background or device stationary),
