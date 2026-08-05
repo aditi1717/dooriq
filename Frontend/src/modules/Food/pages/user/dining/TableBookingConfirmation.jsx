@@ -219,7 +219,7 @@ export default function TableBookingConfirmation() {
                     <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex items-center justify-between">
                         <div>
                             <p className="font-bold text-gray-900">{user?.name || "Shailu"}</p>
-                            <p className="text-sm text-slate-400 mt-1">{user?.phone || user?.email || "8090512291"}</p>
+                            <p className="text-sm text-slate-400 mt-1">{user?.phone || user?.email || "9981115633"}</p>
                         </div>
                         <button className="text-red-500 text-sm font-bold hover:underline">Edit</button>
                     </div>

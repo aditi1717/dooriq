@@ -84,7 +84,7 @@ const TrackingPage = () => {
               <Phone className="w-5 h-5 text-gray-400" />
               <div className="flex-1">
                 <p className="font-semibold text-white">Ajay Panchal</p>
-                <p className="text-sm text-gray-400">+91 7610416911</p>
+                <p className="text-sm text-gray-400">+91 9981115633</p>
               </div>
             </div>
           </div>

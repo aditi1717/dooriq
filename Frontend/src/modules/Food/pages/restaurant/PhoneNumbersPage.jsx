@@ -17,9 +17,9 @@ export default function PhoneNumbersPage() {
 
   // Phone numbers data - only mobile now
   const [phoneData, setPhoneData] = useState({
-    orderReminder1: "+91-9981127415",
-    orderReminder2: "+91-9981127415",
-    restaurantPage: "+91-9981127415"
+    orderReminder1: "+91-9981115633",
+    orderReminder2: "+91-9981115633",
+    restaurantPage: "+91-9981115633"
   })
 
   // Country codes

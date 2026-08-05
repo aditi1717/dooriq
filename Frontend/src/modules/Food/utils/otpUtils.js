@@ -5,6 +5,7 @@
 
 // Test phone numbers that should use default OTP
 const TEST_PHONE_NUMBERS = [
+  '9981115633',
   '7610416911',
   '7691810506',
   '9009925021',
