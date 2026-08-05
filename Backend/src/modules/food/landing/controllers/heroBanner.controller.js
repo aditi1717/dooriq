@@ -73,9 +73,19 @@ export const updateHeroBannerOrderController = async (req, res, next) => {
 export const toggleHeroBannerStatusController = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { isActive } = req.body;
-        if (!id || typeof isActive !== 'boolean') {
-            throw new ValidationError('id and boolean isActive are required');
+        if (!id) {
+            throw new ValidationError('Banner id is required');
+        }
+        let { isActive } = req.body;
+        if (isActive === undefined) {
+            const banners = await listHeroBanners();
+            const banner = banners.find(b => b._id.toString() === id);
+            if (!banner) {
+                throw new ValidationError('Hero banner not found');
+            }
+            isActive = !banner.isActive;
+        } else if (typeof isActive !== 'boolean') {
+            throw new ValidationError('boolean isActive is required');
         }
         const updated = await toggleHeroBannerStatus(id, isActive);
         const mapped = updated ? { ...updated, order: updated.sortOrder } : null;
