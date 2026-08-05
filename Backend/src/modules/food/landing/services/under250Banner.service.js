@@ -5,6 +5,11 @@ export const listUnder250Banners = async () => {
     return FoodUnder250Banner.find().sort({ sortOrder: 1, createdAt: -1 }).lean();
 };
 
+const getNextSortOrder = async () => {
+    const last = await FoodUnder250Banner.findOne().sort({ sortOrder: -1 }).select('sortOrder').lean();
+    return (last?.sortOrder ?? -1) + 1;
+};
+
 export const createUnder250BannersFromFiles = async (files, meta = {}) => {
     if (!files || !files.length) {
         return [];
@@ -15,6 +20,7 @@ export const createUnder250BannersFromFiles = async (files, meta = {}) => {
     for (const file of files) {
         try {
             const imageUrl = await uploadImageBuffer(file.buffer);
+            const sortOrder = meta.sortOrder ?? (await getNextSortOrder());
 
             const banner = await FoodUnder250Banner.create({
                 imageUrl,
@@ -23,7 +29,7 @@ export const createUnder250BannersFromFiles = async (files, meta = {}) => {
                 ctaText: meta.ctaText,
                 ctaLink: meta.ctaLink,
                 zoneId: meta.zoneId,
-                sortOrder: meta.sortOrder ?? 0,
+                sortOrder,
                 isActive: true,
             });
 
