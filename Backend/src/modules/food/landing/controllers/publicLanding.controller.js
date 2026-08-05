@@ -26,6 +26,7 @@ export const getPublicHeroBannersController = async (req, res, next) => {
             const { linkedRestaurantIds, ...rest } = b;
             return {
                 ...rest,
+                order: b.sortOrder,
                 linkedRestaurants: Array.isArray(linkedRestaurantIds) ? linkedRestaurantIds : [],
                 imageUrl: b.imageUrl
             };
@@ -48,7 +49,11 @@ export const getPublicTopBannersController = async (req, res, next) => {
 export const getPublicUnder250BannersController = async (req, res, next) => {
     try {
         const docs = await FoodUnder250Banner.find({ isActive: true }).sort({ sortOrder: 1, createdAt: -1 }).lean();
-        return sendResponse(res, 200, 'Under 250 banners fetched', { banners: docs });
+        const banners = (docs || []).map((b) => ({
+            ...b,
+            order: b.sortOrder
+        }));
+        return sendResponse(res, 200, 'Under 250 banners fetched', { banners });
     } catch (error) {
         next(error);
     }
@@ -57,7 +62,11 @@ export const getPublicUnder250BannersController = async (req, res, next) => {
 export const getPublicDiningBannersController = async (req, res, next) => {
     try {
         const docs = await FoodDiningBanner.find({ isActive: true }).sort({ sortOrder: 1, createdAt: -1 }).lean();
-        return sendResponse(res, 200, 'Dining banners fetched', { banners: docs });
+        const banners = (docs || []).map((b) => ({
+            ...b,
+            order: b.sortOrder
+        }));
+        return sendResponse(res, 200, 'Dining banners fetched', { banners });
     } catch (error) {
         next(error);
     }

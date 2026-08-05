@@ -11,7 +11,11 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 export const listUnder250BannersController = async (req, res, next) => {
     try {
         const data = await listUnder250Banners();
-        return sendResponse(res, 200, 'Under 250 banners fetched successfully', { banners: data });
+        const mappedData = (data || []).map((banner) => ({
+            ...banner,
+            order: banner.sortOrder
+        }));
+        return sendResponse(res, 200, 'Under 250 banners fetched successfully', { banners: mappedData });
     } catch (error) {
         next(error);
     }
@@ -53,13 +57,14 @@ export const deleteUnder250BannerController = async (req, res, next) => {
 export const updateUnder250BannerOrderController = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { order } = req.body;
-        const sortOrder = Number(order);
-        if (!id || Number.isNaN(sortOrder)) {
-            throw new ValidationError('id and numeric order are required');
+        const { order, sortOrder } = req.body;
+        const finalSortOrder = sortOrder !== undefined ? sortOrder : (order !== undefined ? Number(order) : undefined);
+        if (!id || typeof finalSortOrder !== 'number' || Number.isNaN(finalSortOrder)) {
+            throw new ValidationError('id and numeric order/sortOrder are required');
         }
-        const updated = await updateUnder250BannerOrder(id, sortOrder);
-        return sendResponse(res, 200, 'Under 250 banner order updated', updated);
+        const updated = await updateUnder250BannerOrder(id, finalSortOrder);
+        const mapped = updated ? { ...updated, order: updated.sortOrder } : null;
+        return sendResponse(res, 200, 'Under 250 banner order updated', mapped);
     } catch (error) {
         next(error);
     }
@@ -77,7 +82,8 @@ export const toggleUnder250BannerStatusController = async (req, res, next) => {
             throw new ValidationError('Under 250 banner not found');
         }
         const updated = await toggleUnder250BannerStatus(id, !banner.isActive);
-        return sendResponse(res, 200, 'Under 250 banner status updated', updated);
+        const mapped = updated ? { ...updated, order: updated.sortOrder } : null;
+        return sendResponse(res, 200, 'Under 250 banner status updated', mapped);
     } catch (error) {
         next(error);
     }

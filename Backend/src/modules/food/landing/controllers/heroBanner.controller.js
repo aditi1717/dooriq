@@ -11,8 +11,12 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 export const listHeroBannersController = async (req, res, next) => {
     try {
         const data = await listHeroBanners();
+        const mappedData = (data || []).map((banner) => ({
+            ...banner,
+            order: banner.sortOrder
+        }));
         // Wrap in { banners } to match LandingPageManagement.jsx expectations
-        return sendResponse(res, 200, 'Hero banners fetched successfully', { banners: data });
+        return sendResponse(res, 200, 'Hero banners fetched successfully', { banners: mappedData });
     } catch (error) {
         next(error);
     }
@@ -53,12 +57,14 @@ export const deleteHeroBannerController = async (req, res, next) => {
 export const updateHeroBannerOrderController = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { sortOrder } = req.body;
-        if (!id || typeof sortOrder !== 'number') {
-            throw new ValidationError('id and numeric sortOrder are required');
+        const { sortOrder, order } = req.body;
+        const finalSortOrder = sortOrder !== undefined ? sortOrder : (order !== undefined ? Number(order) : undefined);
+        if (!id || typeof finalSortOrder !== 'number' || Number.isNaN(finalSortOrder)) {
+            throw new ValidationError('id and numeric sortOrder/order are required');
         }
-        const updated = await updateHeroBannerOrder(id, sortOrder);
-        return sendResponse(res, 200, 'Hero banner order updated', updated);
+        const updated = await updateHeroBannerOrder(id, finalSortOrder);
+        const mapped = updated ? { ...updated, order: updated.sortOrder } : null;
+        return sendResponse(res, 200, 'Hero banner order updated', mapped);
     } catch (error) {
         next(error);
     }
@@ -72,7 +78,8 @@ export const toggleHeroBannerStatusController = async (req, res, next) => {
             throw new ValidationError('id and boolean isActive are required');
         }
         const updated = await toggleHeroBannerStatus(id, isActive);
-        return sendResponse(res, 200, 'Hero banner status updated', updated);
+        const mapped = updated ? { ...updated, order: updated.sortOrder } : null;
+        return sendResponse(res, 200, 'Hero banner status updated', mapped);
     } catch (error) {
         next(error);
     }

@@ -11,7 +11,11 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 export const listDiningBannersController = async (req, res, next) => {
     try {
         const data = await listDiningBanners();
-        return sendResponse(res, 200, 'Dining banners fetched successfully', { banners: data });
+        const mappedData = (data || []).map((banner) => ({
+            ...banner,
+            order: banner.sortOrder
+        }));
+        return sendResponse(res, 200, 'Dining banners fetched successfully', { banners: mappedData });
     } catch (error) {
         next(error);
     }
@@ -53,13 +57,14 @@ export const deleteDiningBannerController = async (req, res, next) => {
 export const updateDiningBannerOrderController = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { order } = req.body;
-        const sortOrder = Number(order);
-        if (!id || Number.isNaN(sortOrder)) {
-            throw new ValidationError('id and numeric order are required');
+        const { order, sortOrder } = req.body;
+        const finalSortOrder = sortOrder !== undefined ? sortOrder : (order !== undefined ? Number(order) : undefined);
+        if (!id || typeof finalSortOrder !== 'number' || Number.isNaN(finalSortOrder)) {
+            throw new ValidationError('id and numeric order/sortOrder are required');
         }
-        const updated = await updateDiningBannerOrder(id, sortOrder);
-        return sendResponse(res, 200, 'Dining banner order updated', updated);
+        const updated = await updateDiningBannerOrder(id, finalSortOrder);
+        const mapped = updated ? { ...updated, order: updated.sortOrder } : null;
+        return sendResponse(res, 200, 'Dining banner order updated', mapped);
     } catch (error) {
         next(error);
     }
@@ -77,7 +82,8 @@ export const toggleDiningBannerStatusController = async (req, res, next) => {
             throw new ValidationError('Dining banner not found');
         }
         const updated = await toggleDiningBannerStatus(id, !banner.isActive);
-        return sendResponse(res, 200, 'Dining banner status updated', updated);
+        const mapped = updated ? { ...updated, order: updated.sortOrder } : null;
+        return sendResponse(res, 200, 'Dining banner status updated', mapped);
     } catch (error) {
         next(error);
     }
