@@ -254,7 +254,7 @@ export default function LandingPage() {
 
             <div className="overflow-hidden mt-4 lg:mt-6 max-w-xl">
               <motion.p custom={3} initial="hidden" animate="visible" variants={textReveal} className="text-base lg:text-lg text-slate-600 font-light leading-relaxed">
-                Dooriq is a next-generation food delivery platform built with a mission to create fairness and transparency in the food ecosystem. Unlike traditional platforms, we operate on a lifetime 0% commission model, ensuring that restaurant partners keep every hard-earned penny of their revenue.
+                Dooriq is a next-generation food delivery platform built to deliver exceptional dining experiences with absolute transparency. We connect food lovers with top local kitchens through seamless technology, fast delivery, and fair digital commerce.
               </motion.p>
             </div>
 
