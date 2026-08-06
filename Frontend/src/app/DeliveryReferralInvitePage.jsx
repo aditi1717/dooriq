@@ -3,8 +3,8 @@ import { Link, useSearchParams } from "react-router-dom"
 import { ArrowLeft, Check, Copy, Download, Smartphone } from "lucide-react"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 
-const APP_STORE_URL = "https://apps.apple.com/in/app/switcheats-captain/id6766778164"
-const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.switcheats.delivery1"
+const APP_STORE_URL = "#"
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.dooriq.delivery"
 const INVITE_STORAGE_KEY = "food_delivery_invite_ref"
 
 export default function DeliveryReferralInvitePage() {

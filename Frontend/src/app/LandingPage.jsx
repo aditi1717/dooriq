@@ -320,10 +320,10 @@ export default function LandingPage() {
               About Dooriq
             </span>
             <h3 className="text-5xl lg:text-7xl font-black leading-[1.1] tracking-tight text-slate-900">
-              Empowering partners, <br /><span className="italic text-slate-500 font-light">restoring trust.</span>
+              Empowering partners, <br /><span className="italic text-slate-500 font-light">building local success.</span>
             </h3>
             <p className="text-lg md:text-xl text-slate-600 leading-relaxed font-light max-w-lg">
-              Unlike traditional delivery apps that squeeze restaurant margins, Dooriq works on a lifetime 0% commission model. We believe in creating a balanced, fair, and growth-oriented food ecosystem.
+              Dooriq connects food lovers with top local kitchens through a high-efficiency digital ordering platform. We focus on lightning-fast deliveries, transparent pricing, and sustainable growth for every restaurant partner.
             </p>
             <div className="pt-2">
               <button
@@ -335,12 +335,12 @@ export default function LandingPage() {
             </div>
             <div className="pt-8 grid grid-cols-2 gap-8 border-t border-slate-200">
               <div>
-                <p className="text-4xl font-black text-slate-950">0%</p>
-                <p className="text-xs text-slate-500 uppercase tracking-widest font-bold mt-2">Lifetime Commission</p>
+                <p className="text-4xl font-black text-slate-950">100%</p>
+                <p className="text-xs text-slate-500 uppercase tracking-widest font-bold mt-2">Transparent Operations</p>
               </div>
               <div>
-                <p className="text-4xl font-black text-slate-950">100%</p>
-                <p className="text-xs text-slate-500 uppercase tracking-widest font-bold mt-2">Revenue Retained</p>
+                <p className="text-4xl font-black text-slate-950">Direct</p>
+                <p className="text-xs text-slate-500 uppercase tracking-widest font-bold mt-2">Kitchen Partnerships</p>
               </div>
             </div>
           </div>
@@ -414,15 +414,13 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 pt-4">
               <a
-                href="https://apps.apple.com/in/app/switcheats/id6766444150"
-                target="_blank"
-                rel="noopener noreferrer"
+                href="#"
                 className="flex items-center justify-center gap-3 bg-slate-900 text-white hover:bg-[#FA0272] px-8 py-4 rounded-2xl font-bold transition-all duration-300 text-sm shadow-md shadow-slate-900/10 cursor-pointer"
               >
                 <Apple className="w-5 h-5" /> App Store
               </a>
               <a
-                href="https://play.google.com/store/apps/details?id=com.switcheats.user1"
+                href="https://play.google.com/store/apps/details?id=com.dooriq.user"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 px-8 py-4 rounded-2xl font-bold transition-all duration-300 text-sm shadow-sm cursor-pointer"
@@ -763,7 +761,7 @@ export default function LandingPage() {
                 <span className="text-transparent bg-clip-text bg-gradient-to-br from-slate-900 to-slate-500 italic font-light">Operating.</span>
               </h3>
               <p className="text-lg text-slate-600 font-light leading-relaxed">
-                Starting our journey from the progressive landscape of <strong>Telangana</strong>, Dooriq is engineered to scale across India, specifically focusing on empowering Tier-2 and Tier-3 cities.
+                Starting our journey from the progressive landscape of <strong>Vijay Nagar, Indore</strong>, Dooriq is engineered to scale across India, specifically focusing on empowering Tier-2 and Tier-3 cities.
               </p>
             </div>
 
@@ -774,9 +772,9 @@ export default function LandingPage() {
                   <Award className="w-6 h-6" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-900 mb-1">Telangana Launchpad (Active)</h4>
+                  <h4 className="font-bold text-slate-900 mb-1">Vijay Nagar, Indore Launchpad (Active)</h4>
                   <p className="text-sm text-slate-500 font-light">
-                    Our central headquarters and active delivery operations. Reclaiming restaurant revenues with 0% lifetime commission.
+                    Our central headquarters and active delivery operations. Empowering local restaurants with cutting-edge digital commerce.
                   </p>
                 </div>
               </div>
@@ -788,7 +786,7 @@ export default function LandingPage() {
                 <div>
                   <h4 className="font-bold text-slate-900 mb-1">Empowering Tier 2 & 3 Cities</h4>
                   <p className="text-sm text-slate-500 font-light">
-                    Taking modern, commission-free food commerce to growing towns and communities that traditional giants ignore or overcharge.
+                    Taking modern, seamless food ordering technology to growing towns and vibrant communities.
                   </p>
                 </div>
               </div>
@@ -823,7 +821,7 @@ export default function LandingPage() {
                   <span className="text-[10px] uppercase tracking-widest font-black text-slate-400">Live Network Operations</span>
                 </div>
                 <div className="bg-slate-900 border border-slate-800 text-[10px] text-slate-400 font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                  Region: Telangana
+                  Region: Vijay Nagar, Indore
                 </div>
               </div>
 
@@ -831,7 +829,7 @@ export default function LandingPage() {
               <div className="relative z-10 flex-1 flex items-center justify-center py-4 overflow-hidden select-none pointer-events-none">
                 <img 
                   src="/india-map-operations.jpg" 
-                  alt="Switcheats Operational Map" 
+                  alt="Dooriq Operational Map" 
                   className="w-full h-full object-contain filter brightness-110 contrast-105 saturate-110 transform scale-[1.18]"
                   style={{
                     maskImage: 'radial-gradient(circle at center, black 65%, transparent 100%)',
@@ -857,7 +855,7 @@ export default function LandingPage() {
                 {/* Floating Active Info Tag over the beacon, centered above it on mobile, shifted right on desktop */}
                 <div className="absolute top-[61.5%] left-[48%] lg:left-[57%] -translate-x-1/2 lg:translate-x-0 -translate-y-[280%] lg:-translate-y-1/2 bg-slate-900/95 border border-[#FA0272]/50 text-[9px] font-black text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-2xl shadow-pink-500/20 whitespace-nowrap z-30">
                   <span className="w-2 h-2 rounded-full bg-[#FA0272] animate-ping" />
-                  TELANGANA (ACTIVE HUB)
+                  VIJAY NAGAR, INDORE (ACTIVE HUB)
                 </div>
               </div>
 
@@ -1000,29 +998,21 @@ export default function LandingPage() {
                 Elevating the dining experience. Premium food delivery for those who expect more.
               </p>
               <div className="flex gap-4">
-                {[
-                  { Icon: Facebook, url: "https://www.facebook.com/share/1J8C8U4wnK/?mibextid=wwXIfr" },
-                  { Icon: Youtube, url: "https://youtube.com/@switcheats?si=EzceIs61zBwz3SGO" },
-                  { Icon: Instagram, url: "https://www.instagram.com/switcheats?igsh=MTA3eXJnMTRlMTF5Zw%3D%3D&utm_source=qr" },
-                  { Icon: Linkedin, url: "https://www.linkedin.com/company/switcheats/" }
-                ].map(({ Icon, url }, i) => (
-                  <a 
-                    key={i} 
-                    href={url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="w-11 h-11 rounded-full border border-slate-200 flex items-center justify-center hover:bg-[#FA0272] hover:border-[#FA0272] hover:text-white cursor-pointer transition-all duration-300 text-slate-700 bg-white shadow-sm"
-                  >
-                    <Icon className="w-4.5 h-4.5" />
-                  </a>
-                ))}
+                <a 
+                  href="https://www.instagram.com/dooriq_india" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="w-11 h-11 rounded-full border border-slate-200 flex items-center justify-center hover:bg-[#FA0272] hover:border-[#FA0272] hover:text-white cursor-pointer transition-all duration-300 text-slate-700 bg-white shadow-sm"
+                >
+                  <Instagram className="w-4.5 h-4.5" />
+                </a>
               </div>
             </div>
 
             <div className="flex flex-col gap-5 text-sm font-medium">
               <h4 className="text-slate-900 font-bold tracking-widest text-xs uppercase mb-1">Legal</h4>
               <a 
-                href="https://dooriq.com/food/user/profile/privacy" 
+                href="/food/user/profile/privacy" 
                 target="_blank" 
                 rel="noopener noreferrer" 
                 className="hover:text-[#FA0272] transition-colors"
@@ -1030,7 +1020,7 @@ export default function LandingPage() {
                 Privacy Policy
               </a>
               <a 
-                href="https://dooriq.com/food/user/profile/terms" 
+                href="/food/user/profile/terms" 
                 target="_blank" 
                 rel="noopener noreferrer" 
                 className="hover:text-[#FA0272] transition-colors"
@@ -1041,16 +1031,14 @@ export default function LandingPage() {
 
             <div className="flex flex-col gap-5 text-sm font-medium">
               <h4 className="text-slate-900 font-bold tracking-widest text-xs uppercase mb-1">Company</h4>
-              <a 
-                href="https://dooriq.com/food/user/profile/about" 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="hover:text-[#FA0272] transition-colors"
+              <button 
+                onClick={() => setIsAboutOpen(true)}
+                className="text-left hover:text-[#FA0272] transition-colors cursor-pointer"
               >
                 About Us
-              </a>
+              </button>
               <a 
-                href="https://dooriq.com/food/user/profile/help-content" 
+                href="/food/user/profile/help-content" 
                 target="_blank" 
                 rel="noopener noreferrer" 
                 className="hover:text-[#FA0272] transition-colors"
@@ -1138,20 +1126,20 @@ export default function LandingPage() {
               {/* Dynamic Value Story Grid */}
               <div className="grid md:grid-cols-2 gap-8 lg:gap-12 shrink-0">
 
-                {/* Story Card 1: 0% Commission */}
+                {/* Story Card 1: Empowering Restaurant Growth */}
                 <div className="group bg-white border border-slate-200/60 rounded-[2rem] p-8 lg:p-10 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
                   <div>
                     <div className="w-14 h-14 rounded-2xl bg-[#FA0272]/10 flex items-center justify-center text-[#FA0272] mb-6 group-hover:scale-110 transition-transform">
-                      <Percent className="w-7 h-7" />
+                      <Store className="w-7 h-7" />
                     </div>
-                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Lifetime 0% Commission</h3>
+                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Empowering Restaurant Growth</h3>
                     <p className="text-slate-600 font-light leading-relaxed">
-                      We operate on a lifetime 0% commission model. This ensures that our restaurant partners keep every hard-earned penny of their revenue, giving them the financial breathing room to grow, sustain jobs, and thrive in a digital economy.
+                      We empower local restaurants with high-efficiency digital ordering, seamless delivery dispatch, and transparent operations. This gives our restaurant partners the freedom and technology to scale, innovate, and thrive.
                     </p>
                   </div>
                   <div className="mt-8 pt-6 border-t border-slate-100 flex items-center gap-3">
                     <Zap className="w-4 h-4 text-[#FA0272]" />
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">No Hidden Partner Fees</span>
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sustainable Partner Growth</span>
                   </div>
                 </div>
 
@@ -1178,9 +1166,9 @@ export default function LandingPage() {
                     <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 mb-6 group-hover:scale-110 transition-transform">
                       <MapPin className="w-7 h-7" />
                     </div>
-                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Telangana to Tier 2 & 3 Cities</h3>
+                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Vijay Nagar, Indore to Tier 2 & 3 Cities</h3>
                     <p className="text-slate-600 font-light leading-relaxed">
-                      Dooriq is starting its journey from Telangana, with a strategic focus on expanding across Tier 2 and Tier 3 cities in India. We aim to empower local businesses in these growing regions and integrate them into the digital market.
+                      Dooriq is starting its journey from Vijay Nagar, Indore, with a strategic focus on expanding across Tier 2 and Tier 3 cities in India. We aim to empower local businesses in these growing regions and integrate them into the digital market.
                     </p>
                   </div>
                   <div className="mt-8 pt-6 border-t border-slate-100 flex items-center gap-3">
@@ -1189,20 +1177,20 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                {/* Story Card 4: Two Young Founders */}
+                {/* Story Card 4: Driven by Innovation */}
                 <div className="group bg-white border border-slate-200/60 rounded-[2rem] p-8 lg:p-10 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
                   <div>
                     <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-6 group-hover:scale-110 transition-transform">
-                      <Users className="w-7 h-7" />
+                      <Sparkles className="w-7 h-7" />
                     </div>
-                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Founded by Visionaries</h3>
+                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Driven by Innovation</h3>
                     <p className="text-slate-600 font-light leading-relaxed">
-                      Dooriq was founded by two passionate 23-year-old entrepreneurs driven by a vision to revolutionize the food delivery industry and create a more balanced, fair, and growth-oriented platform for all stakeholders.
+                      Dooriq is built by a dedicated team driven by a vision to modernize the food delivery industry and create a balanced, fair, and growth-oriented platform for all stakeholders.
                     </p>
                   </div>
                   <div className="mt-8 pt-6 border-t border-slate-100 flex items-center gap-3">
                     <TrendingUp className="w-4 h-4 text-emerald-600" />
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Innovation Led By Youth</span>
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Next-Gen Food Commerce</span>
                   </div>
                 </div>
 
@@ -1281,11 +1269,11 @@ export default function LandingPage() {
                   <Store className="w-4 h-4 text-[#FA0272]" /> Restaurant Empowerment Initiative
                 </span>
                 <h1 className="text-5xl md:text-7xl font-black leading-[1.05] tracking-tight text-slate-900">
-                  Earn Commission-Free. <br />
-                  <span className="text-transparent bg-clip-text bg-gradient-to-br from-[#FA0272] to-[#E02477] font-extrabold italic font-light">Reclaim 100% of Your Revenue.</span>
+                  Partner with Dooriq. <br />
+                  <span className="text-transparent bg-clip-text bg-gradient-to-br from-[#FA0272] to-[#E02477] font-extrabold italic font-light">Grow Your Restaurant Business.</span>
                 </h1>
                 <p className="text-xl text-slate-700 font-light leading-relaxed max-w-3xl mx-auto">
-                  Say goodbye to standard 25%-30% commissions that wipe out restaurant profit margins. With Dooriq, you gain access to a powerful digital ordering system on a <strong>lifetime 0% commission model</strong>.
+                  Expand your reach, streamline online orders, and delight local customers. With Dooriq, you gain access to a powerful digital ordering system built for high performance and growth.
                 </p>
               </div>
 
@@ -1295,24 +1283,22 @@ export default function LandingPage() {
 
                 <div className="flex-1 space-y-6 relative z-10">
                   <div className="inline-block text-[10px] uppercase tracking-widest font-black text-pink-500 bg-[#FA0272]/10 border border-[#FA0272]/20 px-3 py-1.5 rounded-full">
-                    Active Operations: Telangana Region
+                    Active Operations: Vijay Nagar, Indore Region
                   </div>
                   <h2 className="text-3xl md:text-4xl font-black leading-tight tracking-tight">Setup Your Live Digital Kitchen</h2>
                   <p className="text-slate-400 font-light max-w-xl leading-relaxed text-sm md:text-base">
-                    Register your business profile, customize your digital menu, and start receiving commission-free orders directly on your phone or tablet in minutes.
+                    Register your business profile, customize your digital menu, and start receiving online orders directly on your phone or tablet in minutes.
                   </p>
 
                   <div className="flex flex-col sm:flex-row gap-4 pt-2">
                     <a
-                      href="https://apps.apple.com/in/app/switcheats-partner/id6766466794"
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href="#"
                       className="flex items-center justify-center gap-3 bg-white text-slate-950 hover:bg-[#FA0272] hover:text-white px-8 py-4 rounded-2xl font-bold transition-all duration-300 text-sm shadow-md cursor-pointer text-center"
                     >
                       <Apple className="w-5 h-5" /> iOS App Store
                     </a>
                     <a
-                      href="https://play.google.com/store/apps/details?id=com.switcheats.restaurant1"
+                      href="https://play.google.com/store/apps/details?id=com.dooriq.restaurant"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-3 bg-slate-800 border border-slate-700 text-white hover:bg-[#FA0272] hover:border-[#FA0272] px-8 py-4 rounded-2xl font-bold transition-all duration-300 text-sm shadow-md cursor-pointer text-center"
@@ -1337,23 +1323,23 @@ export default function LandingPage() {
                       <span className="text-[8px] bg-pink-500/10 text-[#FA0272] px-2 py-0.5 rounded-full font-bold uppercase">Online</span>
                     </div>
 
-                    {/* Middle: Comparison metric */}
+                    {/* Middle: Order Growth Metric */}
                     <div className="grid grid-cols-2 gap-3 py-2 flex-1 items-center">
                       <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-center">
-                        <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">With Dooriq</div>
-                        <div className="text-sm font-black text-[#FA0272] mt-0.5">₹18,450.00</div>
-                        <div className="text-[7px] text-slate-400 mt-0.5">0% Commission Paid</div>
+                        <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Daily Orders</div>
+                        <div className="text-sm font-black text-[#FA0272] mt-0.5">180+ Completed</div>
+                        <div className="text-[7px] text-slate-400 mt-0.5">Direct Kitchen Orders</div>
                       </div>
                       <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-center relative opacity-80">
-                        <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Traditional Apps</div>
-                        <div className="text-sm font-black text-slate-400 mt-0.5 line-through">₹12,915.00</div>
-                        <div className="text-[7px] text-[#FA0272] mt-0.5 font-bold">30% Aggregator Cut</div>
+                        <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Order Accuracy</div>
+                        <div className="text-sm font-black text-white mt-0.5">99.8%</div>
+                        <div className="text-[7px] text-emerald-400 mt-0.5 font-bold">High Delivery Rating</div>
                       </div>
                     </div>
 
                     {/* POS Footer bar */}
                     <div className="bg-[#FA0272] text-white text-[9px] font-black text-center py-2 rounded-lg uppercase tracking-widest shrink-0">
-                      Saving ₹5,535.00 Today
+                      High Efficiency Digital POS
                     </div>
                   </div>
                 </div>
@@ -1366,11 +1352,11 @@ export default function LandingPage() {
                 <div className="group bg-white/80 border border-slate-200/40 rounded-[2rem] p-8 lg:p-10 hover:shadow-2xl hover:shadow-[#FA0272]/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between shadow-sm">
                   <div>
                     <div className="w-14 h-14 rounded-2xl bg-pink-50 border border-pink-100 flex items-center justify-center text-[#FA0272] mb-6 group-hover:scale-110 transition-transform">
-                      <Percent className="w-7 h-7" />
+                      <Store className="w-7 h-7" />
                     </div>
-                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Lifetime 0% Commission</h3>
+                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Direct Restaurant Growth</h3>
                     <p className="text-slate-600 font-light leading-relaxed">
-                      Every order processed through our platform incurs exactly 0% commission. You keep 100% of your earnings to scale your business, hire culinary talents, and maintain operational margins.
+                      Dooriq gives your kitchen a powerful digital presence and direct customer ordering channels. Scale your restaurant business, hire top culinary talent, and maintain full control over your operations.
                     </p>
                   </div>
                   <div className="mt-8 pt-6 border-t border-slate-200/50 flex items-center gap-3">
@@ -1518,7 +1504,7 @@ export default function LandingPage() {
                       <input
                         type="text"
                         required
-                        placeholder="Ex: Madhapur, Hyderabad, Telangana"
+                        placeholder="Ex: Vijay Nagar, Indore, Madhya Pradesh"
                         value={leadForm.location}
                         onChange={(e) => setLeadForm({ ...leadForm, location: e.target.value })}
                         className="w-full px-5 py-3.5 text-sm rounded-2xl border border-slate-200 bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#FA0272]/20 focus:border-[#FA0272] transition-all text-slate-800"
@@ -1614,7 +1600,7 @@ export default function LandingPage() {
 
                 <div className="flex-1 space-y-6 relative z-10">
                   <div className="inline-block text-[10px] uppercase tracking-widest font-black text-[#FA0272] bg-[#FA0272]/10 border border-[#FA0272]/20 px-3 py-1.5 rounded-full">
-                    Squad Expanding: Telangana Core Hubs
+                    Squad Expanding: Vijay Nagar, Indore Core Hubs
                   </div>
                   <h2 className="text-3xl md:text-4xl font-black leading-tight tracking-tight">Join the active delivery crew</h2>
                   <p className="text-slate-400 font-light max-w-xl leading-relaxed text-sm md:text-base">
@@ -1623,15 +1609,13 @@ export default function LandingPage() {
 
                   <div className="flex flex-col sm:flex-row gap-4 pt-2">
                     <a
-                      href="https://apps.apple.com/in/app/switcheats-captain/id6766778164"
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href="#"
                       className="flex items-center justify-center gap-3 bg-white text-slate-950 hover:bg-[#FA0272] hover:text-white px-8 py-4 rounded-2xl font-bold transition-all duration-300 text-sm shadow-md cursor-pointer text-center"
                     >
                       <Apple className="w-5 h-5" /> iOS App Store
                     </a>
                     <a
-                      href="https://play.google.com/store/apps/details?id=com.switcheats.delivery1"
+                      href="https://play.google.com/store/apps/details?id=com.dooriq.delivery"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-3 bg-slate-800 border border-slate-800 text-white hover:bg-[#FA0272] hover:border-[#FA0272] px-8 py-4 rounded-2xl font-bold transition-all duration-300 text-sm shadow-md cursor-pointer text-center"
