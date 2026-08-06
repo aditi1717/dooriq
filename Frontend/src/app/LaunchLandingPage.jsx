@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import Lenis from "lenis";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import {
   ArrowRight, ArrowLeft, Search, ShoppingCart, Play, Apple,
   MapPin, Clock, Star, Facebook, Youtube, Instagram, Linkedin,
@@ -38,6 +40,15 @@ const gridVariants = {
     y: 0,
     transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: i * 0.15 }
   })
+};
+
+const sectionRevealVariants = {
+  hidden: { opacity: 0, y: 35 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.75, ease: [0.22, 1, 0.36, 1] }
+  }
 };
 
 export default function LandingPage() {
@@ -123,6 +134,8 @@ export default function LandingPage() {
   const lenisRef = useRef(null);
 
   useEffect(() => {
+    gsap.registerPlugin(ScrollTrigger);
+
     const lenis = new Lenis({
       duration: 1.2,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
@@ -131,13 +144,40 @@ export default function LandingPage() {
     });
     lenisRef.current = lenis;
 
-    function raf(time) {
-      lenis.raf(time);
-      requestAnimationFrame(raf);
-    }
-    requestAnimationFrame(raf);
+    lenis.on("scroll", ScrollTrigger.update);
 
-    return () => lenis.destroy();
+    const updateTicker = (time) => {
+      lenis.raf(time * 1000);
+    };
+    gsap.ticker.add(updateTicker);
+    gsap.ticker.lagSmoothing(0);
+
+    const ctx = gsap.context(() => {
+      const sections = document.querySelectorAll(".gsap-reveal-section");
+      sections.forEach((sec) => {
+        gsap.fromTo(
+          sec,
+          { opacity: 0, y: 50 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 1.1,
+            ease: "power3.out",
+            scrollTrigger: {
+              trigger: sec,
+              start: "top 85%",
+              toggleActions: "play none none reverse",
+            },
+          }
+        );
+      });
+    });
+
+    return () => {
+      ctx.revert();
+      gsap.ticker.remove(updateTicker);
+      lenis.destroy();
+    };
   }, []);
 
   useEffect(() => {
@@ -206,7 +246,7 @@ export default function LandingPage() {
 
 
       {/* 1. AUGUST 15 LAUNCH HERO SECTION (Full Background Image) */}
-      <section className="relative z-10 w-full min-h-[90vh] sm:h-screen lg:min-h-[700px] flex items-center justify-center overflow-hidden pt-32 sm:pt-40 pb-16">
+      <section id="home" className="relative z-10 w-full min-h-[90vh] sm:h-screen lg:min-h-[700px] flex items-center justify-center overflow-hidden pt-32 sm:pt-40 pb-16">
         
         {/* Background Video with Parallax & Dark Overlay */}
         <motion.div style={{ y: heroY }} className="absolute inset-0 z-0 scale-105">
@@ -279,7 +319,10 @@ export default function LandingPage() {
       </section>
 
       {/* 2. OUR STORY / BENTO GRID LAYOUT */}
-      <section className="relative z-10 pt-10 pb-4 sm:pt-14 sm:pb-6 lg:pt-16 lg:pb-8 px-4 sm:px-6 md:px-12 lg:px-20 max-w-[1800px] mx-auto bg-[#FCFBFA]">
+      <section
+        id="about"
+        className="gsap-reveal-section relative z-10 pt-10 pb-4 sm:pt-14 sm:pb-6 lg:pt-16 lg:pb-8 px-4 sm:px-6 md:px-12 lg:px-20 max-w-[1800px] mx-auto bg-[#FCFBFA]"
+      >
         <div className="grid lg:grid-cols-12 gap-8 lg:gap-16 items-center">
           
           {/* Left: Typography & Story */}
@@ -351,7 +394,10 @@ export default function LandingPage() {
       </section>
 
       {/* 3. MOBILE EXPERIENCE (Floating Phone Parallax) */}
-      <section className="relative z-10 pt-4 pb-10 sm:pt-6 sm:pb-14 md:pt-8 md:pb-16 lg:pt-10 lg:pb-20 bg-slate-50/60 backdrop-blur-3xl border-y border-slate-100">
+      <section
+        id="how-it-works"
+        className="gsap-reveal-section relative z-10 pt-4 pb-10 sm:pt-6 sm:pb-14 md:pt-8 md:pb-16 lg:pt-10 lg:pb-20 bg-slate-50/60 backdrop-blur-3xl border-y border-slate-100"
+      >
         <div className="max-w-[1800px] mx-auto px-4 sm:px-6 md:px-16 lg:px-24 flex flex-col lg:flex-row items-center gap-8 sm:gap-14 lg:gap-20">
 
           {/* Phone Mockup Column */}
@@ -427,7 +473,9 @@ export default function LandingPage() {
       </section>
 
       {/* 4. LATE NIGHT CRAVINGS - Cinematic 3D Interactive Midnight Console Stage */}
-      <section className="relative z-10 py-12 sm:py-16 md:py-20 lg:py-24 bg-[#030303] text-slate-100 overflow-hidden">
+      <section
+        className="gsap-reveal-section relative z-10 py-12 sm:py-16 md:py-20 lg:py-24 bg-[#030303] text-slate-100 overflow-hidden"
+      >
         
         {/* Dynamic ambient backdrop glow matching active item */}
         <div 
@@ -630,7 +678,9 @@ export default function LandingPage() {
         </div>
       </section>
       {/* 4.1 whats waiting for you section */}
-      <section className="relative z-10 py-10 sm:py-16 md:py-24 px-4 sm:px-6 md:px-12 lg:px-20 max-w-[1800px] mx-auto bg-[#FCFBFA]">
+      <section
+        className="gsap-reveal-section relative z-10 py-10 sm:py-16 md:py-24 px-4 sm:px-6 md:px-12 lg:px-20 max-w-[1800px] mx-auto bg-[#FCFBFA]"
+      >
 
         {/* Section Header */}
         <div className="mb-8 md:mb-16 flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-8">
@@ -688,14 +738,21 @@ export default function LandingPage() {
             <motion.div
               custom={1} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }}
               variants={gridVariants}
-              className="group relative flex-1 min-h-[250px] md:min-h-0 rounded-[2rem] overflow-hidden bg-white border border-slate-200 shadow-xl shadow-slate-200/50 p-6 md:p-8 flex flex-col justify-between hover:shadow-2xl hover:-translate-y-1 transition-all duration-500"
+              className="group relative flex-1 min-h-[250px] md:min-h-0 rounded-[2rem] overflow-hidden bg-slate-900 shadow-xl p-6 md:p-8 flex flex-col justify-between hover:shadow-2xl hover:-translate-y-1 transition-all duration-500"
             >
-              <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-100 group-hover:bg-[#2563EB] transition-colors duration-500">
-                <Map className="w-5 h-5 text-[#2563EB] group-hover:text-white transition-colors duration-500" />
+              <img
+                src="/assets/images/delivery_map.png"
+                alt="Surgical Precision Map"
+                className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:scale-105 group-hover:opacity-85 transition-all duration-1000 ease-out"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent" />
+
+              <div className="relative z-10 w-11 h-11 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20">
+                <Map className="w-5 h-5 text-white" />
               </div>
-              <div>
-                <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-2 tracking-tight">Surgical Precision</h3>
-                <p className="text-slate-600 font-light text-xs md:text-sm leading-relaxed">
+              <div className="relative z-10">
+                <h3 className="text-xl md:text-2xl font-black text-white mb-2 tracking-tight">Surgical Precision</h3>
+                <p className="text-slate-300 font-light text-xs md:text-sm leading-relaxed">
                   Proprietary routing algorithms ensure your meal arrives at the exact optimum temperature. Watch it live, down to the exact intersection.
                 </p>
               </div>
@@ -714,20 +771,26 @@ export default function LandingPage() {
                   alt="Premium Packaging"
                   className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
                 />
-                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-500" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent group-hover:bg-black/40 transition-colors duration-500" />
                 <div className="absolute bottom-5 left-5 right-5">
                   <h4 className="text-white font-bold text-base md:text-lg leading-tight">Bespoke<br />Packaging</h4>
                 </div>
               </div>
 
               {/* Sub-card B */}
-              <div className="col-span-1 rounded-[2rem] bg-slate-900 p-5 md:p-6 flex flex-col justify-between border border-slate-800 group hover:bg-[#2563EB] transition-colors duration-500 shadow-lg">
-                <div className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center">
-                  <ShieldCheck className="w-5 h-5 text-white" />
+              <div className="col-span-1 rounded-[2rem] overflow-hidden relative group shadow-lg bg-slate-900">
+                <img
+                  src="/assets/images/paneer_tikka.png"
+                  alt="Zero Compromise Quality"
+                  className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-700 ease-out"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent group-hover:bg-black/50 transition-colors duration-500" />
+                <div className="absolute top-4 left-4 w-9 h-9 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20">
+                  <ShieldCheck className="w-4.5 h-4.5 text-white" />
                 </div>
-                <div>
+                <div className="absolute bottom-4 left-4 right-4">
                   <h4 className="text-white font-bold text-base md:text-lg leading-tight mb-1">Zero<br />Compromise</h4>
-                  <p className="text-slate-400 text-[10px] md:text-xs group-hover:text-white/80 transition-colors">Sealed, hygienic, and pristine.</p>
+                  <p className="text-slate-300 text-[10px] md:text-xs font-light">Sealed, hygienic, and pristine.</p>
                 </div>
               </div>
             </motion.div>
@@ -737,7 +800,9 @@ export default function LandingPage() {
       </section>
 
       {/* 4.5 GEOGRAPHY / Telengana Highlight */}
-      <section className="relative z-10 py-12 lg:py-16 px-6 md:px-16 lg:px-24 max-w-[1800px] mx-auto overflow-hidden">
+      <section
+        className="gsap-reveal-section relative z-10 py-12 lg:py-16 px-6 md:px-16 lg:px-24 max-w-[1800px] mx-auto overflow-hidden"
+      >
         {/* Glow ambient background lights */}
         <div className="absolute top-[20%] right-[-10%] w-[30vw] h-[30vw] bg-blue-500/5 rounded-full blur-[120px] pointer-events-none z-0" />
         <div className="absolute bottom-[10%] left-[-10%] w-[25vw] h-[25vw] bg-orange-400/5 rounded-full blur-[100px] pointer-events-none z-0" />
@@ -866,7 +931,9 @@ export default function LandingPage() {
       </section>
 
       {/* 5. FASTEST DELIVERY / GLOWING ROUTE */}
-      <section className="relative z-10 py-8 sm:py-12 md:py-16 lg:py-20 px-4 sm:px-6 md:px-16 lg:px-24 max-w-[1800px] mx-auto">
+      <section
+        className="gsap-reveal-section relative z-10 py-8 sm:py-12 md:py-16 lg:py-20 px-4 sm:px-6 md:px-16 lg:px-24 max-w-[1800px] mx-auto"
+      >
         <div className="flex flex-col lg:flex-row items-center gap-8 sm:gap-14 lg:gap-20">
 
           <div className="flex-1 space-y-4 sm:space-y-8">
@@ -980,7 +1047,7 @@ export default function LandingPage() {
       </section>
 
       {/* 6. FOOTER */}
-      <footer className="relative z-10 bg-slate-50 pt-12 sm:pt-20 md:pt-32 pb-8 sm:pb-10 px-4 sm:px-6 md:px-16 lg:px-24 border-t border-slate-200/50 overflow-hidden text-slate-600">
+      <footer id="contact" className="relative z-10 bg-slate-50 pt-12 sm:pt-20 md:pt-32 pb-8 sm:pb-10 px-4 sm:px-6 md:px-16 lg:px-24 border-t border-slate-200/50 overflow-hidden text-slate-600">
 
         <div className="max-w-[1800px] mx-auto">
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 sm:gap-12 lg:gap-16 mb-10 sm:mb-24 relative z-10">
@@ -1124,73 +1191,73 @@ export default function LandingPage() {
               </div>
 
               {/* Dynamic Value Story Grid */}
-              <div className="grid sm:grid-cols-2 gap-4 lg:gap-6 shrink-0">
+              <div className="grid grid-cols-2 gap-4 lg:gap-6 shrink-0">
 
                 {/* Story Card 1: Empowering Restaurant Growth */}
-                <div className="group bg-white border border-slate-200/60 rounded-2xl p-5 lg:p-8 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
+                <div className="group bg-white border border-slate-200/60 rounded-2xl p-4 sm:p-5 lg:p-8 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
                   <div>
-                    <div className="w-12 h-12 rounded-xl bg-[#2563EB]/10 flex items-center justify-center text-[#2563EB] mb-4 group-hover:scale-110 transition-transform">
-                      <Store className="w-6 h-6" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#2563EB]/10 flex items-center justify-center text-[#2563EB] mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                      <Store className="w-5 h-5 sm:w-6 sm:h-6" />
                     </div>
-                    <h3 className="text-lg md:text-xl font-black text-slate-900 mb-2 tracking-tight">Empowering Restaurant Growth</h3>
-                    <p className="text-sm text-slate-600 font-light leading-relaxed">
+                    <h3 className="text-[13px] leading-tight sm:text-lg md:text-xl font-black text-slate-900 mb-1.5 sm:mb-2 tracking-tight">Empowering Restaurant Growth</h3>
+                    <p className="text-[11px] sm:text-sm text-slate-600 font-light leading-relaxed">
                       We empower local restaurants with high-efficiency digital ordering, seamless delivery dispatch, and transparent operations. This gives our restaurant partners the freedom and technology to scale, innovate, and thrive.
                     </p>
                   </div>
-                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2">
-                    <Zap className="w-3.5 h-3.5 text-[#2563EB]" />
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sustainable Partner Growth</span>
+                  <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-slate-100 flex items-center gap-1.5 sm:gap-2">
+                    <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#2563EB]" />
+                    <span className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sustainable Partner Growth</span>
                   </div>
                 </div>
 
                 {/* Story Card 2: Transparent Pricing */}
-                <div className="group bg-white border border-slate-200/60 rounded-2xl p-5 lg:p-8 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
+                <div className="group bg-white border border-slate-200/60 rounded-2xl p-4 sm:p-5 lg:p-8 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
                   <div>
-                    <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center text-orange-500 mb-4 group-hover:scale-110 transition-transform">
-                      <Heart className="w-6 h-6" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-orange-50 flex items-center justify-center text-orange-500 mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                      <Heart className="w-5 h-5 sm:w-6 sm:h-6" />
                     </div>
-                    <h3 className="text-lg md:text-xl font-black text-slate-900 mb-2 tracking-tight">Trust & Transparent Pricing</h3>
-                    <p className="text-sm text-slate-600 font-light leading-relaxed">
+                    <h3 className="text-[13px] leading-tight sm:text-lg md:text-xl font-black text-slate-900 mb-1.5 sm:mb-2 tracking-tight">Trust & Transparent Pricing</h3>
+                    <p className="text-[11px] sm:text-sm text-slate-600 font-light leading-relaxed">
                       By offering transparent pricing, Dooriq ensures customers pay genuine prices without hidden markups. We are building long-term relationships of trust with both restaurants and consumers.
                     </p>
                   </div>
-                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2">
-                    <ShieldCheck className="w-3.5 h-3.5 text-orange-500" />
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Honest Pricing Guarantee</span>
+                  <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-slate-100 flex items-center gap-1.5 sm:gap-2">
+                    <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-orange-500" />
+                    <span className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">Honest Pricing Guarantee</span>
                   </div>
                 </div>
 
                 {/* Story Card 3: Geographical Expansion */}
-                <div className="group bg-white border border-slate-200/60 rounded-2xl p-5 lg:p-8 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
+                <div className="group bg-white border border-slate-200/60 rounded-2xl p-4 sm:p-5 lg:p-8 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
                   <div>
-                    <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 mb-4 group-hover:scale-110 transition-transform">
-                      <MapPin className="w-6 h-6" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                      <MapPin className="w-5 h-5 sm:w-6 sm:h-6" />
                     </div>
-                    <h3 className="text-lg md:text-xl font-black text-slate-900 mb-2 tracking-tight">Vijay Nagar, Indore to Tier 2 & 3 Cities</h3>
-                    <p className="text-sm text-slate-600 font-light leading-relaxed">
+                    <h3 className="text-[13px] leading-tight sm:text-lg md:text-xl font-black text-slate-900 mb-1.5 sm:mb-2 tracking-tight">Vijay Nagar, Indore to Tier 2 & 3 Cities</h3>
+                    <p className="text-[11px] sm:text-sm text-slate-600 font-light leading-relaxed">
                       Dooriq is starting its journey from Vijay Nagar, Indore, with a strategic focus on expanding across Tier 2 and Tier 3 cities in India. We aim to empower local businesses in these growing regions and integrate them into the digital market.
                     </p>
                   </div>
-                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2">
-                    <Map className="w-3.5 h-3.5 text-indigo-600" />
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Empowering Local Communities</span>
+                  <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-slate-100 flex items-center gap-1.5 sm:gap-2">
+                    <Map className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-600" />
+                    <span className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">Empowering Local Communities</span>
                   </div>
                 </div>
 
                 {/* Story Card 4: Driven by Innovation */}
-                <div className="group bg-white border border-slate-200/60 rounded-2xl p-5 lg:p-8 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
+                <div className="group bg-white border border-slate-200/60 rounded-2xl p-4 sm:p-5 lg:p-8 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
                   <div>
-                    <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-4 group-hover:scale-110 transition-transform">
-                      <Sparkles className="w-6 h-6" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-3 sm:mb-4 group-hover:scale-110 transition-transform">
+                      <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />
                     </div>
-                    <h3 className="text-lg md:text-xl font-black text-slate-900 mb-2 tracking-tight">Driven by Innovation</h3>
-                    <p className="text-sm text-slate-600 font-light leading-relaxed">
+                    <h3 className="text-[13px] leading-tight sm:text-lg md:text-xl font-black text-slate-900 mb-1.5 sm:mb-2 tracking-tight">Driven by Innovation</h3>
+                    <p className="text-[11px] sm:text-sm text-slate-600 font-light leading-relaxed">
                       Dooriq is built by a dedicated team driven by a vision to modernize the food delivery industry and create a balanced, fair, and growth-oriented platform for all stakeholders.
                     </p>
                   </div>
-                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2">
-                    <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Next-Gen Food Commerce</span>
+                  <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-slate-100 flex items-center gap-1.5 sm:gap-2">
+                    <TrendingUp className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600" />
+                    <span className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">Next-Gen Food Commerce</span>
                   </div>
                 </div>
 

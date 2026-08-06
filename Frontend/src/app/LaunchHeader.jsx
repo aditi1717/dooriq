@@ -26,13 +26,13 @@ export default function LaunchHeader() {
   }, []);
 
   const navLinks = [
-    { name: 'Home', icon: Home },
-    { name: 'How It Works', icon: Info },
-    { name: 'Restaurants', icon: Store },
-    { name: 'Offers', icon: Gift },
-    { name: 'Become Partner', icon: Briefcase },
-    { name: 'About', icon: Info },
-    { name: 'Contact', icon: Phone },
+    { name: 'Home', icon: Home, href: '#home' },
+    { name: 'How It Works', icon: Info, href: '#how-it-works' },
+    { name: 'User App', icon: Gift, href: 'https://play.google.com/store/apps/details?id=com.dooriq.user', external: true },
+    { name: 'Restaurant App', icon: Store, href: 'https://play.google.com/store/apps/details?id=com.dooriq.restaurant', external: true },
+    { name: 'Delivery App', icon: Briefcase, href: 'https://play.google.com/store/apps/details?id=com.dooriq.delivery', external: true },
+    { name: 'About', icon: Info, href: '#about' },
+    { name: 'Contact', icon: Phone, href: '#contact' },
   ];
 
   return (
@@ -78,9 +78,17 @@ export default function LaunchHeader() {
           {/* CENTER: Desktop Navigation Links */}
           <nav className="hidden xl:flex items-center gap-1 lg:gap-2">
             {navLinks.map((link) => (
-              <button
+              <a
                 key={link.name}
-                onClick={() => setActiveTab(link.name)}
+                href={link.href}
+                target={link.external ? "_blank" : "_self"}
+                rel={link.external ? "noopener noreferrer" : undefined}
+                onClick={(e) => {
+                  if (link.external) return; // let anchor handle it
+                  e.preventDefault(); // For smooth scrolling
+                  setActiveTab(link.name);
+                  document.querySelector(link.href)?.scrollIntoView({ behavior: 'smooth' });
+                }}
                 className={`relative px-4 py-2 text-sm font-bold transition-colors duration-300 group ${
                   activeTab === link.name ? 'text-[#3B4DFF]' : (isScrolled ? 'text-slate-600 hover:text-slate-900' : 'text-white/90 hover:text-white')
                 }`}
@@ -96,7 +104,7 @@ export default function LaunchHeader() {
                 {activeTab !== link.name && (
                   <div className={`absolute bottom-0 left-1/2 right-1/2 h-0.5 rounded-t-full opacity-0 group-hover:opacity-100 group-hover:left-2 group-hover:right-2 transition-all duration-300 ${isScrolled ? 'bg-slate-900/10' : 'bg-white/30'}`} />
                 )}
-              </button>
+              </a>
             ))}
           </nav>
 
@@ -173,11 +181,17 @@ export default function LaunchHeader() {
                 </div>
 
                 {navLinks.map((link) => (
-                  <button
+                  <a
                     key={link.name}
-                    onClick={() => {
+                    href={link.href}
+                    target={link.external ? "_blank" : "_self"}
+                    rel={link.external ? "noopener noreferrer" : undefined}
+                    onClick={(e) => {
+                      if (link.external) return; // let anchor handle it
+                      e.preventDefault();
                       setActiveTab(link.name);
                       setIsMobileMenuOpen(false);
+                      document.querySelector(link.href)?.scrollIntoView({ behavior: 'smooth' });
                     }}
                     className={`flex items-center gap-4 w-full p-3 rounded-xl font-bold transition-colors ${
                       activeTab === link.name ? 'bg-[#3B4DFF]/10 text-[#3B4DFF]' : 'text-slate-700 hover:bg-slate-50'
@@ -185,12 +199,15 @@ export default function LaunchHeader() {
                   >
                     <link.icon className="w-5 h-5" />
                     {link.name}
-                  </button>
+                  </a>
                 ))}
               </div>
 
               <div className="p-5 border-t border-slate-100 bg-slate-50">
-                <button className="w-full bg-gradient-to-r from-[#3B4DFF] to-[#2B35B3] text-white px-6 py-4 rounded-[16px] font-black text-sm shadow-lg shadow-[#3B4DFF]/30 flex items-center justify-center gap-2 mb-6">
+                <button 
+                  onClick={() => window.open("https://play.google.com/store/apps/details?id=com.dooriq.user", "_blank")}
+                  className="w-full bg-gradient-to-r from-[#3B4DFF] to-[#2B35B3] text-white px-6 py-4 rounded-[16px] font-black text-sm shadow-lg shadow-[#3B4DFF]/30 flex items-center justify-center gap-2 mb-6"
+                >
                   Download App
                   <ArrowRight className="w-4 h-4" />
                 </button>
