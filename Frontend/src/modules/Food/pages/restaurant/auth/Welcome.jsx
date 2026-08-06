@@ -235,7 +235,7 @@ export default function RestaurantWelcome() {
 
                   {/* Text Overlay */}
                   <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8 pb-16">
-                    {/* SwitchEats Brand */}
+                    {/* Dooriq Brand */}
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}

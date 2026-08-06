@@ -659,14 +659,14 @@ export default function AddRestaurant() {
       // Upload all images first
       let profileImageData = null
       if (step2.profileImage instanceof File) {
-        profileImageData = await handleUpload(step2.profileImage, "switcheats/restaurant/profile")
+        profileImageData = await handleUpload(step2.profileImage, "dooriq/restaurant/profile")
       } else if (step2.profileImage?.url) {
         profileImageData = step2.profileImage
       }
 
       let menuImagesData = []
       for (const file of step2.menuImages.filter(f => f instanceof File)) {
-        const uploaded = await handleUpload(file, "switcheats/restaurant/menu")
+        const uploaded = await handleUpload(file, "dooriq/restaurant/menu")
         menuImagesData.push(uploaded)
       }
       const existingMenuUrls = step2.menuImages.filter(img => !(img instanceof File) && (img?.url || (typeof img === 'string' && img.startsWith('http'))))
@@ -674,7 +674,7 @@ export default function AddRestaurant() {
 
       let panImageData = null
       if (step3.panImage instanceof File) {
-        panImageData = await handleUpload(step3.panImage, "switcheats/restaurant/pan")
+        panImageData = await handleUpload(step3.panImage, "dooriq/restaurant/pan")
       } else if (step3.panImage?.url) {
         panImageData = step3.panImage
       }
@@ -682,7 +682,7 @@ export default function AddRestaurant() {
       let gstImageData = null
       if (step3.gstRegistered && step3.gstImage) {
         if (step3.gstImage instanceof File) {
-          gstImageData = await handleUpload(step3.gstImage, "switcheats/restaurant/gst")
+          gstImageData = await handleUpload(step3.gstImage, "dooriq/restaurant/gst")
         } else if (step3.gstImage?.url) {
           gstImageData = step3.gstImage
         }
@@ -690,7 +690,7 @@ export default function AddRestaurant() {
 
       let fssaiImageData = null
       if (step3.fssaiImage instanceof File) {
-        fssaiImageData = await handleUpload(step3.fssaiImage, "switcheats/restaurant/fssai")
+        fssaiImageData = await handleUpload(step3.fssaiImage, "dooriq/restaurant/fssai")
       } else if (step3.fssaiImage?.url) {
         fssaiImageData = step3.fssaiImage
       }

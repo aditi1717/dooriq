@@ -275,7 +275,7 @@ async function expireUnacceptedOrders(filter = {}) {
         {
           title: "Order Cancelled ❌",
           body: `Order #${updated.order_id || updated._id} was not accepted by restaurant in time.${refundDetail}`,
-          image: "https://i.ibb.co/5GzXz7r/Switcheats-Brand-Image.png",
+          image: "https://i.ibb.co/5GzXz7r/Dooriq-Brand-Image.png",
           data: {
             type: "order_cancelled",
             orderId: String(updated._id.toString()),
@@ -663,7 +663,7 @@ export async function createOrder(userId, dto) {
         body: isAwaitingOnlinePayment
           ? `Order #${order.order_id || order._id} is created. Please complete payment to send it to ${restaurant.restaurantName || "the restaurant"}.`
           : `Your order #${order.order_id || order._id} from ${restaurant.restaurantName || "the restaurant"} has been placed successfully.`,
-        image: "https://i.ibb.co/5GzXz7r/Switcheats-Brand-Image.png",
+        image: "https://i.ibb.co/5GzXz7r/Dooriq-Brand-Image.png",
         data: {
           type: isAwaitingOnlinePayment ? "order_created_pending_payment" : "order_created",
           orderId: String(order._id),
@@ -777,7 +777,7 @@ export async function verifyPayment(userId, dto) {
   await notifyOwnersSafely([{ ownerType: "USER", ownerId: userId }], {
     title: "Payment Successful! ✅",
     body: `We have received your payment of ₹${order.payment.amountDue} for Order #${order.order_id || order.orderId || order._id.toString()}.`,
-    image: "https://i.ibb.co/5GzXz7r/Switcheats-Brand-Image.png",
+    image: "https://i.ibb.co/5GzXz7r/Dooriq-Brand-Image.png",
     data: {
       type: "payment_success",
       orderId: String(order._id.toString()),
@@ -1118,7 +1118,7 @@ export async function cancelOrder(orderId, userId, reason) {
     {
       title: "Order Cancelled ❌",
       body: `Order #${order.order_id || order._id} has been cancelled successfully.${refundDetail}`,
-      image: "https://i.ibb.co/5GzXz7r/Switcheats-Brand-Image.png",
+      image: "https://i.ibb.co/5GzXz7r/Dooriq-Brand-Image.png",
       data: {
         type: "order_cancelled",
         orderId: String(order._id.toString()),
@@ -1437,7 +1437,7 @@ export async function updateOrderStatusRestaurant(
       {
         title: title,
         body: body,
-        image: "https://i.ibb.co/5GzXz7r/Switcheats-Brand-Image.png",
+        image: "https://i.ibb.co/5GzXz7r/Dooriq-Brand-Image.png",
         data: {
           type: "order_status_update",
           orderId: order._id.toString(),
