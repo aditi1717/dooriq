@@ -66,19 +66,30 @@ export default function ProtectedRoute({ children, requiredRole, loginPath = "/f
         const featureRes =
           featureResult.status === "fulfilled" ? featureResult.value : null;
 
+        const cachedUserStr = localStorage.getItem("restaurant_user");
+        let cachedUser = null;
+        if (cachedUserStr) {
+          try { cachedUser = JSON.parse(cachedUserStr); } catch (_) { /* ignore */ }
+        }
+
         const restaurant =
           response?.data?.data?.restaurant ||
           response?.data?.restaurant ||
+          (response?.data?.data && typeof response.data.data === "object" ? response.data.data : null) ||
+          cachedUser ||
           null;
 
-        // If restaurant payload is not available, keep access blocked until next successful sync.
+        // If restaurant payload is not available at all, fallback to cached status
         if (!restaurant) {
           if (active) {
-            setServerRequiresPayment(true);
+            const featureEnabled = localStorage.getItem("restaurant_subscription_feature_enabled") !== "false";
+            const onboardingFeePaid = Boolean(cachedUser?.onboardingFeePaid);
+            setServerRequiresPayment(featureEnabled && !onboardingFeePaid);
           }
           return;
         }
-        if (restaurant) {
+
+        if (restaurant && response?.data) {
           localStorage.setItem("restaurant_user", JSON.stringify(restaurant));
         }
 
@@ -98,7 +109,17 @@ export default function ProtectedRoute({ children, requiredRole, loginPath = "/f
         }
       } catch {
         if (active) {
-          setServerRequiresPayment(true);
+          const cachedUserStr = localStorage.getItem("restaurant_user");
+          if (cachedUserStr) {
+            try {
+              const cachedUser = JSON.parse(cachedUserStr);
+              const onboardingFeePaid = Boolean(cachedUser?.onboardingFeePaid);
+              const featureEnabled = localStorage.getItem("restaurant_subscription_feature_enabled") !== "false";
+              setServerRequiresPayment(featureEnabled && !onboardingFeePaid);
+              return;
+            } catch (_) { /* ignore */ }
+          }
+          setServerRequiresPayment(false);
         }
       } finally {
         if (active) {

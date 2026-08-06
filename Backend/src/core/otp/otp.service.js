@@ -69,7 +69,7 @@ const sendSmsViaIndiaHub = async (phone, otp) => {
     }
 };
 
-export const createOrUpdateOtp = async (phone) => {
+export const createOrUpdateOtp = async (phone, useDefault = config.useDefaultOtp) => {
     const existing = await FoodOtp.findOne({ phone });
     const now = new Date();
 
@@ -91,7 +91,7 @@ export const createOrUpdateOtp = async (phone) => {
     }
 
     let otp;
-    if (config.useDefaultOtp) {
+    if (useDefault) {
         otp = '1234';
         logger.info(`Default OTP mode enabled – OTP is ${otp} for phone ${phone}`);
     } else {
@@ -125,8 +125,8 @@ export const createOrUpdateOtp = async (phone) => {
         });
     }
 
-    // Only send SMS if not in default OTP mode
-    if (!config.useDefaultOtp) {
+    // Only send SMS if not in default OTP mode for this request
+    if (!useDefault) {
         await sendSmsViaIndiaHub(phone, otp);
     }
 

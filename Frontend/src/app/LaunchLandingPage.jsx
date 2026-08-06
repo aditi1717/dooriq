@@ -10,6 +10,7 @@ import {
 import { APP_CONFIG } from "../config/constants"; // Adjust path if needed
 import apiClient, { restaurantAPI } from "../services/api";
 import { loadBusinessSettings } from "../modules/Food/utils/businessSettings";
+import LaunchHeader from "./LaunchHeader";
 
 // --- Animation Variants for Cinematic Reveals ---
 const textReveal = {
@@ -201,169 +202,156 @@ export default function LandingPage() {
       <div className="absolute top-[20%] left-[-10%] w-[40vw] h-[40vw] bg-orange-400/5 rounded-full blur-[100px] pointer-events-none z-0" />
 
       {/* Header */}
-      <header className="absolute top-0 w-full z-50 px-4 py-3 sm:px-6 sm:py-5 md:px-12 lg:px-20 flex items-center justify-between bg-transparent">
-        <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tighter relative z-50">
-          {APP_CONFIG?.NAME || "BRAND"}
-          <span className="text-[var(--module-theme-color,#2563EB)]">.</span>
-        </div>
-        <nav className="flex items-center gap-1 sm:gap-1.5 bg-white/50 backdrop-blur-md border border-slate-200/30 p-1 rounded-full shadow-lg shadow-slate-900/5 relative z-50">
-          <a
-            href="/"
-            className="group flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 md:px-4 md:py-2 rounded-full text-[11px] sm:text-xs font-bold text-slate-700 hover:text-[var(--module-theme-color,#2563EB)] hover:bg-white/80 transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5"
+      <LaunchHeader />
+
+
+      {/* 1. AUGUST 15 LAUNCH HERO SECTION (Full Background Image) */}
+      <section className="relative z-10 w-full min-h-[90vh] sm:h-screen lg:min-h-[700px] flex items-center justify-center overflow-hidden pt-32 sm:pt-40 pb-16">
+        
+        {/* Background Video with Parallax & Dark Overlay */}
+        <motion.div style={{ y: heroY }} className="absolute inset-0 z-0 scale-105">
+          <video 
+            autoPlay 
+            loop 
+            muted 
+            playsInline
+            className="w-full h-full object-cover"
           >
-            <Home className="w-3.5 h-3.5 md:w-3.5 md:h-3.5 text-slate-500 group-hover:text-[var(--module-theme-color,#2563EB)] transition-colors" />
-            <span className="hidden md:inline">Home</span>
-          </a>
-          <button
-            onClick={() => setIsRestaurantOpen(true)}
-            className="group flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 md:px-4 md:py-2 rounded-full text-[11px] sm:text-xs font-bold text-slate-700 hover:text-[var(--module-theme-color,#2563EB)] hover:bg-white/80 transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
-          >
-            <Store className="w-3.5 h-3.5 md:w-3.5 md:h-3.5 text-slate-500 group-hover:text-[var(--module-theme-color,#2563EB)] transition-colors" />
-            <span className="hidden md:inline">Restaurant Partner</span>
-          </button>
-          <button
-            onClick={() => setIsDeliveryOpen(true)}
-            className="group flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 md:px-4 md:py-2 rounded-full text-[11px] sm:text-xs font-bold text-slate-700 hover:text-[var(--module-theme-color,#2563EB)] hover:bg-white/80 transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
-          >
-            <Bike className="w-3.5 h-3.5 md:w-3.5 md:h-3.5 text-slate-500 group-hover:text-[var(--module-theme-color,#2563EB)] transition-colors" />
-            <span className="hidden md:inline">Delivery Partner</span>
-          </button>
-        </nav>
-      </header>
+            <source src="/assets/images/landing.mp4" type="video/mp4" />
+          </video>
+          {/* Lighter overlays to make video pop more, while keeping text readable */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/70" />
+        </motion.div>
 
-      {/* 1. AWARD-WINNING HERO SECTION */}
-      <section className="relative z-10 py-6 sm:py-12 md:py-16 lg:py-0 lg:h-screen lg:min-h-screen flex items-center px-4 sm:px-6 md:px-12 lg:px-20 max-w-[1800px] mx-auto">
-
-        <motion.div style={{ y: heroY, opacity: heroOpacity }} className="grid lg:grid-cols-2 gap-4 sm:gap-8 lg:gap-16 items-center w-full h-full pt-14 sm:pt-20 lg:pt-20">
-
-          {/* Left: Dramatic Typography */}
-          <div className="col-span-1 flex flex-col justify-center z-20 h-full relative">
-
-            <div className="overflow-hidden mb-2 sm:mb-4 md:mb-6">
-              <motion.div custom={0} initial="hidden" animate="visible" variants={textReveal} className="inline-flex items-center gap-1.5 sm:gap-2 text-[var(--module-theme-color,#2563EB)] font-bold tracking-wider sm:tracking-widest uppercase text-[10px] sm:text-xs bg-[var(--module-theme-color,#2563EB)]/10 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full">
-                <Award className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Michelin-Level Experience at Home
-              </motion.div>
-            </div>
-
-            <h1 className="text-3xl sm:text-5xl lg:text-[5.8vw] font-black leading-tight sm:leading-[0.85] tracking-tight sm:tracking-tighter text-slate-900 relative z-20">
-              <div className="overflow-hidden pb-1 sm:pb-2">
-                <motion.div custom={1} initial="hidden" animate="visible" variants={textReveal}>
-                  WHAT IS
-                </motion.div>
-              </div>
-              <div className="overflow-hidden pb-2 sm:pb-4">
-                <motion.div custom={2} initial="hidden" animate="visible" variants={textReveal} className="flex items-center gap-4 lg:gap-8">
-                  <span className="text-transparent bg-clip-text bg-gradient-to-br from-[var(--module-theme-color,#2563EB)] to-[var(--module-theme-color,#2563EB)]">DOORIQ?</span>
-                </motion.div>
-              </div>
-            </h1>
-
-            <div className="overflow-hidden mt-2 sm:mt-4 lg:mt-6 max-w-xl">
-              <motion.p custom={3} initial="hidden" animate="visible" variants={textReveal} className="text-xs sm:text-base lg:text-lg text-slate-600 font-light leading-relaxed">
-                Dooriq is a next-generation food delivery platform built to deliver exceptional dining experiences with absolute transparency. We connect food lovers with top local kitchens through seamless technology, fast delivery, and fair digital commerce.
-              </motion.p>
-            </div>
-
-            <div className="overflow-hidden mt-3 sm:mt-6 lg:mt-8">
-              <motion.div custom={4} initial="hidden" animate="visible" variants={textReveal}>
-                <button
-                  onClick={() => setIsAboutOpen(true)}
-                  className="group flex items-center gap-2.5 sm:gap-3 bg-slate-900 hover:bg-[var(--module-theme-color,#2563EB)] text-white px-5 py-2.5 sm:px-8 sm:py-4 rounded-full font-bold text-xs sm:text-sm transition-all duration-500 hover:shadow-xl hover:shadow-[var(--module-theme-color,#2563EB)]/20 cursor-pointer"
-                >
-                  Learn More About Our Mission
-                  <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
-                </button>
-              </motion.div>
-            </div>
-          </div>
-
-          {/* Right: The Cinematic Centerpiece */}
-          <div className="hidden lg:flex col-span-1 h-full items-center justify-end">
-
-            <motion.div
-              initial="hidden"
-              animate="visible"
-              variants={imageReveal}
-              style={{ y: imageParallax }}
-              className="relative w-full h-[75vh] max-h-[750px] rounded-3xl overflow-hidden shadow-2xl"
-            >
-              {/* Overlay Gradient to blend with text on smaller screens */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent z-10" />
-
-              <img
-                src="/assets/images/veg_thali.png"
-                alt="Gourmet Plating"
-                className="w-full h-full object-cover"
-              />
-
-              {/* Minimal Floating Element */}
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 1.5, duration: 0.8 }}
-                className="absolute bottom-6 left-6 bg-white/90 backdrop-blur-xl p-4 rounded-2xl shadow-xl flex items-center gap-4 z-20 border border-white/50"
-              >
-                <div className="w-12 h-12 rounded-full bg-slate-900 flex items-center justify-center shrink-0">
-                  <Clock className="w-5 h-5 text-white" />
-                </div>
-                <div className="pr-4">
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Average Delivery</p>
-                  <p className="text-xl font-black text-slate-900 leading-none mt-1">15 Mins</p>
-                </div>
-              </motion.div>
-
+        {/* Hero Content (Centered) */}
+        <div className="relative z-20 flex flex-col items-center justify-center text-center px-4 sm:px-6 w-full max-w-5xl mx-auto mt-4 sm:mt-0">
+          
+          <div className="overflow-hidden mb-4 sm:mb-6">
+            <motion.div custom={0} initial="hidden" animate="visible" variants={textReveal} className="inline-flex items-center justify-center gap-1.5 sm:gap-2 text-white font-black tracking-widest uppercase text-[10px] sm:text-xs bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-2 sm:px-6 sm:py-2.5 rounded-full shadow-2xl shadow-orange-500/40">
+              <Sparkles className="w-4 h-4" /> 🚀 LAUNCHING AUGUST 15TH IN VIJAY NAGAR
             </motion.div>
           </div>
-        </motion.div>
+
+          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-[6vw] font-black leading-[1.1] sm:leading-[1] tracking-tight text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)] mb-4 sm:mb-6">
+            <div className="overflow-hidden pb-1 sm:pb-2">
+              <motion.div custom={1} initial="hidden" animate="visible" variants={textReveal}>
+                The Wait is Over.
+              </motion.div>
+            </div>
+            <div className="overflow-hidden pb-1 sm:pb-2">
+              <motion.div custom={2} initial="hidden" animate="visible" variants={textReveal} className="flex items-center justify-center">
+                <span className="text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-300">Indore's Premium</span>
+              </motion.div>
+            </div>
+            <div className="overflow-hidden pb-2 sm:pb-4">
+              <motion.div custom={3} initial="hidden" animate="visible" variants={textReveal} className="flex items-center justify-center">
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-[var(--module-theme-color,#3B4DFF)]">Food App Arrives.</span>
+              </motion.div>
+            </div>
+          </h1>
+
+          <div className="overflow-hidden mb-8 sm:mb-10 max-w-2xl mx-auto px-2">
+            <motion.p custom={4} initial="hidden" animate="visible" variants={textReveal} className="text-sm sm:text-base md:text-xl text-slate-200 font-medium leading-relaxed drop-shadow-md">
+              Experience the new standard for food delivery. As a launch exclusive, the first users get a <span className="font-black text-amber-400">Free Order up to ₹250</span>. No hidden fees, just great food.
+            </motion.p>
+          </div>
+
+          <div className="overflow-hidden">
+            <motion.div custom={5} initial="hidden" animate="visible" variants={textReveal} className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-center justify-center">
+              <button
+                onClick={() => window.open("https://play.google.com/store/apps/details?id=com.dooriq.user", "_blank")}
+                className="group flex items-center justify-center gap-3 bg-gradient-to-r from-[var(--module-theme-color,#3B4DFF)] to-indigo-600 text-white px-8 py-4 sm:px-10 sm:py-5 rounded-full font-black text-sm sm:text-base transition-all duration-500 hover:shadow-[0_0_40px_rgba(59,77,255,0.6)] hover:-translate-y-1 w-full sm:w-auto"
+              >
+                Claim Your ₹250 Free Order
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1.5 transition-transform" />
+              </button>
+              <div className="flex items-center justify-center gap-2 text-xs sm:text-sm font-bold text-white/80 bg-white/10 backdrop-blur-md px-6 py-4 sm:py-5 rounded-full w-full sm:w-auto">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                </span>
+                App launching Aug 15th
+              </div>
+            </motion.div>
+          </div>
+
+        </div>
       </section>
 
-      {/* 2. OUR STORY / ASYMMETRICAL LAYOUT */}
-      <section className="relative z-10 py-12 sm:py-20 md:py-24 lg:py-32 px-4 sm:px-6 md:px-16 lg:px-24 max-w-[1800px] mx-auto">
-        <div className="grid lg:grid-cols-2 gap-8 sm:gap-14 lg:gap-20 items-center">
-
-          <div className="space-y-4 sm:space-y-6 lg:space-y-8">
-            <span className="inline-block text-[10px] sm:text-xs font-black tracking-[0.2em] sm:tracking-[0.3em] text-[var(--module-theme-color,#2563EB)] uppercase bg-[var(--module-theme-color,#2563EB)]/10 border border-[var(--module-theme-color,#2563EB)]/20 rounded-full px-3 py-1">
-              About Dooriq
-            </span>
-            <h3 className="text-3xl sm:text-5xl lg:text-7xl font-black leading-[1.1] tracking-tight text-slate-900">
-              Empowering partners, <br /><span className="italic text-slate-500 font-light">building local success.</span>
-            </h3>
-            <p className="text-sm sm:text-lg md:text-xl text-slate-600 leading-relaxed font-light max-w-lg">
+      {/* 2. OUR STORY / BENTO GRID LAYOUT */}
+      <section className="relative z-10 pt-10 pb-4 sm:pt-14 sm:pb-6 lg:pt-16 lg:pb-8 px-4 sm:px-6 md:px-12 lg:px-20 max-w-[1800px] mx-auto bg-[#FCFBFA]">
+        <div className="grid lg:grid-cols-12 gap-8 lg:gap-16 items-center">
+          
+          {/* Left: Typography & Story */}
+          <div className="lg:col-span-5 space-y-6 sm:space-y-8">
+            <div>
+              <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-black tracking-widest text-[#3B4DFF] uppercase bg-[#3B4DFF]/10 px-4 py-1.5 rounded-full mb-4 sm:mb-6">
+                <Sparkles className="w-3.5 h-3.5" /> About Dooriq
+              </span>
+              <h3 className="text-3xl sm:text-5xl lg:text-6xl font-black leading-[1.1] tracking-tight text-slate-900">
+                Empowering partners, <br />
+                <span className="text-slate-400 font-light italic">building local success.</span>
+              </h3>
+            </div>
+            
+            <p className="text-base sm:text-lg text-slate-600 leading-relaxed font-medium">
               Dooriq connects food lovers with top local kitchens through a high-efficiency digital ordering platform. We focus on lightning-fast deliveries, transparent pricing, and sustainable growth for every restaurant partner.
             </p>
-            <div className="pt-2">
+            
+            <div className="flex flex-col sm:flex-row items-center gap-4 pt-4 sm:pt-6">
               <button
                 onClick={() => setIsAboutOpen(true)}
-                className="group inline-flex items-center gap-2 text-slate-900 hover:text-[var(--module-theme-color,#2563EB)] font-bold text-xs sm:text-sm tracking-wide uppercase transition-colors"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-sm hover:bg-[#3B4DFF] hover:shadow-lg hover:shadow-[#3B4DFF]/30 transition-all duration-300"
               >
-                Read Our Story <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                Read Our Story <ArrowRight className="w-4 h-4" />
               </button>
-            </div>
-            <div className="pt-4 sm:pt-8 grid grid-cols-2 gap-4 sm:gap-8 border-t border-slate-200">
-              <div>
-                <p className="text-2xl sm:text-4xl font-black text-slate-950">100%</p>
-                <p className="text-[10px] sm:text-xs text-slate-500 uppercase tracking-widest font-bold mt-1 sm:mt-2">Transparent Operations</p>
-              </div>
-              <div>
-                <p className="text-2xl sm:text-4xl font-black text-slate-950">Direct</p>
-                <p className="text-[10px] sm:text-xs text-slate-500 uppercase tracking-widest font-bold mt-1 sm:mt-2">Kitchen Partnerships</p>
+              
+              <div className="w-full sm:w-auto flex items-center justify-center gap-6 px-8 py-3.5 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="text-center">
+                  <p className="text-2xl font-black text-slate-900">100%</p>
+                  <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mt-0.5">Transparent</p>
+                </div>
+                <div className="w-px h-10 bg-slate-200" />
+                <div className="text-center">
+                  <p className="text-2xl font-black text-slate-900">Direct</p>
+                  <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mt-0.5">Partnerships</p>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="relative h-[260px] sm:h-[400px] lg:h-[600px] rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden group shadow-2xl border-4 border-white">
-            <div className="absolute inset-0 bg-[var(--module-theme-color,#2563EB)] mix-blend-overlay opacity-10 z-10 group-hover:opacity-0 transition-opacity duration-700" />
-            <img
-              src="/assets/images/paneer_tikka.png"
-              alt="Chef working"
-              className="w-full h-full object-cover transform scale-105 group-hover:scale-100 transition-transform duration-1000 ease-out"
-            />
+          {/* Right: Bento Image Grid */}
+          <div className="lg:col-span-7 grid grid-cols-2 grid-rows-2 gap-3 sm:gap-5 h-[350px] sm:h-[500px] lg:h-[600px] mt-8 lg:mt-0">
+            {/* Main large image */}
+            <div className="col-span-1 row-span-2 relative rounded-3xl overflow-hidden shadow-lg group">
+              <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors duration-500 z-10" />
+              <img src="/assets/images/veg_thali.png" alt="Dooriq Food" className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700 ease-out" />
+            </div>
+            
+            {/* Top right image */}
+            <div className="col-span-1 row-span-1 relative rounded-3xl overflow-hidden shadow-lg group">
+              <div className="absolute inset-0 bg-[#3B4DFF]/10 group-hover:bg-transparent transition-colors duration-500 z-10" />
+              <img src="/assets/images/veg_pasta.png" alt="Premium Pasta" className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700 ease-out" />
+            </div>
+            
+            {/* Bottom right image */}
+            <div className="col-span-1 row-span-1 relative rounded-3xl overflow-hidden shadow-lg group">
+              <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-500 z-10" />
+              <img src="/assets/images/chef_prep.png" alt="Chef Prep" className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700 ease-out" />
+              
+              {/* Floating Badge */}
+              <div className="absolute bottom-3 right-3 sm:bottom-5 sm:right-5 bg-white/95 backdrop-blur-md px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl shadow-xl z-20 flex items-center gap-1.5 sm:gap-2">
+                 <ShieldCheck className="w-3 h-3 sm:w-4 sm:h-4 text-[#3B4DFF]" />
+                 <span className="text-[8px] sm:text-[10px] font-black text-slate-900 tracking-wider">PREMIUM</span>
+              </div>
+            </div>
           </div>
+          
         </div>
       </section>
 
       {/* 3. MOBILE EXPERIENCE (Floating Phone Parallax) */}
-      <section className="relative z-10 py-12 sm:py-20 md:py-24 lg:py-32 bg-slate-50/60 backdrop-blur-3xl border-y border-slate-100">
+      <section className="relative z-10 pt-4 pb-10 sm:pt-6 sm:pb-14 md:pt-8 md:pb-16 lg:pt-10 lg:pb-20 bg-slate-50/60 backdrop-blur-3xl border-y border-slate-100">
         <div className="max-w-[1800px] mx-auto px-4 sm:px-6 md:px-16 lg:px-24 flex flex-col lg:flex-row items-center gap-8 sm:gap-14 lg:gap-20">
 
           {/* Phone Mockup Column */}
@@ -375,14 +363,14 @@ export default function LandingPage() {
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 sm:w-36 h-5 sm:h-6 bg-black rounded-b-2xl z-20" />
                 <div className="w-full h-full bg-white rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden relative border border-slate-100">
                   <img
-                    src="/assets/images/veg_pasta.png"
-                    className="w-full h-[55%] object-cover"
-                    alt="App preview"
+                    src="/assets/images/vijay_nagar_map.png"
+                    className="w-full h-[65%] object-cover"
+                    alt="Vijay Nagar Delivery Map"
                   />
-                  <div className="absolute bottom-0 w-full h-[50%] bg-gradient-to-t from-white via-white to-transparent p-4 sm:p-6 flex flex-col justify-end">
+                  <div className="absolute bottom-0 w-full h-[45%] bg-gradient-to-t from-white via-white to-transparent p-4 sm:p-6 flex flex-col justify-end">
                     <div className="w-10 sm:w-12 h-1 bg-slate-200 rounded-full mb-4 sm:mb-6 mx-auto" />
-                    <h4 className="text-lg sm:text-2xl font-black text-slate-900 mb-1">Sushi Masterclass</h4>
-                    <p className="text-slate-500 text-[10px] sm:text-xs font-semibold mb-3 sm:mb-4">Japanese • 4.9 <Star className="inline w-3 h-3 text-[var(--module-theme-color,#2563EB)] fill-[var(--module-theme-color,#2563EB)] mb-0.5" /></p>
+                    <h4 className="text-lg sm:text-2xl font-black text-slate-900 mb-1">Your Order</h4>
+                    <p className="text-slate-500 text-[10px] sm:text-xs font-semibold mb-3 sm:mb-4">Vijay Nagar • 4.9 <Star className="inline w-3 h-3 text-[var(--module-theme-color,#2563EB)] fill-[var(--module-theme-color,#2563EB)] mb-0.5" /></p>
                     <button className="w-full bg-slate-900 text-white py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl font-bold hover:bg-[var(--module-theme-color,#2563EB)] transition-colors duration-300 text-xs sm:text-sm shadow-md">
                       Track Delivery
                     </button>
@@ -418,20 +406,20 @@ export default function LandingPage() {
             <p className="text-sm sm:text-lg md:text-xl text-slate-600 font-light leading-relaxed max-w-lg">
               Live tracking that actually updates. Beautifully designed interface. Zero friction. Download the app to experience food delivery designed for the modern era.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2 sm:pt-4">
+            <div className="flex flex-col sm:flex-row gap-4 pt-4 sm:pt-6">
               <a
                 href="#"
-                className="flex items-center justify-center gap-2.5 sm:gap-3 bg-slate-900 text-white hover:bg-[var(--module-theme-color,#2563EB)] px-6 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-bold transition-all duration-300 text-xs sm:text-sm shadow-md shadow-slate-900/10 cursor-pointer"
+                className="group flex items-center justify-center gap-3 bg-slate-900 text-white hover:bg-slate-800 px-6 py-3.5 sm:px-8 sm:py-4 rounded-[1.25rem] font-bold transition-all duration-300 text-sm shadow-xl shadow-slate-900/20 hover:-translate-y-1"
               >
-                <Apple className="w-4 h-4 sm:w-5 sm:h-5" /> App Store
+                <Apple className="w-5 h-5 group-hover:scale-110 transition-transform" /> App Store
               </a>
               <a
                 href="https://play.google.com/store/apps/details?id=com.dooriq.user"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2.5 sm:gap-3 bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 px-6 py-3 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl font-bold transition-all duration-300 text-xs sm:text-sm shadow-sm cursor-pointer"
+                className="group flex items-center justify-center gap-3 bg-white border-2 border-slate-200 text-slate-900 hover:border-[var(--module-theme-color,#3B4DFF)] hover:bg-slate-50 px-6 py-3.5 sm:px-8 sm:py-4 rounded-[1.25rem] font-bold transition-all duration-300 text-sm shadow-sm hover:shadow-xl hover:shadow-[var(--module-theme-color,#3B4DFF)]/10 hover:-translate-y-1"
               >
-                <Play className="w-4 h-4 sm:w-5 sm:h-5" /> Google Play
+                <Play className="w-5 h-5 text-slate-700 group-hover:text-[var(--module-theme-color,#3B4DFF)] transition-colors" /> Google Play
               </a>
             </div>
           </div>
@@ -439,7 +427,7 @@ export default function LandingPage() {
       </section>
 
       {/* 4. LATE NIGHT CRAVINGS - Cinematic 3D Interactive Midnight Console Stage */}
-      <section className="relative z-10 py-14 sm:py-24 md:py-28 lg:py-36 bg-[#030303] text-slate-100 overflow-hidden">
+      <section className="relative z-10 py-12 sm:py-16 md:py-20 lg:py-24 bg-[#030303] text-slate-100 overflow-hidden">
         
         {/* Dynamic ambient backdrop glow matching active item */}
         <div 
@@ -457,7 +445,7 @@ export default function LandingPage() {
         <div className="max-w-[1800px] mx-auto px-4 sm:px-6 md:px-16 lg:px-24 relative z-10">
           
           {/* Section Header */}
-          <div className="text-center mb-10 sm:mb-16 lg:mb-24">
+          <div className="text-center mb-8 sm:mb-12 lg:mb-16">
             <span className="inline-flex items-center gap-1.5 sm:gap-2 text-[10px] font-black tracking-[0.25em] sm:tracking-[0.35em] text-[var(--module-theme-color,#2563EB)] uppercase bg-[var(--module-theme-color,#2563EB)]/10 border border-[var(--module-theme-color,#2563EB)]/30 rounded-full px-3.5 py-1.5 mb-4 sm:mb-6">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--module-theme-color,#2563EB)] animate-ping" />
               Midnight Gastronomy
@@ -471,10 +459,10 @@ export default function LandingPage() {
           </div>
 
           {/* Interactive Console Console Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-center">
             
             {/* Left Console: Tab selectors (Columns 5) */}
-            <div className="lg:col-span-5 flex flex-col gap-6 order-2 lg:order-1">
+            <div className="lg:col-span-5 flex flex-col gap-4 sm:gap-6 order-2 lg:order-1">
               {[
                 { 
                   tag: "🔥 BESTSELLER", 
@@ -509,7 +497,7 @@ export default function LandingPage() {
                   <div
                     key={index}
                     onClick={() => setActiveCraving(index)}
-                    className={`group relative rounded-[2rem] p-8 cursor-pointer border transition-all duration-500 ease-out select-none ${
+                    className={`group relative rounded-2xl sm:rounded-[2rem] p-5 sm:p-8 cursor-pointer border transition-all duration-500 ease-out select-none ${
                       isActive 
                         ? "bg-white/[0.03] border-white/10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)]" 
                         : "bg-transparent border-transparent hover:bg-white/[0.01] hover:border-white/5"
@@ -545,17 +533,17 @@ export default function LandingPage() {
                           </span>
                         </div>
 
-                        <h4 className="text-xl md:text-2xl font-black text-white group-hover:text-slate-200 transition-colors duration-300">
+                        <h4 className="text-lg sm:text-xl md:text-2xl font-black text-white group-hover:text-slate-200 transition-colors duration-300">
                           {item.title}
                         </h4>
 
                         {/* Slide open description & action */}
                         <div 
                           className={`transition-all duration-500 ease-in-out overflow-hidden ${
-                            isActive ? "max-h-[300px] mt-4 opacity-100" : "max-h-0 opacity-0"
+                            isActive ? "max-h-[300px] mt-3 sm:mt-4 opacity-100" : "max-h-0 opacity-0"
                           }`}
                         >
-                          <p className="text-slate-400 text-xs md:text-sm font-light leading-relaxed mb-5">
+                          <p className="text-slate-400 text-xs md:text-sm font-light leading-relaxed mb-3 sm:mb-5">
                             {item.desc}
                           </p>
 
@@ -575,11 +563,11 @@ export default function LandingPage() {
             </div>
 
             {/* Right Console: The floating cinematic 3D Stage (Columns 7) */}
-            <div className="lg:col-span-7 flex justify-center items-center order-1 lg:order-2 h-[500px] md:h-[600px] relative">
+            <div className="lg:col-span-7 flex justify-center items-center order-1 lg:order-2 h-[300px] sm:h-[400px] md:h-[500px] lg:h-[600px] relative">
               
               {/* Dynamic Pedestal Under-glow Shadow */}
               <div 
-                className="absolute bottom-12 w-[350px] md:w-[480px] h-[35px] rounded-full blur-[40px] opacity-40 transition-all duration-1000 ease-out"
+                className="absolute bottom-6 sm:bottom-12 w-[250px] sm:w-[350px] md:w-[480px] h-[25px] sm:h-[35px] rounded-full blur-[40px] opacity-40 transition-all duration-1000 ease-out"
                 style={{
                   background: activeCraving === 0 ? '#2563EB' : activeCraving === 1 ? '#EB590E' : '#EAB308'
                 }}
@@ -607,7 +595,7 @@ export default function LandingPage() {
                     animate={{ rotate: 0, scale: 1, opacity: 1 }}
                     exit={{ rotate: 45, scale: 0.8, opacity: 0 }}
                     transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-                    className="relative w-[340px] h-[340px] md:w-[480px] md:h-[480px] rounded-full p-2 bg-gradient-to-tr from-white/10 to-transparent border border-white/10 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.9)] overflow-hidden"
+                    className="relative w-[260px] h-[260px] sm:w-[340px] sm:h-[340px] md:w-[480px] md:h-[480px] rounded-full p-2 bg-gradient-to-tr from-white/10 to-transparent border border-white/10 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.9)] overflow-hidden"
                   >
                     {/* Inner gloss layer */}
                     <div className="absolute inset-0 bg-black/10 group-hover/plate:bg-black/0 transition-all duration-500" />
@@ -749,7 +737,7 @@ export default function LandingPage() {
       </section>
 
       {/* 4.5 GEOGRAPHY / Telengana Highlight */}
-      <section className="relative z-10 py-24 px-6 md:px-16 lg:px-24 max-w-[1800px] mx-auto overflow-hidden">
+      <section className="relative z-10 py-12 lg:py-16 px-6 md:px-16 lg:px-24 max-w-[1800px] mx-auto overflow-hidden">
         {/* Glow ambient background lights */}
         <div className="absolute top-[20%] right-[-10%] w-[30vw] h-[30vw] bg-blue-500/5 rounded-full blur-[120px] pointer-events-none z-0" />
         <div className="absolute bottom-[10%] left-[-10%] w-[25vw] h-[25vw] bg-orange-400/5 rounded-full blur-[100px] pointer-events-none z-0" />
@@ -878,7 +866,7 @@ export default function LandingPage() {
       </section>
 
       {/* 5. FASTEST DELIVERY / GLOWING ROUTE */}
-      <section className="relative z-10 py-10 sm:py-16 md:py-24 lg:py-32 px-4 sm:px-6 md:px-16 lg:px-24 max-w-[1800px] mx-auto">
+      <section className="relative z-10 py-8 sm:py-12 md:py-16 lg:py-20 px-4 sm:px-6 md:px-16 lg:px-24 max-w-[1800px] mx-auto">
         <div className="flex flex-col lg:flex-row items-center gap-8 sm:gap-14 lg:gap-20">
 
           <div className="flex-1 space-y-4 sm:space-y-8">
@@ -1099,7 +1087,7 @@ export default function LandingPage() {
               </div>
               <button
                 onClick={() => setIsAboutOpen(false)}
-                className="group flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-full text-xs font-bold hover:bg-[#2563EB] transition-all duration-300 shadow-md hover:shadow-lg shadow-slate-900/10 cursor-pointer"
+                className="group flex items-center gap-2 bg-[var(--module-theme-color,#3B4DFF)] text-white px-5 py-2.5 rounded-full text-xs font-bold hover:bg-[#2B35B3] transition-all duration-300 shadow-md hover:shadow-lg shadow-blue-500/20 cursor-pointer"
               >
                 <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
                 Back to Home
@@ -1107,102 +1095,102 @@ export default function LandingPage() {
             </header>
 
             {/* Page Content Container */}
-            <main className="flex-1 relative z-10 w-full max-w-[1400px] mx-auto px-6 py-12 md:py-20 lg:px-20 flex flex-col gap-12 md:gap-20">
+            <main className="flex-1 relative z-10 w-full max-w-[1400px] mx-auto px-4 py-8 md:py-12 lg:px-16 flex flex-col gap-8 md:gap-10">
 
               {/* Cinematic Page Title */}
-              <div className="max-w-3xl space-y-6">
-                <span className="inline-flex items-center gap-2 text-[#2563EB] font-bold tracking-widest uppercase text-xs bg-[#2563EB]/10 px-4 py-2 rounded-full">
-                  <Sparkles className="w-4 h-4" /> The Movement
+              <div className="max-w-3xl space-y-4">
+                <span className="inline-flex items-center gap-2 text-[#2563EB] font-bold tracking-widest uppercase text-[10px] sm:text-xs bg-[#2563EB]/10 px-3 py-1.5 rounded-full">
+                  <Sparkles className="w-3.5 h-3.5" /> The Movement
                 </span>
-                <h1 className="text-5xl md:text-7xl font-black leading-[1.05] tracking-tight text-slate-900">
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-black leading-[1.05] tracking-tight text-slate-900">
                   Reclaiming Fairness <br />
                   <span className="text-transparent bg-clip-text bg-gradient-to-br from-slate-900 to-slate-500 italic font-light">in the Food Ecosystem.</span>
                 </h1>
-                <p className="text-xl text-slate-600 font-light leading-relaxed">
+                <p className="text-lg md:text-xl text-slate-600 font-light leading-relaxed">
                   Dooriq is built with a mission to create a sustainable, transparent, and balanced environment for both food merchants and consumers across India.
                 </p>
               </div>
 
               {/* Central Blockquote Quote Banner */}
-              <div className="bg-slate-900 text-white rounded-[2.5rem] p-8 md:p-14 relative overflow-hidden shadow-2xl shrink-0">
-                <div className="absolute top-[-50%] right-[-10%] w-[350px] h-[350px] bg-[#2563EB]/20 rounded-full blur-[90px] pointer-events-none" />
-                <div className="relative z-10 space-y-6">
-                  <p className="text-2xl md:text-3xl lg:text-4xl font-light leading-relaxed italic text-slate-100 max-w-4xl">
+              <div className="bg-gradient-to-r from-[var(--module-theme-color,#3B4DFF)] to-indigo-600 text-white rounded-[1.5rem] md:rounded-[2rem] p-6 md:p-10 relative overflow-hidden shadow-2xl shadow-blue-500/20 shrink-0">
+                <div className="absolute top-[-50%] right-[-10%] w-[350px] h-[350px] bg-white/10 rounded-full blur-[90px] pointer-events-none" />
+                <div className="relative z-10 space-y-4">
+                  <p className="text-xl md:text-2xl lg:text-3xl font-light leading-relaxed italic text-white max-w-4xl drop-shadow-md">
                     "Dooriq isn’t just a food delivery app—it’s a movement towards fair business, trust, and transparency."
                   </p>
-                  <div className="w-16 h-1 bg-[#2563EB] rounded-full" />
-                  <p className="text-xs uppercase tracking-widest font-bold text-slate-400">Our Core Philosophy</p>
+                  <div className="w-12 h-1 bg-white/50 rounded-full" />
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-white/80">Our Core Philosophy</p>
                 </div>
               </div>
 
               {/* Dynamic Value Story Grid */}
-              <div className="grid md:grid-cols-2 gap-8 lg:gap-12 shrink-0">
+              <div className="grid sm:grid-cols-2 gap-4 lg:gap-6 shrink-0">
 
                 {/* Story Card 1: Empowering Restaurant Growth */}
-                <div className="group bg-white border border-slate-200/60 rounded-[2rem] p-8 lg:p-10 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
+                <div className="group bg-white border border-slate-200/60 rounded-2xl p-5 lg:p-8 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
                   <div>
-                    <div className="w-14 h-14 rounded-2xl bg-[#2563EB]/10 flex items-center justify-center text-[#2563EB] mb-6 group-hover:scale-110 transition-transform">
-                      <Store className="w-7 h-7" />
+                    <div className="w-12 h-12 rounded-xl bg-[#2563EB]/10 flex items-center justify-center text-[#2563EB] mb-4 group-hover:scale-110 transition-transform">
+                      <Store className="w-6 h-6" />
                     </div>
-                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Empowering Restaurant Growth</h3>
-                    <p className="text-slate-600 font-light leading-relaxed">
+                    <h3 className="text-lg md:text-xl font-black text-slate-900 mb-2 tracking-tight">Empowering Restaurant Growth</h3>
+                    <p className="text-sm text-slate-600 font-light leading-relaxed">
                       We empower local restaurants with high-efficiency digital ordering, seamless delivery dispatch, and transparent operations. This gives our restaurant partners the freedom and technology to scale, innovate, and thrive.
                     </p>
                   </div>
-                  <div className="mt-8 pt-6 border-t border-slate-100 flex items-center gap-3">
-                    <Zap className="w-4 h-4 text-[#2563EB]" />
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sustainable Partner Growth</span>
+                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2">
+                    <Zap className="w-3.5 h-3.5 text-[#2563EB]" />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sustainable Partner Growth</span>
                   </div>
                 </div>
 
                 {/* Story Card 2: Transparent Pricing */}
-                <div className="group bg-white border border-slate-200/60 rounded-[2rem] p-8 lg:p-10 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
+                <div className="group bg-white border border-slate-200/60 rounded-2xl p-5 lg:p-8 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
                   <div>
-                    <div className="w-14 h-14 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-500 mb-6 group-hover:scale-110 transition-transform">
-                      <Heart className="w-7 h-7" />
+                    <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center text-orange-500 mb-4 group-hover:scale-110 transition-transform">
+                      <Heart className="w-6 h-6" />
                     </div>
-                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Trust & Transparent Pricing</h3>
-                    <p className="text-slate-600 font-light leading-relaxed">
+                    <h3 className="text-lg md:text-xl font-black text-slate-900 mb-2 tracking-tight">Trust & Transparent Pricing</h3>
+                    <p className="text-sm text-slate-600 font-light leading-relaxed">
                       By offering transparent pricing, Dooriq ensures customers pay genuine prices without hidden markups. We are building long-term relationships of trust with both restaurants and consumers.
                     </p>
                   </div>
-                  <div className="mt-8 pt-6 border-t border-slate-100 flex items-center gap-3">
-                    <ShieldCheck className="w-4 h-4 text-orange-500" />
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Honest Pricing Guarantee</span>
+                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2">
+                    <ShieldCheck className="w-3.5 h-3.5 text-orange-500" />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Honest Pricing Guarantee</span>
                   </div>
                 </div>
 
                 {/* Story Card 3: Geographical Expansion */}
-                <div className="group bg-white border border-slate-200/60 rounded-[2rem] p-8 lg:p-10 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
+                <div className="group bg-white border border-slate-200/60 rounded-2xl p-5 lg:p-8 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
                   <div>
-                    <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 mb-6 group-hover:scale-110 transition-transform">
-                      <MapPin className="w-7 h-7" />
+                    <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 mb-4 group-hover:scale-110 transition-transform">
+                      <MapPin className="w-6 h-6" />
                     </div>
-                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Vijay Nagar, Indore to Tier 2 & 3 Cities</h3>
-                    <p className="text-slate-600 font-light leading-relaxed">
+                    <h3 className="text-lg md:text-xl font-black text-slate-900 mb-2 tracking-tight">Vijay Nagar, Indore to Tier 2 & 3 Cities</h3>
+                    <p className="text-sm text-slate-600 font-light leading-relaxed">
                       Dooriq is starting its journey from Vijay Nagar, Indore, with a strategic focus on expanding across Tier 2 and Tier 3 cities in India. We aim to empower local businesses in these growing regions and integrate them into the digital market.
                     </p>
                   </div>
-                  <div className="mt-8 pt-6 border-t border-slate-100 flex items-center gap-3">
-                    <Map className="w-4 h-4 text-indigo-600" />
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Empowering Local Communities</span>
+                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2">
+                    <Map className="w-3.5 h-3.5 text-indigo-600" />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Empowering Local Communities</span>
                   </div>
                 </div>
 
                 {/* Story Card 4: Driven by Innovation */}
-                <div className="group bg-white border border-slate-200/60 rounded-[2rem] p-8 lg:p-10 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
+                <div className="group bg-white border border-slate-200/60 rounded-2xl p-5 lg:p-8 hover:shadow-2xl hover:shadow-pink-500/5 hover:-translate-y-1 transition-all duration-500 flex flex-col justify-between">
                   <div>
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-6 group-hover:scale-110 transition-transform">
-                      <Sparkles className="w-7 h-7" />
+                    <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-4 group-hover:scale-110 transition-transform">
+                      <Sparkles className="w-6 h-6" />
                     </div>
-                    <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Driven by Innovation</h3>
-                    <p className="text-slate-600 font-light leading-relaxed">
+                    <h3 className="text-lg md:text-xl font-black text-slate-900 mb-2 tracking-tight">Driven by Innovation</h3>
+                    <p className="text-sm text-slate-600 font-light leading-relaxed">
                       Dooriq is built by a dedicated team driven by a vision to modernize the food delivery industry and create a balanced, fair, and growth-oriented platform for all stakeholders.
                     </p>
                   </div>
-                  <div className="mt-8 pt-6 border-t border-slate-100 flex items-center gap-3">
-                    <TrendingUp className="w-4 h-4 text-emerald-600" />
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Next-Gen Food Commerce</span>
+                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2">
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Next-Gen Food Commerce</span>
                   </div>
                 </div>
 
@@ -1217,7 +1205,7 @@ export default function LandingPage() {
                 <div className="flex gap-4 mt-2">
                   <button
                     onClick={() => setIsAboutOpen(false)}
-                    className="bg-slate-900 text-white hover:bg-[#2563EB] px-8 py-4 rounded-full font-bold text-sm transition-all duration-300 shadow-md shadow-slate-900/10 cursor-pointer"
+                    className="bg-[var(--module-theme-color,#3B4DFF)] text-white hover:bg-[#2B35B3] px-8 py-4 rounded-full font-bold text-sm transition-all duration-300 shadow-md shadow-blue-500/20 cursor-pointer"
                   >
                     Return to Homepage
                   </button>

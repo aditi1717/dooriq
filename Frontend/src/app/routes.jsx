@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { AppShellSkeleton } from '@food/components/ui/loading-skeletons'
 import LandingPage from './LandingPage'
+import LaunchLandingPage from './LaunchLandingPage'
 import { adminAPI } from '@/services/api'
 import { registerWebPushForCurrentModule } from '@food/utils/firebaseMessaging'
 
@@ -117,12 +118,8 @@ const AppRoutes = () => {
     <Routes>
       {/* Root → Master Landing Page */}
       <Route path="/" element={<RootEntryRoute />} />
+      <Route path="/launch-aug-15" element={<LaunchLandingPage />} />
       <Route path="/invite" element={<ReferralInvitePage />} />
-      <Route path="/invite/delivery" element={<DeliveryReferralInvitePage />} />
-
-      {/* Auth Module */}
-
-
       {/* Food Module */}
       <Route path="/food/*" element={<FoodAppWrapper />} />
 

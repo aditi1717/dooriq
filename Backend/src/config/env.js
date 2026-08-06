@@ -25,6 +25,9 @@ export const config = {
     otpRateLimit: Number(process.env.OTP_RATE_LIMIT || 3),
     otpRateWindow: Number(process.env.OTP_RATE_WINDOW || 600),
     useDefaultOtp: process.env.USE_DEFAULT_OTP === 'true',
+    useUserDefaultOtp: process.env.USE_USER_DEFAULT_OTP !== undefined ? process.env.USE_USER_DEFAULT_OTP === 'true' : false,
+    useRestaurantDefaultOtp: process.env.USE_RESTAURANT_DEFAULT_OTP !== undefined ? process.env.USE_RESTAURANT_DEFAULT_OTP === 'true' : true,
+    useDeliveryDefaultOtp: process.env.USE_DELIVERY_DEFAULT_OTP !== undefined ? process.env.USE_DELIVERY_DEFAULT_OTP === 'true' : true,
 
     // SMS India Hub
     smsIndiaHubUsername: process.env.SMS_INDIA_HUB_USERNAME,
