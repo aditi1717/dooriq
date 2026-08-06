@@ -730,20 +730,13 @@ export async function getTransactionReport(query = {}) {
 
     if (search) {
         const searchRegex = new RegExp(String(search).trim(), "i");
-        const matchingOrders = await FoodOrder.find({ orderId: { $regex: searchRegex } })
-            .select('_id')
-            .lean();
-
-        match.$or = [
-            { orderReadableId: { $regex: searchRegex } },
-            { orderId: { $in: matchingOrders.map((order) => order._id) } }
-        ];
+        match.orderId = searchRegex;
     }
 
     if (zone || restaurant) {
         const restFilter = {};
 
-        if (zone) {
+        if (zone && zone !== 'All Zones') {
             const zoneRaw = String(zone).trim();
             if (zoneRaw) {
                 if (mongoose.Types.ObjectId.isValid(zoneRaw)) {
@@ -798,17 +791,26 @@ export async function getTransactionReport(query = {}) {
         }
     }
 
-    // Include only resolved transactions for reports (or all to match orders)
-    // We will query the FoodTransaction table directly as it is the ledger
-    const transactionRows = await FoodTransaction.find(match)
-        .populate('orderId')
+    // Query FoodOrder as primary source of truth to cover ALL orders placed
+    const orderRows = await FoodOrder.find(match)
         .populate('userId', 'name')
         .populate('restaurantId', 'restaurantName')
         .sort({ createdAt: -1 })
         .lean();
 
-    const transactions = transactionRows.map((tx) => {
-        const order = tx.orderId || {};
+    const orderIds = orderRows.map((o) => o._id);
+
+    // Fetch corresponding FoodTransaction ledger entries where present
+    const transactionList = await FoodTransaction.find({ orderId: { $in: orderIds } }).lean();
+    const txMap = new Map();
+    transactionList.forEach((tx) => {
+        if (tx.orderId) {
+            txMap.set(String(tx.orderId), tx);
+        }
+    });
+
+    const transactions = orderRows.map((order) => {
+        const tx = txMap.get(String(order._id));
         const pricing = order.pricing || {};
         const subtotal = Number(pricing.subtotal || 0) || 0;
         const packagingFee = Number(pricing.packagingFee || 0) || 0;
@@ -817,9 +819,6 @@ export async function getTransactionReport(query = {}) {
         const discount = Number(pricing.discount || 0) || 0;
         const total = Number(pricing.total || 0) || 0;
 
-        // "Platform fee" should come from pricing.platformFee when available.
-        // For older orders where pricing.platformFee isn't stored, derive it from the pricing equation:
-        // total = subtotal + packagingFee + deliveryFee + platformFee + tax - discount
         const platformFeeDerived = Math.max(
             0,
             total - subtotal - packagingFee - deliveryFee - tax + discount
@@ -828,23 +827,26 @@ export async function getTransactionReport(query = {}) {
             pricing.platformFee !== undefined && pricing.platformFee !== null
                 ? Number(pricing.platformFee || 0) || 0
                 : platformFeeDerived;
+
         return {
-            id: tx._id,
-            orderId: tx.orderReadableId || order.orderId || 'N/A',
-            restaurant: tx.restaurantId?.restaurantName || 'N/A',
-            customerName: tx.userId?.name || 'Guest',
+            id: tx?._id || order._id,
+            orderId: order.orderId || tx?.orderReadableId || 'N/A',
+            restaurant: order.restaurantId?.restaurantName || tx?.restaurantId?.restaurantName || 'N/A',
+            customerName: order.userId?.name || tx?.userId?.name || 'Guest',
             totalItemAmount: subtotal,
-            itemDiscount: pricing.discount || 0,
-            couponDiscount: pricing.discount || 0,
-            adminDiscountShare: Number(tx.amounts?.adminDiscountShare || 0),
-            restaurantDiscountShare: Number(tx.amounts?.restaurantDiscountShare || 0),
-            referralDiscount: 0, // Placeholder
-            discountedAmount: Math.max(0, (pricing.subtotal || 0) - (pricing.discount || 0)),
-            vatTax: tx.amounts?.taxAmount || pricing.tax || 0,
-            deliveryCharge: pricing.deliveryFee || 0,
+            itemDiscount: discount,
+            couponDiscount: discount,
+            adminDiscountShare: Number(tx?.amounts?.adminDiscountShare || 0),
+            restaurantDiscountShare: Number(tx?.amounts?.restaurantDiscountShare || 0),
+            referralDiscount: 0,
+            discountedAmount: Math.max(0, subtotal - discount),
+            vatTax: tx?.amounts?.taxAmount || tax,
+            deliveryCharge: deliveryFee,
             platformFee,
-            orderAmount: tx.amounts?.totalCustomerPaid || pricing.total || 0,
-            status: tx.status
+            orderAmount: tx?.amounts?.totalCustomerPaid || total,
+            status: tx?.status || order.orderStatus || 'completed',
+            orderStatus: order.orderStatus,
+            createdAt: order.createdAt
         };
     });
 
@@ -854,23 +856,24 @@ export async function getTransactionReport(query = {}) {
     let restaurantEarning = 0;
     let deliverymanEarning = 0;
 
-    for (const tx of transactionRows) {
-        // Calculate Summary
-        if (tx.orderId && tx.orderId.orderStatus === 'delivered') {
-            completedTransaction += tx.amounts?.totalCustomerPaid || 0;
-            adminEarning += tx.amounts?.platformNetProfit || 0;
-            restaurantEarning += tx.amounts?.restaurantShare || 0;
-            deliverymanEarning += tx.amounts?.riderShare || 0;
-        }
-        if (tx.status === 'refunded' || (tx.orderId && tx.orderId.orderStatus === 'cancelled_by_admin')) {
-            // Count number of refunded transactions according to old logic or sum them
-            refundedTransaction += tx.amounts?.totalCustomerPaid || 0;
+    for (const order of orderRows) {
+        const tx = txMap.get(String(order._id));
+        const pricing = order.pricing || {};
+        const totalPaid = tx?.amounts?.totalCustomerPaid || pricing.total || 0;
+
+        if (order.orderStatus === 'delivered') {
+            completedTransaction += totalPaid;
+            adminEarning += tx?.amounts?.platformNetProfit ?? (pricing.platformFee || 0);
+            restaurantEarning += tx?.amounts?.restaurantShare ?? Math.max(0, (pricing.subtotal || 0) + (pricing.packagingFee || 0) - (pricing.restaurantCommission || 0));
+            deliverymanEarning += tx?.amounts?.riderShare ?? (pricing.deliveryFee || 0);
+        } else if (tx?.status === 'refunded' || order.orderStatus === 'cancelled' || order.orderStatus === 'cancelled_by_admin') {
+            refundedTransaction += totalPaid;
         }
     }
 
     const summary = {
         completedTransaction,
-        refundedTransaction, // Returning amount instead of count for consistency, frontend might expect count though
+        refundedTransaction,
         adminEarning,
         restaurantEarning,
         deliverymanEarning,
