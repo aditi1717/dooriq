@@ -3626,19 +3626,26 @@ export async function getAllOffers(_query = {}) {
             offerId: String(o._id),
             dishId: 'all',
             restaurantName,
+            restaurantId: o.restaurantId ? String(o.restaurantId) : null,
+            restaurantIds: Array.isArray(o.restaurantIds) ? o.restaurantIds.map((id) => String(id)) : [],
             dishName: 'All Items',
             couponCode: o.couponCode,
             customerGroup: o.customerScope === 'first-time' ? 'new' : 'all',
+            customerScope: o.customerScope || 'all',
             discountType: o.discountType,
+            discountValue: Number(o.discountValue ?? 0),
             discountPercentage,
             originalPrice,
             discountedPrice,
             status: isExpired ? 'inactive' : (o.status || 'active'),
             showInCart: o.showInCart !== false,
+            startDate: o.startDate || null,
             endDate: o.endDate || null,
             // Additional info for admin UI (backward compatible)
             minOrderValue: o.minOrderValue ?? 0,
+            perUserLimit: o.perUserLimit ?? null,
             maxDiscount: o.maxDiscount ?? null,
+            isFirstOrderOnly: Boolean(o.isFirstOrderOnly),
             usageLimit: o.usageLimit ?? null,
             usedCount: o.usedCount ?? 0,
             restaurantScope: o.restaurantScope,
@@ -3704,6 +3711,45 @@ export async function createAdminOffer(body) {
     }
 
     return doc.toObject();
+}
+
+
+export async function updateAdminOffer(id, body) {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+
+    const existing = await FoodOffer.findById(id);
+    if (!existing) return null;
+
+    const duplicate = await FoodOffer.findOne({
+        couponCode: body.couponCode,
+        _id: { $ne: new mongoose.Types.ObjectId(id) }
+    }).lean();
+    if (duplicate) {
+        throw new ValidationError('Coupon code already exists');
+    }
+
+    existing.couponCode = body.couponCode;
+    existing.discountType = body.discountType;
+    existing.discountValue = body.discountValue;
+    existing.customerScope = body.customerScope;
+    existing.restaurantScope = body.restaurantScope;
+    existing.restaurantId = body.restaurantScope === 'selected' ? body.restaurantId : undefined;
+    existing.restaurantIds = body.restaurantScope === 'selected' ? body.restaurantIds : [];
+    existing.minOrderValue = body.minOrderValue ?? 0;
+    existing.maxDiscount = body.discountType === 'percentage' ? (body.maxDiscount ?? null) : null;
+    existing.usageLimit = body.usageLimit ?? null;
+    existing.perUserLimit = body.perUserLimit ?? null;
+    existing.startDate = body.startDate;
+    existing.isFirstOrderOnly = body.isFirstOrderOnly ?? false;
+    existing.endDate = body.endDate;
+    existing.status = body.endDate && new Date(body.endDate).getTime() <= Date.now()
+        ? 'inactive'
+        : (existing.status === 'paused' ? 'paused' : 'active');
+    existing.adminBearPercentage = body.adminBearPercentage ?? 100;
+    existing.restaurantBearPercentage = body.restaurantBearPercentage ?? 0;
+
+    const updated = await existing.save();
+    return updated.toObject();
 }
 
 export async function updateAdminOfferCartVisibility(offerId, itemId, showInCart) {
@@ -5683,3 +5729,6 @@ export function getAdminPermissionCatalog() {
         })),
     };
 }
+
+
+

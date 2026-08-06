@@ -255,6 +255,7 @@ router.post('/foods/bulk-approve', adminController.bulkApproveFoodItems);
 // ----- Offers & Coupons -----
 router.get('/offers', adminController.getAllOffers);
 router.post('/offers', adminController.createAdminOffer);
+router.patch('/offers/:id', adminController.updateAdminOffer);
 router.patch('/offers/:id/cart-visibility', adminController.updateAdminOfferCartVisibility);
 router.delete('/offers/:id', adminController.deleteAdminOffer);
 
@@ -420,3 +421,4 @@ router.get('/sidebar-badges', adminController.getSidebarBadges);
 router.get('/notifications/fssai-expired', adminController.getExpiredFssaiNotifications);
 
 export default router;
+

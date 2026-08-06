@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import * as adminService from '../services/admin.service.js';
 import * as featureSettingsService from '../services/featureSettings.service.js';
 import { validateCategoryListQuery, validateCategoryRejectDto, validateCategoryUpsertDto } from '../validators/category.validator.js';
-import { validateCreateOfferDto, validateUpdateOfferCartVisibilityDto } from '../validators/offer.validator.js';
+import { validateCreateOfferDto, validateUpdateOfferDto, validateUpdateOfferCartVisibilityDto } from '../validators/offer.validator.js';
 import { validateAddDeliveryBonusDto } from '../validators/deliveryBonus.validator.js';
 import { validateCheckCompletionsDto, validateEarningAddonHistoryActionDto, validateEarningAddonUpsertDto, validateToggleEarningAddonStatusDto } from '../validators/earningAddon.validator.js';
 import { validateDeliveryCommissionRuleDto, validateOptionalStatusDto, validateRestaurantCommissionUpsertDto } from '../validators/commission.validator.js';
@@ -739,6 +739,24 @@ export async function createAdminOffer(req, res, next) {
         const body = validateCreateOfferDto(req.body || {});
         const created = await adminService.createAdminOffer(body);
         res.status(201).json({ success: true, message: 'Offer created successfully', data: { offer: created } });
+    } catch (error) {
+        next(error);
+    }
+}
+
+
+export async function updateAdminOffer(req, res, next) {
+    try {
+        const { id } = req.params;
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid offer id' });
+        }
+        const body = validateUpdateOfferDto(req.body || {});
+        const updated = await adminService.updateAdminOffer(id, body);
+        if (!updated) {
+            return res.status(404).json({ success: false, message: 'Offer not found' });
+        }
+        res.status(200).json({ success: true, message: 'Offer updated successfully', data: { offer: updated } });
     } catch (error) {
         next(error);
     }
@@ -1756,3 +1774,6 @@ export async function updateFeatureSetting(req, res, next) {
         next(error);
     }
 }
+
+
+

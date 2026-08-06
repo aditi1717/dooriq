@@ -128,3 +128,6 @@ export const validateUpdateOfferCartVisibilityDto = (body) => {
     }
     return result.data;
 };
+
+export const validateUpdateOfferDto = validateCreateOfferDto;
+

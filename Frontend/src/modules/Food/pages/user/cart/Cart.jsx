@@ -1606,7 +1606,7 @@ export default function Cart() {
       debugLog("?? Delivery address:", defaultAddress?.label || defaultAddress?.city)
 
       // Ensure couponCode is included in pricing
-      const orderPricing = {
+      let orderPricing = {
         ...(pricing || {}),
         subtotal,
         deliveryFee,
@@ -1638,16 +1638,6 @@ export default function Cart() {
         preparationTime: item.preparationTime
       }))
 
-      debugLog("?? Order items to send:", orderItems)
-      debugLog("?? Order pricing:", orderPricing)
-
-      // Check API base URL before making request (for debugging)
-      const fullUrl = `${API_BASE_URL}${API_ENDPOINTS.ORDER.CREATE}`;
-      debugLog("?? Making request to:", fullUrl)
-      debugLog("?? Authentication token present:", !!localStorage.getItem('accessToken') || !!localStorage.getItem('user_accessToken'))
-
-      // CRITICAL: Validate restaurant ID before placing order
-      // Ensure we're using the correct restaurant from restaurantData (most reliable)
       const finalRestaurantId = restaurantData?.restaurantId || restaurantData?._id || null;
       const finalRestaurantName = restaurantData?.name || null;
 
@@ -1672,6 +1662,39 @@ export default function Cart() {
         setIsPlacingOrder(false);
         return;
       }
+
+      const resolvedCouponCode = appliedCoupon?.type === "restaurant-auto-offer"
+        ? undefined
+        : appliedCoupon?.code || couponCode || undefined
+
+      const validationResponse = await orderAPI.calculateOrder({
+        items: orderItems,
+        restaurantId: finalRestaurantId,
+        deliveryAddress: defaultAddress,
+        couponCode: resolvedCouponCode
+      })
+
+      const validationPricing = validationResponse?.data?.data?.pricing
+      if (!validationPricing) {
+        toast.error("Unable to validate your order. Please try again.")
+        setIsPlacingOrder(false)
+        return
+      }
+
+      if (resolvedCouponCode && !validationPricing.appliedCoupon) {
+        toast.error("This coupon is no longer valid or the limit has been reached. Please remove it and try again.")
+        setPricing(validationPricing)
+        setAppliedCoupon(null)
+        setCouponCode("")
+        setManualCouponCode("")
+        setIsPlacingOrder(false)
+        return
+      }
+
+      setPricing(validationPricing)
+      orderPricing = validationPricing
+      debugLog("?? Order items to send:", orderItems)
+      debugLog("?? Order pricing:", orderPricing)
 
       // CRITICAL: Validate that ALL cart items belong to the SAME restaurant
       const cartRestaurantIds = cart
@@ -3317,3 +3340,7 @@ export default function Cart() {
     </div>
   )
 }      
+
+
+
+

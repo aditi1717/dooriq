@@ -31,6 +31,7 @@ import { getFirebaseDB } from '../../../../config/firebase.js';
 import * as foodTransactionService from './foodTransaction.service.js';
 import * as userWalletService from '../../user/services/userWallet.service.js';
 import { calculateOrderPricing } from './order-pricing.service.js';
+import { getCouponIneligibilityReason } from './couponValidation.service.js';
 import * as dispatchService from './order-dispatch.service.js';
 import * as deliveryService from './order-delivery.service.js';
 import * as paymentService from './order-payment.service.js';
@@ -458,6 +459,35 @@ export async function createOrder(userId, dto) {
       dto.paymentMethod === "card" ? "razorpay" : dto.paymentMethod;
     const isCash = paymentMethod === "cash";
     const isWallet = paymentMethod === "wallet";
+
+    const submittedCouponCode = dto.pricing?.couponCode ? String(dto.pricing.couponCode).trim().toUpperCase() : "";
+    if (submittedCouponCode) {
+      const offer = await FoodOffer.findOne({ couponCode: submittedCouponCode }).lean();
+      if (!offer) throw new ValidationError("Coupon is no longer available");
+
+      const ineligibilityReason = await getCouponIneligibilityReason({
+        offer,
+        userId,
+        restaurantId,
+        subtotal: computedSubtotal,
+      });
+
+      if (ineligibilityReason) {
+        const reasonMessage = {
+          not_found: "Coupon is no longer available",
+          inactive: "Coupon is inactive",
+          not_started: "Coupon has not started yet",
+          expired: "Coupon has expired",
+          restaurant_mismatch: "Coupon is not valid for this restaurant",
+          min_order_not_met: "Minimum order amount not met for this coupon",
+          global_limit_reached: "Coupon usage limit has been reached",
+          per_user_limit_reached: "You have already used this coupon the maximum number of times",
+          first_time_only: "This coupon is only for first-time users",
+          first_order_only: "This coupon is only for first orders",
+        }[ineligibilityReason] || "Coupon is no longer available";
+        throw new ValidationError(reasonMessage);
+      }
+    }
 
     // Ensure pricing is present and consistent.
     const computedSubtotal = (dto.items || []).reduce((sum, item) => {
@@ -2067,3 +2097,5 @@ export async function processRefundAdmin(orderId, amount, adminId) {
 
     return { success: true, order: normalizeOrderForClient(order) };
 }
+
+
