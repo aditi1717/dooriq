@@ -191,17 +191,6 @@ export const searchUnified = async (query = {}, options = {}) => {
         }
     };
 
-    // FALLBACK: If results are empty and a zoneId was provided, try one more time without zoneId 
-    // to ensure user sees SOMETHING if their current zone has no matches.
-    if (results.length === 0 && zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
-        console.log(`[Search-Service] No results in zone ${zoneId}. Trying global fallback...`);
-        const fallbackResults = await searchUnified({ ...query, zoneId: null }, options);
-        if (fallbackResults.data.total > 0) {
-            fallbackResults.data.wasFallback = true;
-            return fallbackResults;
-        }
-    }
-
     return finalResult;
 };
 
