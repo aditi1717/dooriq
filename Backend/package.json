@@ -6,6 +6,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "start:api": "node server.js",
+    "start:socket": "node socket-server.js",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
     "dev": "nodemon server.js",
     "seed:admin": "node create_admin.cjs",
     "worker:otp": "node src/queues/workers/otp.worker.js",
@@ -26,6 +29,7 @@
   "license": "ISC",
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
+    "@socket.io/redis-emitter": "^5.1.0",
     "axios": "^1.15.0",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.34.5",

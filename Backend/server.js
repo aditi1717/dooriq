@@ -7,7 +7,7 @@ import { config } from './src/config/env.js';
 import { validateConfig } from './src/config/validateEnv.js';
 import { connectDB, disconnectDB } from './src/config/db.js';
 import { connectRedis, closeRedis } from './src/config/redis.js';
-import { initSocket } from './src/config/socket.js';
+import { initRedisEmitter } from './src/config/socket.js';
 import { initializeQueues, closeBullMQConnection } from './src/queues/index.js';
 import { expireExpiredOffers } from './src/modules/food/admin/services/admin.service.js';
 import { syncExpiredFssaiNotifications } from './src/modules/food/restaurant/services/fssaiExpiry.service.js';
@@ -54,17 +54,16 @@ const startServer = async () => {
         // 1. Connect to Database (MongoDB)
         await connectDB();
 
-        // 2. Create HTTP server from Express app
-        const httpServer = http.createServer(app);
-
-        // 3. Initialize Socket.IO with the HTTP server (Redis adapter when Redis enabled)
-        await initSocket(httpServer);
-
+        // 2. Connect Redis and initialize the emitter used by API controllers/workers
         if (config.redisEnabled) {
             await connectRedis();
+            initRedisEmitter();
         }
 
-        // 5a. Watchdog: Recover stuck orders from previous run
+        // 3. Create HTTP server from Express app
+        const httpServer = http.createServer(app);
+
+        // 4. Watchdog: Recover stuck orders from previous run
         try {
             const { recoverStuckOrders } = await import('./src/modules/food/orders/services/order.service.js');
             await recoverStuckOrders();

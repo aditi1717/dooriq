@@ -1,10 +1,13 @@
 import { Server } from 'socket.io';
+import { Emitter } from '@socket.io/redis-emitter';
 import { config } from './env.js';
+import { getRedisClient } from './redis.js';
 import { logger } from '../utils/logger.js';
 import { verifyAccessToken } from '../core/auth/token.util.js';
 import { getFirebaseDB } from './firebase.js';
 
 let io = null;
+let redisEmitter = null;
 
 function logDeliverySocket(message, extra = {}) {
     const suffix = Object.keys(extra).length ? ` ${JSON.stringify(extra)}` : '';
@@ -27,6 +30,16 @@ const roomNames = {
     user: (id) => `user:${String(id)}`,
     delivery: (id) => `delivery:${String(id)}`,
     tracking: (orderId) => `tracking:${String(orderId)}`
+};
+
+const noopIO = {
+    emit: () => noopIO,
+    to: () => noopIO,
+    in: () => noopIO,
+    except: () => noopIO,
+    sockets: {
+        emit: () => noopIO
+    }
 };
 
 function maskToken(token) {
@@ -382,14 +395,32 @@ export const initSocket = async (server) => {
 };
 
 /**
- * Returns the initialized Socket.IO instance.
- * @returns {Server | null}
+ * Initializes the Redis emitter used by the API server and background workers.
+ * If no Redis client is available, falls back to a safe no-op interface.
+ * @param {import('redis').RedisClientType | null} [redisClient]
+ * @returns {Emitter | typeof noopIO}
+ */
+export const initRedisEmitter = (redisClient = getRedisClient()) => {
+    if (!redisClient) {
+        logger.warn('Socket.IO Redis emitter skipped because Redis client is unavailable');
+        redisEmitter = null;
+        return noopIO;
+    }
+
+    redisEmitter = new Emitter(redisClient);
+    logger.info('Socket.IO Redis emitter initialized');
+    return redisEmitter;
+};
+
+/**
+ * Returns the initialized Socket.IO instance or Redis emitter.
+ * @returns {Server | Emitter | typeof noopIO}
  */
 export const getIO = () => {
-    if (!io) {
-        logger.warn('Socket.IO not initialized');
-    }
-    return io;
+    if (io) return io;
+    if (redisEmitter) return redisEmitter;
+    logger.warn('Socket.IO not initialized');
+    return noopIO;
 };
 
 export const rooms = roomNames;
