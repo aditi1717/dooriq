@@ -392,8 +392,17 @@ export async function checkRestaurantOpenStatus(restaurantId, checkDate = new Da
   const { FoodRestaurantOutletTimings } = await import('../../restaurant/models/outletTimings.model.js');
   const timingDoc = await FoodRestaurantOutletTimings.findOne({ restaurantId }).lean();
 
+  // Standardize time check to IST timezone (Asia/Kolkata)
+  let istDate;
+  try {
+    const istString = checkDate.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+    istDate = new Date(istString);
+  } catch (e) {
+    istDate = checkDate;
+  }
+
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const currentDayName = daysOfWeek[checkDate.getDay()];
+  const currentDayName = daysOfWeek[istDate.getDay()];
 
   let openingTime = restaurant.openingTime || null;
   let closingTime = restaurant.closingTime || null;
@@ -435,7 +444,7 @@ export async function checkRestaurantOpenStatus(restaurantId, checkDate = new Da
     return { isOpen: true };
   }
 
-  const currentMin = checkDate.getHours() * 60 + checkDate.getMinutes();
+  const currentMin = istDate.getHours() * 60 + istDate.getMinutes();
 
   let isWithin = false;
   if (closeMin < openMin) {
