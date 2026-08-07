@@ -11,6 +11,7 @@ import { ValidationError, ForbiddenError, NotFoundError } from '../../../../core
 import { buildPaginationOptions, buildPaginatedResult } from '../../../../utils/helpers.js';
 import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FoodOfferUsage } from '../../admin/models/offerUsage.model.js';
+import { getCouponIneligibilityReason } from './couponValidation.service.js';
 import { FoodDeliveryCommissionRule } from '../../admin/models/deliveryCommissionRule.model.js';
 import { FoodRestaurantCommission } from '../../admin/models/restaurantCommission.model.js';
 import { FoodBusinessSettings } from '../../admin/models/businessSettings.model.js';
@@ -31,7 +32,6 @@ import { getFirebaseDB } from '../../../../config/firebase.js';
 import * as foodTransactionService from './foodTransaction.service.js';
 import * as userWalletService from '../../user/services/userWallet.service.js';
 import { calculateOrderPricing } from './order-pricing.service.js';
-import { getCouponIneligibilityReason } from './couponValidation.service.js';
 import * as dispatchService from './order-dispatch.service.js';
 import * as deliveryService from './order-delivery.service.js';
 import * as paymentService from './order-payment.service.js';
@@ -460,6 +460,14 @@ export async function createOrder(userId, dto) {
     const isCash = paymentMethod === "cash";
     const isWallet = paymentMethod === "wallet";
 
+    // Ensure pricing is present and consistent.
+    const computedSubtotal = (dto.items || []).reduce((sum, item) => {
+      const price = Number(item?.price);
+      const qty = Number(item?.quantity);
+      if (!Number.isFinite(price) || !Number.isFinite(qty)) return sum;
+      return sum + Math.max(0, price) * Math.max(0, qty);
+    }, 0);
+
     const submittedCouponCode = dto.pricing?.couponCode ? String(dto.pricing.couponCode).trim().toUpperCase() : "";
     if (submittedCouponCode) {
       const offer = await FoodOffer.findOne({ couponCode: submittedCouponCode }).lean();
@@ -489,14 +497,6 @@ export async function createOrder(userId, dto) {
       }
     }
 
-    // Ensure pricing is present and consistent.
-    const computedSubtotal = (dto.items || []).reduce((sum, item) => {
-      const price = Number(item?.price);
-      const qty = Number(item?.quantity);
-      if (!Number.isFinite(price) || !Number.isFinite(qty)) return sum;
-      return sum + Math.max(0, price) * Math.max(0, qty);
-    }, 0);
-
     const normalizedPricing = {
       subtotal: Number(dto.pricing?.subtotal ?? computedSubtotal) || 0,
       tax: Number(dto.pricing?.tax ?? 0) || 0,
@@ -508,6 +508,35 @@ export async function createOrder(userId, dto) {
       total: Number(dto.pricing?.total ?? 0) || 0,
       currency: String(dto.pricing?.currency || "INR"),
     };
+
+    if (normalizedPricing.couponCode) {
+      const offer = await FoodOffer.findOne({ couponCode: normalizedPricing.couponCode }).lean();
+      if (!offer) {
+        throw new ValidationError("Invalid coupon code applied");
+      }
+      const ineligibilityReason = await getCouponIneligibilityReason({
+        offer,
+        userId,
+        restaurantId: restaurantId,
+        subtotal: normalizedPricing.subtotal,
+      });
+      if (ineligibilityReason) {
+        const errorMap = {
+          not_found: "Invalid coupon code",
+          inactive: "Coupon is currently inactive",
+          not_started: "Coupon offer has not started yet",
+          expired: "Coupon offer has expired",
+          restaurant_mismatch: "Coupon is not valid for this restaurant",
+          min_order_not_met: `Minimum order value of ₹${offer.minOrderValue || 0} not met`,
+          global_limit_reached: "Coupon usage limit has been reached",
+          per_user_limit_reached: "You have already used this coupon",
+          pending_order_exists: "First-time coupon is not valid as you currently have an active/pending order",
+          delivered_order_exists: "First-time coupon is only valid for your very first order",
+          user_cancelled_order_exists: "First-time coupon is not applicable as your previous order was cancelled by you"
+        };
+        throw new ValidationError(errorMap[ineligibilityReason] || "Coupon is not applicable for this order");
+      }
+    }
 
     const computedTotal = Math.max(
       0,
@@ -1448,6 +1477,9 @@ export async function updateOrderStatusRestaurant(
       riderTitle = "Order Cancelled ❌";
       riderBody = `Order #${order.order_id || order._id} has been cancelled. Please stop your current task.`;
       
+      // Revert coupon usage so user can use coupon again
+      await revertCouponUsageOnCancellation(order);
+
       // Sync transaction status
       try {
         const isOnlinePaid = order.payment.method === "razorpay" && (order.payment.status === "paid" || order.payment.status === "refunded");
@@ -1971,6 +2003,7 @@ export async function updateOrderStatusAdmin(orderId, orderStatus, note = "", ad
         title = "Food is ready!";
         body = "Your order is ready and waiting to be picked up.";
     } else if (String(orderStatus).includes("cancel")) {
+        await revertCouponUsageOnCancellation(order);
         const finalPaymentMethod = String(order.payment?.method || "cash").toLowerCase();
         const finalPaymentStatus = String(order.payment?.status || "cod_pending").toLowerCase();
         const isOnlinePaid =
@@ -2097,5 +2130,23 @@ export async function processRefundAdmin(orderId, amount, adminId) {
 
     return { success: true, order: normalizeOrderForClient(order) };
 }
+
+async function revertCouponUsageOnCancellation(order) {
+  if (!order || !order.pricing?.couponCode) return;
+  try {
+    const couponCode = String(order.pricing.couponCode).trim().toUpperCase();
+    const offer = await FoodOffer.findOne({ couponCode }).lean();
+    if (offer) {
+      await FoodOffer.updateOne({ _id: offer._id, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
+      await FoodOfferUsage.updateOne(
+        { offerId: offer._id, userId: order.userId, count: { $gt: 0 } },
+        { $inc: { count: -1 } }
+      );
+    }
+  } catch (couponErr) {
+    logger.warn(`Failed to revert coupon usage on cancellation: ${couponErr?.message || couponErr}`);
+  }
+}
+
 
 

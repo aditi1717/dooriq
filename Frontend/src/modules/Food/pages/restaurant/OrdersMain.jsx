@@ -1010,6 +1010,20 @@ export default function OrdersMain() {
     return Number.isFinite(itemsTotal) ? itemsTotal : 0;
   };
 
+  const getRestaurantEarning = (orderLike) => {
+    if (!orderLike) return 0;
+    const items = Array.isArray(orderLike.items) ? orderLike.items : [];
+    const subtotal = items.reduce((sum, item) => {
+      const price = Number(item?.price || 0);
+      const qty = Number(item?.quantity || 0);
+      return sum + (Number.isFinite(price) ? price : 0) * (Number.isFinite(qty) ? qty : 0);
+    }, 0);
+    const packagingFee = Number(orderLike.pricing?.packagingFee || 0);
+    const commission = Number(orderLike.pricing?.restaurantCommission || 0);
+    const restaurantDiscountShare = 0;
+    return Math.max(0, subtotal + packagingFee - commission - restaurantDiscountShare);
+  };
+
   const getOrderCountdownSeconds = (orderLike) => {
     const deadlineRaw = orderLike?.acceptanceDeadlineAt;
     if (!deadlineRaw) return 240;
@@ -1812,6 +1826,7 @@ export default function OrdersMain() {
 
         autoTable(doc, {
           startY: yPos,
+          margin: { left: 20, right: 20 },
           head: [["Item", "Qty", "Price", "Total"]],
           body: tableData,
           theme: "striped",
@@ -1823,26 +1838,67 @@ export default function OrdersMain() {
           styles: { fontSize: 9 },
           columnStyles: {
             0: { cellWidth: 80 },
-            1: { cellWidth: 30, halign: "center" },
+            1: { cellWidth: 20, halign: "center" },
             2: { cellWidth: 35, halign: "right" },
             3: { cellWidth: 35, halign: "right" },
           },
         });
 
-        yPos = doc.lastAutoTable.finalY + 10;
+        yPos = doc.lastAutoTable.finalY + 12;
       }
 
-      // Total
+      // Financials breakdown
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      
+      const pricing = orderToPrint.pricing || {};
+      const subtotal = Number(pricing.subtotal || 0);
+      const packagingFee = Number(pricing.packagingFee || 0);
+      const deliveryFee = Number(pricing.deliveryFee || 0);
+      const platformFee = Number(pricing.platformFee || 0);
+      const tax = Number(pricing.tax || 0);
+      const discount = Number(pricing.discount || 0);
+      const grandTotal = Number(pricing.total || orderToPrint.total || getPopupOrderTotal(orderToPrint) || 0);
+
+      doc.text(`Subtotal: Rs. ${subtotal.toFixed(2)}`, 20, yPos);
+      yPos += 6;
+      
+      if (packagingFee > 0) {
+        doc.text(`Packaging Fee: Rs. ${packagingFee.toFixed(2)}`, 20, yPos);
+        yPos += 6;
+      }
+      if (deliveryFee > 0) {
+        doc.text(`Delivery Fee: Rs. ${deliveryFee.toFixed(2)}`, 20, yPos);
+        yPos += 6;
+      }
+      if (platformFee > 0) {
+        doc.text(`Platform Fee: Rs. ${platformFee.toFixed(2)}`, 20, yPos);
+        yPos += 6;
+      }
+      if (tax > 0) {
+        doc.text(`GST / Tax: Rs. ${tax.toFixed(2)}`, 20, yPos);
+        yPos += 6;
+      }
+      if (discount > 0) {
+        doc.text(`Discount: -Rs. ${discount.toFixed(2)}`, 20, yPos);
+        yPos += 6;
+      }
+      
+      // Divider line
+      doc.setDrawColor(200, 200, 200);
+      doc.line(20, yPos, 190, yPos);
+      yPos += 8;
+
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
-      doc.text(`Total: Rs. ${(orderToPrint.total || 0).toFixed(2)}`, 20, yPos);
+      doc.text(`Total: Rs. ${grandTotal.toFixed(2)}`, 20, yPos);
 
       // Payment status
       yPos += 10;
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
       doc.text(
-        `Payment Status: ${orderToPrint.status === "confirmed" ? "Paid" : "Pending"}`,
+        `Payment Status: ${orderToPrint.status === "confirmed" || orderToPrint.payment?.status === "paid" ? "Paid" : "Pending"}`,
         20,
         yPos,
       );
@@ -2362,21 +2418,25 @@ export default function OrdersMain() {
                     )}
                   </div>
 
-                  {/* Payment & Bill Summary */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-gray-50 p-4 rounded-[20px] border border-gray-100">
-                      <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">Total Bill</p>
-                      <p className="text-xl font-black text-gray-900">₹{getPopupOrderTotal(popupOrder || newOrder)}</p>
+                  {/* Payment, Bill & Earning Summary */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-gray-50 p-3 rounded-[20px] border border-gray-100 flex flex-col justify-between">
+                      <p className="text-[8px] text-gray-400 font-black uppercase tracking-widest mb-1">Total Bill</p>
+                      <p className="text-base font-black text-gray-900">₹{getPopupOrderTotal(popupOrder || newOrder)}</p>
                     </div>
-                    <div className="bg-gray-50 p-4 rounded-[20px] border border-gray-100">
-                      <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">Payment</p>
+                    <div className="bg-gray-50 p-3 rounded-[20px] border border-gray-100 flex flex-col justify-between">
+                      <p className="text-[8px] text-gray-400 font-black uppercase tracking-widest mb-1">Your Earning</p>
+                      <p className="text-base font-black text-emerald-600">₹{getRestaurantEarning(popupOrder || newOrder)}</p>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-[20px] border border-gray-100 flex flex-col justify-between">
+                      <p className="text-[8px] text-gray-400 font-black uppercase tracking-widest mb-1">Payment</p>
                       {(() => {
                         const raw = (popupOrder || newOrder)?.paymentMethod || (popupOrder || newOrder)?.payment?.method;
                         const m = raw != null ? String(raw).toLowerCase().trim() : "";
                         const isCod = m === "cash" || m === "cod";
                         const isWallet = m === "wallet";
                         return (
-                          <p className={`text-sm font-black leading-tight ${isCod ? "text-amber-600" : isWallet ? "text-blue-600" : "text-emerald-600"}`}>
+                          <p className={`text-[10px] font-black leading-tight ${isCod ? "text-amber-600" : isWallet ? "text-blue-600" : "text-emerald-600"}`}>
                             {isCod ? "Cash on Delivery" : isWallet ? "Wallet" : "Online Paid"}
                           </p>
                         );

@@ -304,13 +304,51 @@ export default function UserOrderDetails() {
       })
 
       // Get final Y position after table (autoTable adds lastAutoTable property)
-      const finalY = (doc.lastAutoTable && doc.lastAutoTable.finalY) ? doc.lastAutoTable.finalY : yPos + (tableData.length * 8) + 20
+      let summaryY = (doc.lastAutoTable && doc.lastAutoTable.finalY) ? doc.lastAutoTable.finalY + 10 : yPos + (tableData.length * 8) + 20
 
-      // Total
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+
+      const subtotalVal = Number(pricing.subtotal || pricing.total || 0)
+      doc.text('Item Subtotal:', 145, summaryY, { align: 'right' })
+      doc.text(`Rs. ${subtotalVal.toFixed(2)}`, 195, summaryY, { align: 'right' })
+      summaryY += 6
+
+      if (Number(pricing.packagingFee || 0) > 0) {
+        doc.text('Packaging Fee:', 145, summaryY, { align: 'right' })
+        doc.text(`Rs. ${Number(pricing.packagingFee).toFixed(2)}`, 195, summaryY, { align: 'right' })
+        summaryY += 6
+      }
+
+      if (Number(pricing.tax || 0) > 0) {
+        doc.text('GST (Govt. Taxes):', 145, summaryY, { align: 'right' })
+        doc.text(`Rs. ${Number(pricing.tax).toFixed(2)}`, 195, summaryY, { align: 'right' })
+        summaryY += 6
+      }
+
+      if (pricing.deliveryFee !== undefined) {
+        doc.text('Delivery Fee:', 145, summaryY, { align: 'right' })
+        doc.text(Number(pricing.deliveryFee) === 0 ? 'FREE' : `Rs. ${Number(pricing.deliveryFee).toFixed(2)}`, 195, summaryY, { align: 'right' })
+        summaryY += 6
+      }
+
+      if (Number(pricing.platformFee || 0) > 0) {
+        doc.text('Platform Fee:', 145, summaryY, { align: 'right' })
+        doc.text(`Rs. ${Number(pricing.platformFee).toFixed(2)}`, 195, summaryY, { align: 'right' })
+        summaryY += 6
+      }
+
+      if (Number(pricing.discount || 0) > 0) {
+        doc.text(`Coupon Discount${pricing.couponCode ? ` (${pricing.couponCode})` : ''}:`, 145, summaryY, { align: 'right' })
+        doc.text(`-Rs. ${Number(pricing.discount).toFixed(2)}`, 195, summaryY, { align: 'right' })
+        summaryY += 6
+      }
+
+      // Total Paid
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text('Total:', 145, finalY + 10, { align: 'right' })
-      doc.text(`Rs. ${Number(pricing.total || 0).toFixed(2)}`, 195, finalY + 10, { align: 'right' })
+      doc.text('Grand Total (Paid):', 145, summaryY + 2, { align: 'right' })
+      doc.text(`Rs. ${Number(pricing.total || 0).toFixed(2)}`, 195, summaryY + 2, { align: 'right' })
 
       // Save PDF instantly
       const fileName = `Order_Summary_${orderIdDisplay}_${Date.now()}.pdf`
@@ -527,6 +565,14 @@ export default function UserOrderDetails() {
                 </span>
               </div>
             </div>
+            {Number(pricing.packagingFee || 0) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Packaging fee</span>
+                <span className="text-gray-800 dark:text-gray-200">
+                  ₹{Number(pricing.packagingFee).toFixed(2)}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-gray-500 dark:text-gray-400">GST (govt. taxes)</span>
               <span className="text-gray-800 dark:text-gray-200">
@@ -550,12 +596,12 @@ export default function UserOrderDetails() {
                 ₹{Number(pricing.platformFee || 0).toFixed(2)}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500 dark:text-gray-400">Subscription / other fees</span>
-              <span className="text-gray-800 dark:text-gray-200">
-                ₹{Number(pricing.subscriptionFee || 0).toFixed(2)}
-              </span>
-            </div>
+            {Number(pricing.discount || 0) > 0 && (
+              <div className="flex justify-between text-[#16a34a] font-medium">
+                <span>Coupon discount {pricing.couponCode ? `(${pricing.couponCode})` : ""}</span>
+                <span>-₹{Number(pricing.discount).toFixed(2)}</span>
+              </div>
+            )}
 
             <div className="border-t border-gray-100 dark:border-zinc-800 my-2 pt-2 flex justify-between items-center">
               <span className="font-bold text-gray-800 dark:text-white">Paid</span>

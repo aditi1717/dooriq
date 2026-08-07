@@ -74,7 +74,18 @@ export default function AddressSelectorPage() {
   const greenMarkerRef = useRef(null) // Green marker for address selection
   const userLocationMarkerRef = useRef(null) // Blue dot marker for user location
   const blueDotCircleRef = useRef(null) // Accuracy circle for Google Maps
-  const [currentAddress, setCurrentAddress] = useState("")
+  const [currentAddress, setCurrentAddress] = useState(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const storedRaw = localStorage.getItem("userLocation")
+        if (storedRaw) {
+          const stored = JSON.parse(storedRaw)
+          return stored?.formattedAddress || stored?.address || ""
+        }
+      }
+    } catch {}
+    return ""
+  })
   const [addressAutocompleteValue, setAddressAutocompleteValue] = useState("")
   const [keywordAddressSuggestions, setKeywordAddressSuggestions] = useState([])
   const [googlePlacesSuggestions, setGooglePlacesSuggestions] = useState([])
@@ -145,6 +156,34 @@ export default function AddressSelectorPage() {
       })
     })
   }, [])
+
+  // Sync live location address into currentAddress state for UI display
+  useEffect(() => {
+    if (location?.formattedAddress || location?.address) {
+      setCurrentAddress(location.formattedAddress || location.address)
+      return
+    }
+
+    try {
+      const storedRaw = localStorage.getItem("userLocation")
+      if (storedRaw) {
+        const stored = JSON.parse(storedRaw)
+        const addr = stored?.formattedAddress || stored?.address
+        if (addr && addr !== "Select location") {
+          setCurrentAddress(addr)
+          return
+        }
+      }
+    } catch {}
+
+    if (!loading && requestLocation) {
+      requestLocation(false).then((loc) => {
+        if (loc?.formattedAddress || loc?.address) {
+          setCurrentAddress(loc.formattedAddress || loc.address)
+        }
+      })
+    }
+  }, [location?.formattedAddress, location?.address, loading, requestLocation])
 
   const ensurePlacesServices = useCallback(async () => {
     if (!GOOGLE_MAPS_API_KEY) return false
@@ -383,58 +422,85 @@ export default function AddressSelectorPage() {
 
   const handleUseCurrentLocation = async () => {
     try {
-      toast.loading("Getting location...", { id: "geo" })
+      toast.loading("Fetching live location...", { id: "geo" })
       const loc = await requestLocation(true, true)
-      if (loc?.latitude) {
+      if (loc?.latitude && loc?.longitude) {
         const newPos = [loc.latitude, loc.longitude]
         setMapPosition(newPos)
-        
-        // Use Google Reverse Geocoding if available for better accuracy
+
+        let finalFormattedAddress = loc.formattedAddress || loc.address || "Current Location"
+        let streetName = loc.street || loc.address || "Current Location"
+        let cityName = loc.city || "Current City"
+        let stateName = loc.state || "Current State"
+        let zipCodeName = loc.postalCode || loc.zipCode || ""
+
+        // Use Google Reverse Geocoding if available for maximum address accuracy
         if (window.google && window.google.maps) {
-          const geocoder = new window.google.maps.Geocoder();
-          geocoder.geocode({ location: { lat: loc.latitude, lng: loc.longitude } }, (results, status) => {
-            if (status === "OK" && results[0]) {
-              const res = results[0];
-              setCurrentAddress(res.formatted_address);
-              
-              // Extract address components
-              let street = "", city = "", state = "", postcode = "";
-              res.address_components.forEach(comp => {
-                const types = comp.types;
-                if (types.includes("route") || types.includes("sublocality")) {
-                  street = street ? `${street}, ${comp.long_name}` : comp.long_name;
-                } else if (types.includes("locality")) {
-                  city = comp.long_name;
-                } else if (types.includes("administrative_area_level_1")) {
-                  state = comp.long_name;
-                } else if (types.includes("postal_code")) {
-                  postcode = comp.long_name;
-                }
-              });
+          try {
+            const geocoder = new window.google.maps.Geocoder()
+            const results = await new Promise((resolve) => {
+              geocoder.geocode({ location: { lat: loc.latitude, lng: loc.longitude } }, (res, status) => {
+                if (status === "OK" && res?.[0]) resolve(res[0])
+                else resolve(null)
+              })
+            })
 
-              setAddressFormData(prev => ({
-                ...prev,
-                street: street || res.formatted_address.split(",")[0] || prev.street,
-                city: city || prev.city,
-                state: state || prev.state,
-                zipCode: postcode || prev.zipCode,
-              }));
+            if (results) {
+              finalFormattedAddress = results.formatted_address || finalFormattedAddress
+              setCurrentAddress(finalFormattedAddress)
+
+              let route = "", sublocality = "", locality = "", adminState = "", postal = ""
+              results.address_components?.forEach(comp => {
+                const types = comp.types
+                if (types.includes("route")) route = comp.long_name
+                if (types.includes("sublocality") || types.includes("sublocality_level_1")) sublocality = comp.long_name
+                if (types.includes("locality")) locality = comp.long_name
+                if (types.includes("administrative_area_level_1")) adminState = comp.long_name
+                if (types.includes("postal_code")) postal = comp.long_name
+              })
+
+              streetName = [sublocality, route].filter(Boolean).join(", ") || results.formatted_address.split(",")[0] || streetName
+              cityName = locality || cityName
+              stateName = adminState || stateName
+              zipCodeName = postal || zipCodeName
             }
-          });
+          } catch (err) {
+            console.error("Reverse geocoding error:", err)
+          }
         }
 
-        // Explicitly pan the map to center the user location
-        if (googleMapRef.current) {
-          suppressReverseGeocodingTemporarily()
-          googleMapRef.current.panTo({ lat: loc.latitude, lng: loc.longitude })
-          googleMapRef.current.setZoom(17)
+        const liveLocationPayload = {
+          lat: loc.latitude,
+          lng: loc.longitude,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          formattedAddress: finalFormattedAddress,
+          address: finalFormattedAddress,
+          street: streetName,
+          city: cityName,
+          state: stateName,
+          zipCode: zipCodeName,
+          postalCode: zipCodeName,
+          location: {
+            type: "Point",
+            coordinates: [loc.longitude, loc.latitude]
+          }
         }
-        
+
         try {
+          localStorage.setItem("userLocation", JSON.stringify(liveLocationPayload))
           localStorage.setItem("deliveryAddressMode", "current")
+          window.dispatchEvent(new CustomEvent("userLocationUpdated", { detail: liveLocationPayload }))
           window.dispatchEvent(new Event("deliveryAddressModeChanged"))
         } catch {}
-        toast.success("Location updated", { id: "geo" })
+
+        toast.success("Live location updated", { id: "geo" })
+
+        // Redirect back to previous page (Cart or Homepage)
+        const fromPath = routerLocation.state?.from || "/food/user"
+        navigate(fromPath, { replace: true })
+      } else {
+        toast.error("Unable to retrieve live location", { id: "geo" })
       }
     } catch (e) {
       toast.error("Failed to get location", { id: "geo" })
@@ -1086,9 +1152,11 @@ export default function AddressSelectorPage() {
             <div className="h-10 w-10 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
               <Navigation className="h-5 w-5 text-[#EB590E]" />
             </div>
-            <div className="text-left flex-1">
+            <div className="text-left flex-1 min-w-0">
               <p className="font-bold text-[#EB590E]">Use Current Location</p>
-              <p className="text-xs text-gray-500 line-clamp-1">{currentAddress || "Enable GPS for accuracy"}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mt-0.5">
+                {loading ? "Fetching live location..." : currentAddress || location?.formattedAddress || location?.address || "Enable GPS for location"}
+              </p>
             </div>
             <ChevronRight className="h-5 w-5 text-gray-400" />
           </button>

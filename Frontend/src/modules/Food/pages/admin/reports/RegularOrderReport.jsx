@@ -43,6 +43,8 @@ export default function RegularOrderReport() {
   const [zones, setZones] = useState([])
   const [restaurants, setRestaurants] = useState([])
   const [customers, setCustomers] = useState([])
+  const [offersList, setOffersList] = useState([])
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState(null)
   
   const [filters, setFilters] = useState({
     zone: "All Zones",
@@ -75,6 +77,16 @@ export default function RegularOrderReport() {
         const customersRes = await adminAPI.getCustomers({ limit: 100 })
         if (customersRes.data?.success) {
           setCustomers(customersRes.data.data.customers || [])
+        }
+
+        // Fetch offers to resolve bear percentages
+        try {
+          const offersRes = await adminAPI.getAllOffers({ limit: 1000 })
+          if (offersRes.data?.success) {
+            setOffersList(offersRes.data.data.offers || [])
+          }
+        } catch (offerErr) {
+          debugError("Error fetching offers list:", offerErr)
         }
       } catch (err) {
         debugError("Error fetching filter data:", err)
@@ -213,6 +225,9 @@ export default function RegularOrderReport() {
             platformFee,
             totalAmount,
             orderStatus: displayStatus,
+            restaurantCommission: Number(pricing.restaurantCommission || 0),
+            couponCode: pricing.couponCode || null,
+            rawOrder: order
           }
         })
         setOrders(transformedOrders)
@@ -241,8 +256,37 @@ export default function RegularOrderReport() {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
+  const processedOrders = useMemo(() => {
+    return orders.map(order => {
+      const couponCode = order.couponCode ? String(order.couponCode).trim().toUpperCase() : ""
+      const discount = Number(order.couponDiscount || 0)
+      
+      let adminBearPercentage = 100
+      let restaurantBearPercentage = 0
+      
+      if (couponCode) {
+        const foundOffer = offersList.find(o => String(o.couponCode || '').trim().toUpperCase() === couponCode)
+        if (foundOffer) {
+          adminBearPercentage = foundOffer.adminBearPercentage !== undefined ? Number(foundOffer.adminBearPercentage) : 100
+          restaurantBearPercentage = foundOffer.restaurantBearPercentage !== undefined ? Number(foundOffer.restaurantBearPercentage) : 0
+        }
+      }
+      
+      const adminBearAmount = (discount * adminBearPercentage) / 100
+      const restaurantBearAmount = (discount * restaurantBearPercentage) / 100
+      
+      return {
+        ...order,
+        adminBearPercentage,
+        restaurantBearPercentage,
+        adminBearAmount,
+        restaurantBearAmount
+      }
+    })
+  }, [orders, offersList])
+
   const filteredOrders = useMemo(() => {
-    let scoped = orders
+    let scoped = processedOrders
     if (filters.zone !== "All Zones") {
       scoped = scoped.filter((o) => String(o.zoneId || "") === String(filters.zone))
     }
@@ -257,7 +301,7 @@ export default function RegularOrderReport() {
         .toLowerCase()
         .includes(q),
     )
-  }, [orders, searchQuery, filters.zone, filters.customer])
+  }, [processedOrders, searchQuery, filters.zone, filters.customer])
 
   const handleExport = (format) => {
     if (filteredOrders.length === 0) {
@@ -269,7 +313,13 @@ export default function RegularOrderReport() {
       { key: "restaurant", label: "Restaurant" },
       { key: "customerName", label: "Customer Name" },
       { key: "totalItemAmount", label: "Total Item Amount" },
+      { key: "couponCode", label: "Coupon Code" },
       { key: "couponDiscount", label: "Coupon Discount" },
+      { key: "adminBearPercentage", label: "Admin Bear %" },
+      { key: "adminBearAmount", label: "Admin Bear Amt" },
+      { key: "restaurantBearPercentage", label: "Rest Bear %" },
+      { key: "restaurantBearAmount", label: "Rest Bear Amt" },
+      { key: "restaurantCommission", label: "Admin Commission" },
       { key: "vatTax", label: "VAT/Tax" },
       { key: "deliveryCharge", label: "Delivery Charge" },
       { key: "platformFee", label: "Platform Fee" },
@@ -560,40 +610,52 @@ export default function RegularOrderReport() {
 
           {/* Table */}
           <div className="overflow-x-auto scrollbar-hide">
-            <table className="w-full" style={{ tableLayout: "fixed", width: "100%" }}>
+            <table className="min-w-[1500px] w-full" style={{ tableLayout: "fixed" }}>
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "3%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "40px" }}>
                     SI
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "8%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "100px" }}>
                     Order Id
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "12%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "150px" }}>
                     Restaurant
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "12%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "120px" }}>
                     Customer Name
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "8%" }}>
-                    Total Item Amount
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "95px" }}>
+                    Total Item Amt
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "7%" }}>
-                    Coupon Discount
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "80px" }}>
+                    Coupon
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "6%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "95px" }}>
+                    Coupon Disc
+                  </th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "115px" }}>
+                    Admin Bear
+                  </th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "115px" }}>
+                    Rest Bear
+                  </th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "100px" }}>
+                    Admin Comm
+                  </th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "80px" }}>
                     Vat/Tax
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "7%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "95px" }}>
                     Delivery Charge
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "7%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "90px" }}>
                     Platform Fee
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "8%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "100px" }}>
                     Order Amount
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "5%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "85px" }}>
                     Status
                   </th>
                 </tr>
@@ -601,7 +663,7 @@ export default function RegularOrderReport() {
               <tbody className="bg-white divide-y divide-slate-100">
                 {paginatedOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-6 py-20 text-center">
+                    <td colSpan={15} className="px-6 py-20 text-center">
                       <div className="flex flex-col items-center justify-center">
                         <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
                         <p className="text-sm text-slate-500">No orders match your filters</p>
@@ -610,14 +672,18 @@ export default function RegularOrderReport() {
                   </tr>
                 ) : (
                   paginatedOrders.map((order, index) => (
-                    <tr key={order.orderId} className="hover:bg-slate-50 transition-colors">
+                    <tr 
+                      key={order.orderId} 
+                      className="hover:bg-slate-50 transition-colors cursor-pointer"
+                      onClick={() => setSelectedOrderDetails(order)}
+                    >
                       <td className="px-1.5 py-1">
                         <span className="text-[10px] font-medium text-slate-700">
                           {(currentPage - 1) * PAGE_SIZE + index + 1}
                         </span>
                       </td>
                       <td className="px-1.5 py-1">
-                        <span className="text-[10px] text-blue-600 hover:underline cursor-pointer">{order.orderId}</span>
+                        <span className="text-[10px] text-blue-600 hover:underline font-medium">{order.orderId}</span>
                       </td>
                       <td className="px-1.5 py-1">
                         <span className="text-[10px] text-slate-700 truncate block">{order.restaurant}</span>
@@ -626,10 +692,26 @@ export default function RegularOrderReport() {
                         <span className="text-[10px] text-slate-700 truncate block">{order.customerName}</span>
                       </td>
                       <td className="px-1.5 py-1">
-                        <span className="text-[10px] text-slate-700">{formatAmount(order.totalAmount)}</span>
+                        <span className="text-[10px] text-slate-700">{formatAmount(order.totalItemAmount)}</span>
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <span className="text-[10px] font-semibold text-slate-600 truncate block">{order.couponCode || "—"}</span>
                       </td>
                       <td className="px-1.5 py-1">
                         <span className="text-[10px] text-slate-700">{formatAmount(order.couponDiscount)}</span>
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <span className="text-[10px] text-slate-700">
+                          {order.couponDiscount > 0 ? `${order.adminBearPercentage}% (${formatAmount(order.adminBearAmount)})` : "—"}
+                        </span>
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <span className="text-[10px] text-slate-700">
+                          {order.couponDiscount > 0 ? `${order.restaurantBearPercentage}% (${formatAmount(order.restaurantBearAmount)})` : "—"}
+                        </span>
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <span className="text-[10px] text-emerald-600 font-medium">{formatAmount(order.restaurantCommission)}</span>
                       </td>
                       <td className="px-1.5 py-1">
                         <span className="text-[10px] text-slate-700">{formatAmount(order.vatTax)}</span>
@@ -641,7 +723,7 @@ export default function RegularOrderReport() {
                         <span className="text-[10px] text-slate-700">{formatAmount(order.platformFee)}</span>
                       </td>
                       <td className="px-1.5 py-1">
-                        <span className="text-[10px] font-medium text-slate-900">{formatAmount(order.totalAmount || order.totalItemAmount)}</span>
+                        <span className="text-[10px] font-bold text-slate-900">{formatAmount(order.totalAmount)}</span>
                       </td>
                       <td className="px-1.5 py-1">
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-slate-100 text-slate-700">
@@ -721,6 +803,210 @@ export default function RegularOrderReport() {
               Close
             </button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Order Details Dialog */}
+      <Dialog open={Boolean(selectedOrderDetails)} onOpenChange={(open) => !open && setSelectedOrderDetails(null)}>
+        <DialogContent className="max-w-3xl bg-white dark:bg-[#121212] p-0 overflow-y-auto max-h-[90vh] z-[100] border dark:border-gray-800 rounded-xl shadow-2xl">
+          {selectedOrderDetails && (
+            <>
+              <DialogHeader className="px-6 pt-6 pb-4 border-b dark:border-gray-800 flex flex-row items-center justify-between">
+                <div>
+                  <DialogTitle className="text-lg font-bold">
+                    Order Details: <span className="text-blue-600">{selectedOrderDetails.orderId}</span>
+                  </DialogTitle>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Placed on: {selectedOrderDetails.rawOrder?.createdAt ? new Date(selectedOrderDetails.rawOrder.createdAt).toLocaleString('en-IN') : "N/A"}
+                  </p>
+                </div>
+              </DialogHeader>
+              
+              <div className="p-6 space-y-6">
+                {/* Status and Zone */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                    <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Status</span>
+                    <p className="text-sm font-bold mt-1 text-slate-800 dark:text-slate-100">{selectedOrderDetails.orderStatus}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                    <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Restaurant</span>
+                    <p className="text-sm font-bold mt-1 text-slate-800 dark:text-slate-100">{selectedOrderDetails.restaurant}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                    <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Customer</span>
+                    <p className="text-sm font-bold mt-1 text-slate-800 dark:text-slate-100">{selectedOrderDetails.customerName}</p>
+                  </div>
+                </div>
+
+                {/* Items Summary */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Order Items</h3>
+                  <div className="border rounded-lg overflow-hidden dark:border-gray-800">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gray-50 dark:bg-gray-900 text-gray-500 font-bold border-b dark:border-gray-800">
+                        <tr>
+                          <th className="p-3">Item Name</th>
+                          <th className="p-3">Price</th>
+                          <th className="p-3 text-center">Qty</th>
+                          <th className="p-3 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y dark:divide-gray-800">
+                        {(selectedOrderDetails.rawOrder?.items || []).map((item, idx) => (
+                          <tr key={idx}>
+                            <td className="p-3 font-medium">
+                              {item.name}
+                              {item.variantName && <span className="text-[10px] text-gray-500 ml-1">({item.variantName})</span>}
+                            </td>
+                            <td className="p-3">{formatAmount(item.price)}</td>
+                            <td className="p-3 text-center">{item.quantity}</td>
+                            <td className="p-3 text-right font-semibold">{formatAmount(Number(item.price) * Number(item.quantity))}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Address & Delivery */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Delivery Address</h3>
+                  <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg space-y-2">
+                    <p className="text-sm text-slate-800 dark:text-slate-200">
+                      <strong className="text-xs text-gray-500 block">Recipient Full Name</strong>
+                      {selectedOrderDetails.rawOrder?.deliveryAddress?.fullName || selectedOrderDetails.rawOrder?.customerName || "N/A"}
+                    </p>
+                    <p className="text-sm text-slate-800 dark:text-slate-200">
+                      <strong className="text-xs text-gray-500 block">Phone</strong>
+                      {selectedOrderDetails.rawOrder?.deliveryAddress?.phone || selectedOrderDetails.rawOrder?.customerPhone || "N/A"}
+                    </p>
+                    <p className="text-sm text-slate-800 dark:text-slate-200">
+                      <strong className="text-xs text-gray-500 block">Street Address</strong>
+                      {selectedOrderDetails.rawOrder?.deliveryAddress?.street || "N/A"}
+                    </p>
+                    <p className="text-sm text-slate-800 dark:text-slate-200">
+                      <strong className="text-xs text-gray-500 block">Landmark / Additional Details</strong>
+                      {selectedOrderDetails.rawOrder?.deliveryAddress?.additionalDetails || "N/A"}
+                    </p>
+                    {selectedOrderDetails.rawOrder?.deliveryAddress?.location?.coordinates && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        🌐 Coordinates: [Lng: {selectedOrderDetails.rawOrder.deliveryAddress.location.coordinates[0]}, Lat: {selectedOrderDetails.rawOrder.deliveryAddress.location.coordinates[1]}]
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Financials & Commission Breakdown */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Financials */}
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Pricing Breakdown</h3>
+                    <div className="p-4 border dark:border-gray-800 rounded-lg space-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span>Items Subtotal</span>
+                        <span className="font-semibold">{formatAmount(selectedOrderDetails.totalItemAmount)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Delivery Charge</span>
+                        <span>{formatAmount(selectedOrderDetails.deliveryCharge)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Platform Fee</span>
+                        <span>{formatAmount(selectedOrderDetails.platformFee)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>GST / Tax</span>
+                        <span>{formatAmount(selectedOrderDetails.vatTax)}</span>
+                      </div>
+                      {selectedOrderDetails.couponDiscount > 0 && (
+                        <div className="flex justify-between text-red-600 font-medium">
+                          <span>Coupon Discount ({selectedOrderDetails.couponCode || "Applied"})</span>
+                          <span>-{formatAmount(selectedOrderDetails.couponDiscount)}</span>
+                        </div>
+                      )}
+                      <div className="border-t dark:border-gray-800 pt-2 flex justify-between text-sm font-bold">
+                        <span>Total Amount</span>
+                        <span className="text-blue-600">{formatAmount(selectedOrderDetails.totalAmount)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Commission & Coupon Bear details */}
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Admin Commission & Coupon Bear</h3>
+                    <div className="p-4 border dark:border-gray-800 rounded-lg space-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span>Admin Commission Amount</span>
+                        <span className="font-bold text-emerald-600">{formatAmount(selectedOrderDetails.restaurantCommission)}</span>
+                      </div>
+                      <div className="border-t dark:border-gray-800 my-2"></div>
+                      <div className="flex justify-between">
+                        <span>Applied Coupon</span>
+                        <span className="font-semibold text-blue-600">{selectedOrderDetails.couponCode || "None"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Total Coupon Discount</span>
+                        <span className="font-semibold">{formatAmount(selectedOrderDetails.couponDiscount)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Admin Bear %</span>
+                        <span>{selectedOrderDetails.adminBearPercentage}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Admin Bear Amount</span>
+                        <span className="font-medium">{formatAmount(selectedOrderDetails.adminBearAmount)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Restaurant Bear %</span>
+                        <span>{selectedOrderDetails.restaurantBearPercentage}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Restaurant Bear Amount</span>
+                        <span className="font-medium">{formatAmount(selectedOrderDetails.restaurantBearAmount)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status History Timeline */}
+                {selectedOrderDetails.rawOrder?.statusHistory?.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Order Timeline</h3>
+                    <div className="space-y-3 relative before:absolute before:inset-y-1 before:left-2 before:w-0.5 before:bg-gray-100 dark:before:bg-gray-800">
+                      {selectedOrderDetails.rawOrder.statusHistory.map((history, idx) => (
+                        <div key={idx} className="flex gap-4 items-start relative pl-6">
+                          <div className="absolute left-1 top-1.5 w-2.5 h-2.5 rounded-full bg-blue-600 border-2 border-white dark:border-gray-900 z-10"></div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
+                                Phase: {history.to}
+                              </span>
+                              <span className="text-[10px] text-gray-400">
+                                {new Date(history.at).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                            {history.note && (
+                              <p className="text-[11px] text-gray-500 mt-0.5">Note: {history.note}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="px-6 pb-6 flex items-center justify-end border-t dark:border-gray-800 pt-4">
+                <button
+                  onClick={() => setSelectedOrderDetails(null)}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 hover:bg-slate-50 transition-all"
+                >
+                  Close Detail View
+                </button>
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

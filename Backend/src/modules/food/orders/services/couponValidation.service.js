@@ -87,14 +87,35 @@ export const getCouponIneligibilityReason = async ({
     }
   }
 
-  if (userObjectId && offer.customerScope === 'first-time') {
-    const orderCount = await FoodOrder.countDocuments({ userId: userObjectId });
-    if (orderCount > 0) return 'first_time_only';
-  }
+  if (userObjectId && (offer.customerScope === 'first-time' || offer.isFirstOrderOnly === true)) {
+    const pendingOrderCount = await FoodOrder.countDocuments({
+      userId: userObjectId,
+      orderStatus: {
+        $in: [
+          'pending_payment',
+          'created',
+          'confirmed',
+          'preparing',
+          'ready_for_pickup',
+          'reached_pickup',
+          'picked_up',
+          'reached_drop'
+        ]
+      }
+    });
+    if (pendingOrderCount > 0) return 'pending_order_exists';
 
-  if (userObjectId && offer.isFirstOrderOnly === true) {
-    const orderCount = await FoodOrder.countDocuments({ userId: userObjectId });
-    if (orderCount > 0) return 'first_order_only';
+    const deliveredOrderCount = await FoodOrder.countDocuments({
+      userId: userObjectId,
+      orderStatus: 'delivered'
+    });
+    if (deliveredOrderCount > 0) return 'delivered_order_exists';
+
+    const userCancelledCount = await FoodOrder.countDocuments({
+      userId: userObjectId,
+      orderStatus: 'cancelled_by_user'
+    });
+    if (userCancelledCount > 0) return 'user_cancelled_order_exists';
   }
 
   return null;

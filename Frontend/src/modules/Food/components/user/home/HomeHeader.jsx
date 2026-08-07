@@ -248,9 +248,13 @@ export default function HomeHeader({
                 <ChevronDown className="h-2.5 w-2.5 text-gray-900/80 dark:text-white/80" />
               </div>
               <span className="text-sm font-bold text-gray-900 dark:text-white whitespace-normal line-clamp-2 drop-shadow-sm max-w-full">
-                {savedAddressText || (location?.area && location?.city 
-                  ? `${location.area}, ${location.city}` 
-                  : location?.area || location?.city || "Select Location")}
+                {savedAddressText || (location?.formattedAddress && location.formattedAddress !== "Select location" && location.formattedAddress !== "Current Location"
+                  ? location.formattedAddress
+                  : (location?.address && location.address !== "Select location" && location.address !== "Current Location"
+                    ? location.address
+                    : (location?.area && location?.city 
+                      ? `${location.area}, ${location.city}` 
+                      : location?.area || location?.city || "Select Location")))}
               </span>
             </div>
           </div>

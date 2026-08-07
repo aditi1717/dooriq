@@ -18,6 +18,7 @@
     "migrate:order-payments": "node scripts/migrate-orders-to-transactions.js",
     "migrate:outlet-timings-from-opening-closing": "node scripts/sync-outlet-timings-from-opening-closing.js",
     "cleanup:legacy-collections": "node scripts/cleanup-legacy-collections.js",
+    "clear:orders": "node scratch_clear_all_orders.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

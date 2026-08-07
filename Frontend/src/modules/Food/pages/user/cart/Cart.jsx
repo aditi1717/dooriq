@@ -922,6 +922,8 @@ export default function Cart() {
         return
       }
 
+      const currentSubtotal = cart.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1), 0)
+
       debugLog(`[CART-COUPONS] Fetching coupons for ${cart.length} items in cart`)
       setLoadingCoupons(true)
 
@@ -938,7 +940,7 @@ export default function Cart() {
 
         try {
           debugLog(`[CART-COUPONS] Fetching coupons for itemId: ${couponItemId}, name: ${cartItem.name}`)
-          const response = await restaurantAPI.getCouponsByItemIdPublic(restaurantId, couponItemId, subtotal)
+          const response = await restaurantAPI.getCouponsByItemIdPublic(restaurantId, couponItemId, currentSubtotal)
 
           if (response?.data?.success && response?.data?.data?.coupons) {
             const coupons = response.data.data.coupons
@@ -981,7 +983,7 @@ export default function Cart() {
     }
 
     fetchCouponsForCartItems()
-  }, [cart, restaurantId])
+  }, [cart, restaurantId, userOrderCount])
 
   // Calculate pricing from backend whenever cart, address, or coupon changes
   useEffect(() => {
@@ -1437,7 +1439,7 @@ export default function Cart() {
 
         const pricingData = response?.data?.data?.pricing
         if (!pricingData || !pricingData.appliedCoupon) {
-          toast.error("Coupon not applicable")
+          toast.error(pricingData?.couponError || "Coupon not applicable")
           return
         }
 
@@ -1503,7 +1505,7 @@ export default function Cart() {
       }
 
       if (!pricingData.appliedCoupon) {
-        toast.error("Invalid or unavailable coupon code")
+        toast.error(pricingData?.couponError || "Invalid or unavailable coupon code")
         setCouponCode("")
         return
       }

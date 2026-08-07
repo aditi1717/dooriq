@@ -1231,7 +1231,13 @@ export const restaurantAPI = {
             const restaurantIds = Array.isArray(o.restaurantIds) && o.restaurantIds.length > 0
               ? o.restaurantIds
               : [o.restaurantId].filter(Boolean);
-            return restaurantIds.some((id) => String(id) === String(restaurantId || ""));
+            if (!restaurantIds.some((id) => String(id) === String(restaurantId || ""))) return false;
+          }
+          // Guard: hide coupon if minOrderValue is not met
+          const subtotalNum = Number(subtotal || 0);
+          const minOrder = Number(o.minOrderValue || 0);
+          if (subtotalNum > 0 && minOrder > 0 && subtotalNum < minOrder) {
+            return false;
           }
           return true;
         })

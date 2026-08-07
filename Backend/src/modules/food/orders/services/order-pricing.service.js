@@ -102,13 +102,16 @@ export async function calculateOrderPricing(userId, dto) {
 
   let discount = 0;
   let appliedCoupon = null;
+  let couponError = null;
   const codeRaw = dto.couponCode
     ? String(dto.couponCode).trim().toUpperCase()
     : "";
 
   if (codeRaw) {
     const offer = await FoodOffer.findOne({ couponCode: codeRaw }).lean();
-    if (offer) {
+    if (!offer) {
+      couponError = "Invalid coupon code";
+    } else {
       const ineligibilityReason = await getCouponIneligibilityReason({
         offer,
         userId,
@@ -118,6 +121,21 @@ export async function calculateOrderPricing(userId, dto) {
       if (!ineligibilityReason) {
         discount = calculateCouponDiscount(offer, subtotal);
         appliedCoupon = { code: codeRaw, discount };
+      } else {
+        const errorMap = {
+          not_found: "Invalid coupon code",
+          inactive: "Coupon is currently inactive",
+          not_started: "Coupon offer has not started yet",
+          expired: "Coupon offer has expired",
+          restaurant_mismatch: "Coupon is not valid for this restaurant",
+          min_order_not_met: `Minimum order value of ₹${offer.minOrderValue || 0} not met`,
+          global_limit_reached: "Coupon usage limit has been reached",
+          per_user_limit_reached: "You have already used this coupon",
+          pending_order_exists: "First-time coupon is not valid as you currently have an active/pending order",
+          delivered_order_exists: "First-time coupon is only valid for your very first order",
+          user_cancelled_order_exists: "First-time coupon is not applicable as your previous order was cancelled by you"
+        };
+        couponError = errorMap[ineligibilityReason] || "Coupon is not applicable";
       }
     }
   }
@@ -139,6 +157,7 @@ export async function calculateOrderPricing(userId, dto) {
       currency: "INR",
       couponCode: appliedCoupon?.code || codeRaw || null,
       appliedCoupon,
+      couponError,
       distanceKm: Number.isFinite(distanceKm) ? Number(distanceKm.toFixed(2)) : null,
       deliveryFeeBreakdown: Number.isFinite(distanceKm) ? {
         source: "distance",
@@ -148,4 +167,3 @@ export async function calculateOrderPricing(userId, dto) {
     },
   };
 }
-

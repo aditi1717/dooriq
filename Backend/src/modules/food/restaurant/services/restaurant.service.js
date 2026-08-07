@@ -2373,9 +2373,25 @@ export const listPublicOffers = async (query = {}) => {
         });
     }
 
-    // If userId is provided, filter out first-time only coupons if user already has orders
+    // If userId is provided, filter out first-time only coupons if user already has non-cancelled orders
     if (userId && mongoose.Types.ObjectId.isValid(userId)) {
-        const orderCount = await FoodOrder.countDocuments({ userId: new mongoose.Types.ObjectId(userId) });
+        const orderCount = await FoodOrder.countDocuments({
+            userId: new mongoose.Types.ObjectId(userId),
+            orderStatus: {
+                $in: [
+                    'pending_payment',
+                    'created',
+                    'confirmed',
+                    'preparing',
+                    'ready_for_pickup',
+                    'reached_pickup',
+                    'picked_up',
+                    'reached_drop',
+                    'delivered',
+                    'cancelled_by_user'
+                ]
+            }
+        });
         if (orderCount > 0) {
             filter.$and.push({
                 customerScope: { $ne: 'first-time' },
