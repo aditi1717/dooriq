@@ -791,8 +791,14 @@ export async function getTransactionReport(query = {}) {
         }
     }
 
-    // Query FoodOrder as primary source of truth to cover ALL orders placed
-    const orderRows = await FoodOrder.find(match)
+    // Transaction report should only show delivered orders.
+    const deliveredMatch = {
+        ...match,
+        orderStatus: 'delivered'
+    };
+
+    // Query FoodOrder as primary source of truth, limited to delivered orders
+    const orderRows = await FoodOrder.find(deliveredMatch)
         .populate('userId', 'name')
         .populate('restaurantId', 'restaurantName')
         .sort({ createdAt: -1 })
@@ -809,6 +815,73 @@ export async function getTransactionReport(query = {}) {
         }
     });
 
+    const couponCodes = [...new Set(
+        orderRows
+            .map((order) => String(order?.pricing?.couponCode || '').trim().toUpperCase())
+            .filter(Boolean)
+    )];
+    const offerDocs = couponCodes.length
+        ? await FoodOffer.find({ couponCode: { $in: couponCodes } })
+            .select('couponCode createdByRole adminBearPercentage restaurantBearPercentage')
+            .lean()
+        : [];
+    const offerMap = new Map(
+        offerDocs.map((offer) => [String(offer.couponCode || '').trim().toUpperCase(), offer])
+    );
+
+    const clampPct = (value, fallback) => {
+        const num = Number(value);
+        if (!Number.isFinite(num)) return fallback;
+        return Math.max(0, Math.min(100, num));
+    };
+
+    const resolveCouponSplit = (order) => {
+        const discount = Number(order?.pricing?.discount || 0) || 0;
+        const couponCode = String(order?.pricing?.couponCode || '').trim().toUpperCase();
+        if (!discount || !couponCode) {
+            return {
+                adminDiscountShare: 0,
+                restaurantDiscountShare: 0,
+                adminBearPercentage: 0,
+                restaurantBearPercentage: 0,
+            };
+        }
+
+        const offer = offerMap.get(couponCode);
+        if (!offer) {
+            return {
+                adminDiscountShare: discount,
+                restaurantDiscountShare: 0,
+                adminBearPercentage: 100,
+                restaurantBearPercentage: 0,
+            };
+        }
+
+        if (String(offer.createdByRole || '').toUpperCase() === 'RESTAURANT') {
+            return {
+                adminDiscountShare: 0,
+                restaurantDiscountShare: discount,
+                adminBearPercentage: 0,
+                restaurantBearPercentage: 100,
+            };
+        }
+
+        const adminPct = clampPct(offer.adminBearPercentage, 100);
+        const restaurantPct = clampPct(offer.restaurantBearPercentage, Math.max(0, 100 - adminPct));
+        const normalizedTotal = adminPct + restaurantPct;
+        const adminBearPercentage = normalizedTotal > 0 ? (adminPct / normalizedTotal) * 100 : 100;
+        const restaurantBearPercentage = normalizedTotal > 0 ? (restaurantPct / normalizedTotal) * 100 : 0;
+        const restaurantDiscountShare = Math.round((discount * (restaurantBearPercentage / 100)) * 100) / 100;
+        const adminDiscountShare = Math.max(0, Math.round((discount - restaurantDiscountShare) * 100) / 100);
+
+        return {
+            adminDiscountShare,
+            restaurantDiscountShare,
+            adminBearPercentage,
+            restaurantBearPercentage,
+        };
+    };
+
     const transactions = orderRows.map((order) => {
         const tx = txMap.get(String(order._id));
         const pricing = order.pricing || {};
@@ -818,6 +891,7 @@ export async function getTransactionReport(query = {}) {
         const tax = Number(pricing.tax || 0) || 0;
         const discount = Number(pricing.discount || 0) || 0;
         const total = Number(pricing.total || 0) || 0;
+        const couponSplit = resolveCouponSplit(order);
 
         const platformFeeDerived = Math.max(
             0,
@@ -860,12 +934,38 @@ export async function getTransactionReport(query = {}) {
         const tx = txMap.get(String(order._id));
         const pricing = order.pricing || {};
         const totalPaid = tx?.amounts?.totalCustomerPaid || pricing.total || 0;
+        const subtotal = Number(pricing.subtotal || 0) || 0;
+        const packagingFee = Number(pricing.packagingFee || 0) || 0;
+        const deliveryFee = Number(pricing.deliveryFee || 0) || 0;
+        const platformFee = Number(pricing.platformFee || 0) || 0;
+        const restaurantCommission = Number(pricing.restaurantCommission || 0) || 0;
+        const riderShare = Number(order.riderEarning || 0) || 0;
+        const couponSplit = resolveCouponSplit(order);
 
         if (order.orderStatus === 'delivered') {
             completedTransaction += totalPaid;
-            adminEarning += tx?.amounts?.platformNetProfit ?? (pricing.platformFee || 0);
-            restaurantEarning += tx?.amounts?.restaurantShare ?? Math.max(0, (pricing.subtotal || 0) + (pricing.packagingFee || 0) - (pricing.restaurantCommission || 0));
-            deliverymanEarning += tx?.amounts?.riderShare ?? (pricing.deliveryFee || 0);
+            const adminFallback = Math.max(
+                0,
+                platformFee +
+                deliveryFee +
+                restaurantCommission -
+                riderShare -
+                couponSplit.adminDiscountShare
+            );
+            const restaurantFallback = Math.max(
+                0,
+                subtotal +
+                packagingFee -
+                restaurantCommission -
+                couponSplit.restaurantDiscountShare
+            );
+            const adminNet = Number(tx?.amounts?.platformNetProfit);
+            const restaurantShare = Number(tx?.amounts?.restaurantShare);
+            const riderNet = Number(tx?.amounts?.riderShare);
+
+            adminEarning += Number.isFinite(adminNet) ? adminNet : adminFallback;
+            restaurantEarning += Number.isFinite(restaurantShare) ? restaurantShare : restaurantFallback;
+            deliverymanEarning += Number.isFinite(riderNet) ? riderNet : riderShare;
         } else if (tx?.status === 'refunded' || order.orderStatus === 'cancelled' || order.orderStatus === 'cancelled_by_admin') {
             refundedTransaction += totalPaid;
         }

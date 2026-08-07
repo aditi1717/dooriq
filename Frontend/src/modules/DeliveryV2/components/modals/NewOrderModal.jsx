@@ -54,48 +54,82 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
   const { distanceKm, etaMins } = useMemo(() => {
     if (!order) return { distanceKm: null, etaMins: null };
 
-    // A. Use provided data if available (Direct distance from socket)
-    const rawDist = order.pickupDistanceKm || order.distanceKm;
-    const basePrepTime = order.estimatedDeliveryTime || order.prepTime || 15;
-    
-    // Calculate remaining preparation time dynamically in real-time
-    const getPreparingTimestamp = (order) => {
-      const history = order.statusHistory || [];
-      const preparingEntry = history.find(h => h.to === 'preparing' || h.to === 'confirmed');
-      if (preparingEntry) return new Date(preparingEntry.at);
-      return order.createdAt ? new Date(order.createdAt) : null;
-    };
-    const prepStart = getPreparingTimestamp(order);
-    const elapsedMs = prepStart ? (Date.now() - prepStart.getTime()) : 0;
-    const remainingSeconds = Math.max(0, basePrepTime * 60 - Math.floor(elapsedMs / 1000));
-    const remainingPrepTime = Math.ceil(remainingSeconds / 60);
-
-    if (rawDist != null) {
-      return { 
-        distanceKm: Number(rawDist).toFixed(1), 
-        etaMins: remainingPrepTime
-      };
-    }
-
-    // B. Calculate from locations (Local calculation fallback)
+    // 1. Get restaurant coordinates
     const rest = order.restaurantLocation || order.restaurantId?.location || {};
     const resLat = parseFloat(order.restaurant_lat || order.restaurantLat || rest.latitude || rest.lat);
     const resLng = parseFloat(order.restaurant_lng || order.restaurantLng || rest.longitude || rest.lng);
 
-    if (riderLocation && !isNaN(resLat) && !isNaN(resLng)) {
+    // 2. Get customer coordinates
+    const deliveryAddress = order?.deliveryAddress || {};
+    const geoCoords =
+      Array.isArray(deliveryAddress?.location?.coordinates) &&
+      deliveryAddress.location.coordinates.length >= 2
+        ? {
+            lng: deliveryAddress.location.coordinates[0],
+            lat: deliveryAddress.location.coordinates[1],
+          }
+        : null;
+    const customerLocation = order.customerLocation || order.deliveryLocation || geoCoords || null;
+    const custLat = parseFloat(customerLocation?.lat || customerLocation?.latitude);
+    const custLng = parseFloat(customerLocation?.lng || customerLocation?.longitude);
+
+    // 3. Calculate delivery distance (restaurant to customer)
+    let deliveryDistKm = 0;
+    if (!isNaN(resLat) && !isNaN(resLng) && !isNaN(custLat) && !isNaN(custLng)) {
+      const distM = getHaversineDistance(resLat, resLng, custLat, custLng);
+      deliveryDistKm = distM / 1000;
+    }
+
+    // 4. Calculate pickup distance (rider to restaurant)
+    const rawDist = order.pickupDistanceKm || order.distanceKm;
+    let pickupDistKm = 0;
+    if (rawDist != null && !isNaN(Number(rawDist))) {
+      pickupDistKm = Number(rawDist);
+    } else if (riderLocation && !isNaN(resLat) && !isNaN(resLng)) {
       const distM = getHaversineDistance(
         riderLocation.lat, riderLocation.lng,
         resLat, resLng
       );
-      const km = distM / 1000;
-      
-      return { 
-        distanceKm: km.toFixed(1), 
-        etaMins: remainingPrepTime
-      };
+      pickupDistKm = distM / 1000;
     }
 
-    return { distanceKm: '??', etaMins: remainingPrepTime };
+    // 5. Total distance = pickup + delivery
+    const totalDistKm = pickupDistKm + deliveryDistKm;
+
+    // 6. Calculate prep time
+    const basePrepTime = Number(order.estimatedDeliveryTime || order.prepTime || 15) || 15;
+    const getPreparingTimestamp = (order) => {
+      const history = order.statusHistory || [];
+      const preparingEntry = history.find(h => h.to === 'preparing' || h.to === 'confirmed');
+      if (preparingEntry && preparingEntry.at) {
+        const d = new Date(preparingEntry.at);
+        if (!isNaN(d.getTime())) return d;
+      }
+      if (order.createdAt) {
+        const d = new Date(order.createdAt);
+        if (!isNaN(d.getTime())) return d;
+      }
+      return null;
+    };
+    const prepStart = getPreparingTimestamp(order);
+    const elapsedMs = (prepStart && !isNaN(prepStart.getTime())) ? Math.max(0, Date.now() - prepStart.getTime()) : 0;
+    const remainingSeconds = Math.max(0, basePrepTime * 60 - Math.floor(elapsedMs / 1000));
+    
+    let etaDisplay = "";
+    if (remainingSeconds <= 0) {
+      etaDisplay = "0 MINS";
+    } else if (remainingSeconds <= 60) {
+      etaDisplay = `${remainingSeconds} SECS`;
+    } else {
+      const mins = Math.floor(remainingSeconds / 60);
+      const secs = remainingSeconds % 60;
+      etaDisplay = `${mins} MIN ${secs} SEC`;
+    }
+
+    return {
+      distanceKm: totalDistKm > 0 ? totalDistKm.toFixed(1) : "??",
+      etaMins: etaDisplay
+    };
   }, [order, riderLocation, timeLeft]);
 
   if (!order) return null;
@@ -204,7 +238,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
                  </div>
                  <div className="flex flex-col">
                     <span className="text-[9px] text-gray-400 font-black uppercase tracking-widest leading-none mb-1">EST. Time</span>
-                    <span className="text-sm font-black text-gray-900 tracking-tight leading-none">{etaMins} MINS</span>
+                    <span className="text-sm font-black text-gray-900 tracking-tight leading-none">{etaMins}</span>
                  </div>
                </div>
                <div className="flex-1 p-3 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-3">
@@ -230,8 +264,8 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
                 <div className="flex-1 space-y-4">
                   <div>
                     <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-emerald-600 mb-0.5">Restaurant Pickup</h4>
-                    <h3 className="text-gray-950 font-black text-lg leading-tight mb-0.5 line-clamp-1">{restaurantName}</h3>
-                    <p className="text-gray-500 text-[11px] font-bold line-clamp-1">{restaurantAddress}</p>
+                    <h3 className="text-gray-950 font-black text-lg leading-tight mb-0.5">{restaurantName}</h3>
+                    <p className="text-gray-500 text-[11px] font-bold leading-normal">{restaurantAddress}</p>
                   </div>
 
                   <div className="pt-1">
@@ -239,7 +273,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
                        <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-blue-600 mb-0.5">Customer Drop</h4>
                     </div>
                     <h3 className="text-gray-950 font-black text-lg leading-tight mb-0.5">Delivery Location</h3>
-                    <p className="text-gray-500 text-[11px] font-bold line-clamp-1">{customerAddress}</p>
+                    <p className="text-gray-500 text-[11px] font-bold leading-normal">{customerAddress}</p>
                   </div>
                 </div>
               </div>

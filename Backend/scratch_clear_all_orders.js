@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { initializeFirebaseRealtime, getFirebaseDB } from './src/config/firebase.js';
 
 dotenv.config();
 
@@ -19,6 +20,19 @@ async function run() {
     const offersCol = db.collection('food_offers');
     const resetOffersResult = await offersCol.updateMany({}, { $set: { usedCount: 0 } });
     console.log(`Reset usedCount to 0 for ${resetOffersResult.modifiedCount} offers in 'food_offers'.`);
+
+    // Clear Firebase Realtime Database
+    try {
+      initializeFirebaseRealtime();
+      const firebaseDb = getFirebaseDB();
+      if (firebaseDb) {
+        await firebaseDb.ref('delivery_offers').remove();
+        await firebaseDb.ref('active_orders').remove();
+        console.log("Successfully cleared Firebase Realtime Database nodes ('delivery_offers', 'active_orders').");
+      }
+    } catch (firebaseErr) {
+      console.warn("Skipped Firebase RTDB clearance (likely no credentials):", firebaseErr.message);
+    }
 
     process.exit(0);
   } catch (err) {

@@ -96,9 +96,9 @@ function BottomPopup({ isOpen, onClose, title, children, maxHeight = "85vh" }) {
  */
 export default function DeliveryHomeV2({ tab = 'feed' }) {
   const navigate = useNavigate();
-  const { isOnline, toggleOnline, activeOrder, tripStatus, setRiderLocation, setActiveOrder, updateTripStatus, clearActiveOrder } = useDeliveryStore();
+  const { isOnline, toggleOnline, activeOrder, tripStatus, setRiderLocation, setActiveOrder, updateTripStatus, clearActiveOrder, riderLocation } = useDeliveryStore();
   const { isWithinRange, distanceToTarget } = useProximityCheck();
-  const { acceptOrder, reachPickup, pickUpOrder, reachDrop, completeDelivery, resetTrip } = useOrderManager();
+  const { acceptOrder, rejectOrder, reachPickup, pickUpOrder, reachDrop, completeDelivery, resetTrip } = useOrderManager();
   const { newOrder, clearNewOrder, orderStatusUpdate, clearOrderStatusUpdate, isConnected: isSocketConnected, emitLocation } = useDeliveryNotifications();
   const companyName = useCompanyName();
   const { unreadCount: notificationUnreadCount } = useNotificationInbox("delivery", { limit: 20 });
@@ -1009,8 +1009,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                 {incomingOrder && (
                   <NewOrderModal
                     order={incomingOrder}
+                    riderLocation={riderLocation}
                     onAccept={(o) => { acceptOrder(o); setIncomingOrder(null); clearNewOrder(); }}
-                    onReject={() => { setIncomingOrder(null); clearNewOrder(); }}
+                    onReject={() => { rejectOrder(incomingOrder); setIncomingOrder(null); clearNewOrder(); }}
                     onMinimize={() => setIsModalMinimized(true)}
                   />
                 )}

@@ -172,6 +172,7 @@ export default function RegularOrderReport() {
             pricing.total != null
               ? Number(pricing.total)
               : computedTotal
+          const packingFee = Number(pricing.packagingFee || 0)
 
           const restaurantName =
             order.restaurantId?.restaurantName ||
@@ -219,6 +220,7 @@ export default function RegularOrderReport() {
             customerId,
             customerName,
             totalItemAmount: subtotal,
+            packagingFee: packingFee,
             couponDiscount,
             vatTax,
             deliveryCharge,
@@ -260,27 +262,40 @@ export default function RegularOrderReport() {
     return orders.map(order => {
       const couponCode = order.couponCode ? String(order.couponCode).trim().toUpperCase() : ""
       const discount = Number(order.couponDiscount || 0)
+      const packagingFee = Number(order.packagingFee || 0)
       
       let adminBearPercentage = 100
       let restaurantBearPercentage = 0
+      let restaurantDiscountShare = 0
       
       if (couponCode) {
         const foundOffer = offersList.find(o => String(o.couponCode || '').trim().toUpperCase() === couponCode)
         if (foundOffer) {
           adminBearPercentage = foundOffer.adminBearPercentage !== undefined ? Number(foundOffer.adminBearPercentage) : 100
           restaurantBearPercentage = foundOffer.restaurantBearPercentage !== undefined ? Number(foundOffer.restaurantBearPercentage) : 0
+          restaurantDiscountShare =
+            String(foundOffer.createdByRole || '').toUpperCase() === 'RESTAURANT'
+              ? discount
+              : (discount * restaurantBearPercentage) / 100
         }
       }
       
       const adminBearAmount = (discount * adminBearPercentage) / 100
       const restaurantBearAmount = (discount * restaurantBearPercentage) / 100
+      const restaurantCommission = Number(order.restaurantCommission || 0)
+      const restaurantEarning = Math.max(
+        0,
+        Number(order.totalItemAmount || 0) + packagingFee - restaurantCommission - restaurantDiscountShare
+      )
       
       return {
         ...order,
         adminBearPercentage,
         restaurantBearPercentage,
         adminBearAmount,
-        restaurantBearAmount
+        restaurantBearAmount,
+        restaurantDiscountShare,
+        restaurantEarning
       }
     })
   }, [orders, offersList])
@@ -320,6 +335,7 @@ export default function RegularOrderReport() {
       { key: "restaurantBearPercentage", label: "Rest Bear %" },
       { key: "restaurantBearAmount", label: "Rest Bear Amt" },
       { key: "restaurantCommission", label: "Admin Commission" },
+      { key: "restaurantEarning", label: "Restaurant Earning" },
       { key: "vatTax", label: "VAT/Tax" },
       { key: "deliveryCharge", label: "Delivery Charge" },
       { key: "platformFee", label: "Platform Fee" },
@@ -610,7 +626,7 @@ export default function RegularOrderReport() {
 
           {/* Table */}
           <div className="overflow-x-auto scrollbar-hide">
-            <table className="min-w-[1500px] w-full" style={{ tableLayout: "fixed" }}>
+            <table className="min-w-[1600px] w-full" style={{ tableLayout: "fixed" }}>
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "40px" }}>
@@ -643,6 +659,9 @@ export default function RegularOrderReport() {
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "100px" }}>
                     Admin Comm
                   </th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "105px" }}>
+                    Rest Earn
+                  </th>
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "80px" }}>
                     Vat/Tax
                   </th>
@@ -663,7 +682,7 @@ export default function RegularOrderReport() {
               <tbody className="bg-white divide-y divide-slate-100">
                 {paginatedOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={15} className="px-6 py-20 text-center">
+                      <td colSpan={16} className="px-6 py-20 text-center">
                       <div className="flex flex-col items-center justify-center">
                         <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
                         <p className="text-sm text-slate-500">No orders match your filters</p>
@@ -712,6 +731,9 @@ export default function RegularOrderReport() {
                       </td>
                       <td className="px-1.5 py-1">
                         <span className="text-[10px] text-emerald-600 font-medium">{formatAmount(order.restaurantCommission)}</span>
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <span className="text-[10px] text-green-600 font-medium">{formatAmount(order.restaurantEarning)}</span>
                       </td>
                       <td className="px-1.5 py-1">
                         <span className="text-[10px] text-slate-700">{formatAmount(order.vatTax)}</span>
@@ -934,11 +956,15 @@ export default function RegularOrderReport() {
 
                   {/* Commission & Coupon Bear details */}
                   <div>
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Admin Commission & Coupon Bear</h3>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Admin Commission, Restaurant Earning & Coupon Bear</h3>
                     <div className="p-4 border dark:border-gray-800 rounded-lg space-y-2 text-xs">
                       <div className="flex justify-between">
                         <span>Admin Commission Amount</span>
                         <span className="font-bold text-emerald-600">{formatAmount(selectedOrderDetails.restaurantCommission)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Restaurant Earning</span>
+                        <span className="font-bold text-green-600">{formatAmount(selectedOrderDetails.restaurantEarning)}</span>
                       </div>
                       <div className="border-t dark:border-gray-800 my-2"></div>
                       <div className="flex justify-between">

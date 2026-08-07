@@ -181,7 +181,8 @@ const OtpModal = ({ order, onVerified, onClose }) => {
 
 const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
   const [showQrModal, setShowQrModal] = useState(false);
-  const [collectQrLink, setCollectQrLink] = useState(null);
+  const [collectQrImageUrl, setCollectQrImageUrl] = useState(null);
+  const [collectQrContent, setCollectQrContent] = useState(null);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
   const isInitialPaid = ['paid', 'captured', 'authorized'].includes(String(order.payment?.status || "").toLowerCase());
   const [paymentStatus, setPaymentStatus] = useState(isInitialPaid ? 'paid' : 'idle');
@@ -192,6 +193,11 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
 
   const orderId = order.orderId || order._id || 'ORD';
   const amountToCollect = order.pricing?.total || order.amountToCollect || 0;
+  const currentQrImageUrl =
+    collectQrImageUrl ||
+    order?.payment?.qr?.imageUrl ||
+    order?.transaction?.payment?.qr?.imageUrl ||
+    null;
 
   const paymentMethod = (
     order?.paymentMethod ||
@@ -272,14 +278,16 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
         name: order.userName || 'Customer',
         phone: order.userPhone || ''
       });
-      const link = res?.data?.data?.shortUrl || res?.data?.shortUrl || null;
-      if (link) {
-        setCollectQrLink(link);
+      const qrImageUrl = res?.data?.data?.imageUrl || res?.data?.imageUrl || null;
+      const qrContent = res?.data?.data?.imageContent || res?.data?.imageContent || null;
+      if (qrImageUrl) {
+        setCollectQrImageUrl(qrImageUrl);
+        setCollectQrContent(qrContent);
         setPaymentStatus('pending');
         setShowQrModal(true);
         setIsCashAccepted(false); // Reset cash if they try QR
       } else {
-        toast.error("Could not generate QR code");
+        toast.error("Could not load Razorpay QR");
       }
     } catch (e) {
       toast.error("QR Generation failed");
@@ -450,9 +458,9 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
               
               <div className="flex flex-col items-center gap-4 p-6 bg-gray-50 rounded-3xl border-2 border-gray-100 mb-8">
                  <img 
-                   src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(collectQrLink)}`} 
+                   src={currentQrImageUrl} 
                    alt="Razorpay QR"
-                   className="w-56 h-56"
+                   className="w-56 h-56 object-contain"
                  />
                  <button 
                     onClick={handleManualCheck}

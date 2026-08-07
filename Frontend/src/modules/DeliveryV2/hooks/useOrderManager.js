@@ -200,12 +200,33 @@ export const useOrderManager = () => {
     }
   };
 
+  const rejectOrder = async (order) => {
+    const orderId = order?.orderId || order?._id || order?.id;
+    if (!orderId) {
+      toast.error('Invalid order data');
+      return;
+    }
+
+    try {
+      const response = await deliveryAPI.rejectOrder(orderId);
+      if (response?.data?.success) {
+        toast.info('Order passed/rejected successfully.');
+      } else {
+        toast.error(response?.data?.message || 'Failed to reject order');
+      }
+    } catch (error) {
+      console.error('Reject Order Error:', error);
+      toast.error('Network error. Please try again.');
+    }
+  };
+
   const resetTrip = () => {
     clearActiveOrder();
   };
 
   return {
     acceptOrder,
+    rejectOrder,
     reachPickup,
     pickUpOrder,
     reachDrop,

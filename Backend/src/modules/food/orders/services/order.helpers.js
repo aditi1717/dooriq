@@ -257,9 +257,15 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
     dispatch: order?.dispatch,
     estimatedDeliveryTime: order?.estimatedDeliveryTime || 30,
     prepTime: order?.estimatedDeliveryTime || 30,
-    statusHistory: order?.statusHistory || [],
-    createdAt: order?.createdAt,
-    updatedAt: order?.updatedAt,
+    statusHistory: (order?.statusHistory || []).map(h => {
+      const plain = h?.toObject ? h.toObject() : { ...(h || {}) };
+      return {
+        ...plain,
+        at: plain.at instanceof Date ? plain.at.toISOString() : (plain.at ? new Date(plain.at).toISOString() : undefined)
+      };
+    }),
+    createdAt: order?.createdAt instanceof Date ? order.createdAt.toISOString() : (order?.createdAt ? new Date(order.createdAt).toISOString() : undefined),
+    updatedAt: order?.updatedAt instanceof Date ? order.updatedAt.toISOString() : (order?.updatedAt ? new Date(order.updatedAt).toISOString() : undefined),
   };
 }
 
