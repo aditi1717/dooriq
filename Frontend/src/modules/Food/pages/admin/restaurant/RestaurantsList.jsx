@@ -1067,18 +1067,6 @@ export default function RestaurantsList() {
 
       const normalizedOpeningTime = normalizeTimeValue(detailsForm.openingTime.trim())
       const normalizedClosingTime = normalizeTimeValue(detailsForm.closingTime.trim())
-      const openingMinutes = timeToMinutes(normalizedOpeningTime)
-      const closingMinutes = timeToMinutes(normalizedClosingTime)
-      if (openingMinutes !== null && closingMinutes !== null) {
-        if (openingMinutes === closingMinutes) {
-          alert("Opening time and closing time cannot be same")
-          return
-        }
-        if (closingMinutes < openingMinutes) {
-          alert("Closing time cannot be less than opening time")
-          return
-        }
-      }
 
       const payload = {
         name: detailsForm.name.trim(),

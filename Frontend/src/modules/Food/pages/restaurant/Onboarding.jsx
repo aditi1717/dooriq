@@ -44,6 +44,7 @@ const EMAIL_REGEX = /^(?!.*\.\.)([A-Za-z0-9]+[._%+-]?)*[A-Za-z0-9]+@[A-Za-z0-9-]
 const LOCAL_IMAGE_FILE_ACCEPT = ".jpg,.jpeg,.png,.webp,.heic,.heif"
 const GALLERY_IMAGE_ACCEPT =
   ".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif"
+const DOCUMENT_FILE_ACCEPT = ".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
 let onboardingFileCache = {
   step2: {
     menuImages: [],
@@ -979,6 +980,11 @@ export default function RestaurantOnboarding() {
 
   const getPreviewImageUrl = (value) => {
     if (!value) return null
+    const fileName = typeof value === "string" ? value : value?.url || value?.name || ""
+    const mimeType = value?.type || ""
+    if (String(mimeType).toLowerCase() === "application/pdf" || /\.pdf(?:[?#].*)?$/i.test(String(fileName))) {
+      return null
+    }
     if (typeof value === "string") return value
     if (value?.url && typeof value.url === "string") return value.url
 
@@ -996,6 +1002,12 @@ export default function RestaurantOnboarding() {
     }
 
     return null
+  }
+
+  const isPdfDocument = (value) => {
+    const fileName = typeof value === "string" ? value : value?.url || value?.name || ""
+    const mimeType = value?.type || ""
+    return String(mimeType).toLowerCase() === "application/pdf" || /\.pdf(?:[?#].*)?$/i.test(String(fileName))
   }
 
   const openImageSourcePicker = ({ title, onSelectFile, fileNamePrefix, fallbackInputRef }) => {
@@ -1667,15 +1679,6 @@ export default function RestaurantOnboarding() {
     }
     if (!step2.closingTime?.trim()) {
       errors.push("Closing time is required")
-    }
-    const openingMinutes = timeStringToMinutes(step2.openingTime)
-    const closingMinutes = timeStringToMinutes(step2.closingTime)
-    if (openingMinutes !== null && closingMinutes !== null) {
-      if (openingMinutes === closingMinutes) {
-        errors.push("Opening time and closing time cannot be same")
-      } else if (closingMinutes < openingMinutes) {
-        errors.push("Closing time cannot be less than opening time")
-      }
     }
     if (!step2.openDays || step2.openDays.length === 0) {
       errors.push("Please select at least one open day")
@@ -2869,40 +2872,14 @@ export default function RestaurantOnboarding() {
               label="Opening time"
               value={step2.openingTime || ""}
               onChange={(val) => {
-                const nextOpening = normalizeTimeValue(val) || ""
-                const openingMinutes = timeStringToMinutes(nextOpening)
-                const closingMinutes = timeStringToMinutes(step2.closingTime)
-                if (openingMinutes !== null && closingMinutes !== null) {
-                  if (openingMinutes === closingMinutes) {
-                    toast.error("Opening time and closing time cannot be same")
-                    return
-                  }
-                  if (closingMinutes < openingMinutes) {
-                    toast.error("Closing time cannot be less than opening time")
-                    return
-                  }
-                }
-                setStep2((prev) => ({ ...prev, openingTime: nextOpening }))
+                setStep2((prev) => ({ ...prev, openingTime: normalizeTimeValue(val) || "" }))
               }}
             />
             <TimeSelector
               label="Closing time"
               value={step2.closingTime || ""}
               onChange={(val) => {
-                const nextClosing = normalizeTimeValue(val) || ""
-                const openingMinutes = timeStringToMinutes(step2.openingTime)
-                const closingMinutes = timeStringToMinutes(nextClosing)
-                if (openingMinutes !== null && closingMinutes !== null) {
-                  if (openingMinutes === closingMinutes) {
-                    toast.error("Opening time and closing time cannot be same")
-                    return
-                  }
-                  if (closingMinutes < openingMinutes) {
-                    toast.error("Closing time cannot be less than opening time")
-                    return
-                  }
-                }
-                setStep2((prev) => ({ ...prev, closingTime: nextClosing }))
+                setStep2((prev) => ({ ...prev, closingTime: normalizeTimeValue(val) || "" }))
               }}
             />
           </div>
@@ -3102,7 +3079,7 @@ export default function RestaurantOnboarding() {
               className="w-full text-xs"
               onClick={() =>
                 openImageSourcePicker({
-                  title: "Upload GST image",
+                  title: "Upload GST document",
                   fileNamePrefix: "gst-image",
                   fallbackInputRef: gstImageInputRef,
                   onSelectFile: handleGstImageSelected,
@@ -3114,7 +3091,7 @@ export default function RestaurantOnboarding() {
             </Button>
             <input
               type="file"
-              accept={GALLERY_IMAGE_ACCEPT}
+              accept={DOCUMENT_FILE_ACCEPT}
               className="hidden"
               ref={gstImageInputRef}
               onChange={(e) => {
@@ -3124,7 +3101,18 @@ export default function RestaurantOnboarding() {
             />
             {step3.gstImage && (
               <div className="mt-3 relative aspect-4/3 rounded-md overflow-hidden bg-gray-100">
-                {getPreviewImageUrl(step3.gstImage) ? (
+                {isPdfDocument(step3.gstImage) ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gray-50 text-gray-700">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm">
+                      <span className="text-xs font-bold">PDF</span>
+                    </div>
+                    <p className="px-4 text-center text-xs font-medium">
+                      {typeof step3.gstImage === "string"
+                        ? step3.gstImage.split("/").pop()
+                        : step3.gstImage?.name || "GST document.pdf"}
+                    </p>
+                  </div>
+                ) : getPreviewImageUrl(step3.gstImage) ? (
                   <img
                     src={getPreviewImageUrl(step3.gstImage)}
                     alt="GST document"
@@ -3218,7 +3206,7 @@ export default function RestaurantOnboarding() {
           className="w-full text-xs"
           onClick={() =>
             openImageSourcePicker({
-              title: "Upload FSSAI image",
+              title: "Upload FSSAI document",
               fileNamePrefix: "fssai-image",
               fallbackInputRef: fssaiImageInputRef,
               onSelectFile: handleFssaiImageSelected,
@@ -3230,7 +3218,7 @@ export default function RestaurantOnboarding() {
         </Button>
         <input
           type="file"
-          accept={GALLERY_IMAGE_ACCEPT}
+          accept={DOCUMENT_FILE_ACCEPT}
           className="hidden"
           ref={fssaiImageInputRef}
           onChange={(e) => {
@@ -3240,7 +3228,18 @@ export default function RestaurantOnboarding() {
         />
         {step3.fssaiImage && (
           <div className="mt-3 relative aspect-4/3 rounded-md overflow-hidden bg-gray-100">
-            {getPreviewImageUrl(step3.fssaiImage) ? (
+            {isPdfDocument(step3.fssaiImage) ? (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gray-50 text-gray-700">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm">
+                  <span className="text-xs font-bold">PDF</span>
+                </div>
+                <p className="px-4 text-center text-xs font-medium">
+                  {typeof step3.fssaiImage === "string"
+                    ? step3.fssaiImage.split("/").pop()
+                    : step3.fssaiImage?.name || "FSSAI document.pdf"}
+                </p>
+              </div>
+            ) : getPreviewImageUrl(step3.fssaiImage) ? (
               <img
                 src={getPreviewImageUrl(step3.fssaiImage)}
                 alt="FSSAI document"

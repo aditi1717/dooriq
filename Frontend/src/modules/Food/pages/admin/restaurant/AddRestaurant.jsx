@@ -62,6 +62,11 @@ const getStoredImageSrc = (value) => {
   if (value?.url) return value.url
   return ""
 }
+const isPdfFile = (value) => {
+  const name = value instanceof File ? value.name : typeof value === "string" ? value : value?.url || ""
+  const type = value instanceof File ? value.type : value?.type || ""
+  return String(type).toLowerCase() === "application/pdf" || /\.pdf(?:[?#].*)?$/i.test(String(name))
+}
 const isUploadableFile = (value) => {
   if (!value || typeof value !== "object") return false
   if (typeof File !== "undefined" && value instanceof File) return true
@@ -473,15 +478,6 @@ export default function AddRestaurant() {
     if (!step2.estimatedDeliveryTime?.trim()) errors.push("Estimated delivery time is required")
     if (!step2.openingTime?.trim()) errors.push("Opening time is required")
     if (!step2.closingTime?.trim()) errors.push("Closing time is required")
-    const openingMinutes = timeStringToMinutes(step2.openingTime)
-    const closingMinutes = timeStringToMinutes(step2.closingTime)
-    if (openingMinutes !== null && closingMinutes !== null) {
-      if (openingMinutes === closingMinutes) {
-        errors.push("Opening time and closing time cannot be same")
-      } else if (closingMinutes < openingMinutes) {
-        errors.push("Closing time cannot be less than opening time")
-      }
-    }
     if (!step2.openDays || step2.openDays.length === 0) errors.push("Please select at least one open day")
     return errors
   }
@@ -757,6 +753,7 @@ export default function AddRestaurant() {
   }
 
   const locationSearchInputRef = useRef(null)
+  const locationSearchWrapperRef = useRef(null)
   const placesAutocompleteRef = useRef(null)
   const mapsScriptLoadedRef = useRef(false)
 
@@ -1008,6 +1005,23 @@ export default function AddRestaurant() {
     return () => clearTimeout(t)
   }, [locationSearchValue, step])
 
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      const wrapper = locationSearchWrapperRef.current
+      if (wrapper && !wrapper.contains(event.target)) {
+        setLocationSuggestions([])
+        locationSearchInputRef.current?.blur()
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick, true)
+    document.addEventListener("touchstart", handleOutsideClick, true)
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick, true)
+      document.removeEventListener("touchstart", handleOutsideClick, true)
+    }
+  }, [])
+
 
   // Render functions for each step
   const renderStep1 = () => (
@@ -1107,7 +1121,7 @@ export default function AddRestaurant() {
 
       <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
         <h2 className="text-lg font-semibold text-black">Restaurant contact & location</h2>
-        <div className="relative">
+        <div ref={locationSearchWrapperRef} className="relative">
           <Label className="text-xs text-gray-700">Search location</Label>
           <div className="relative">
             <Input
@@ -1399,20 +1413,7 @@ export default function AddRestaurant() {
                 type="time"
                 value={step2.openingTime || ""}
                 onChange={(e) => {
-                  const nextOpening = e.target.value
-                  const closingMinutes = timeStringToMinutes(step2.closingTime)
-                  const openingMinutes = timeStringToMinutes(nextOpening)
-                  if (openingMinutes !== null && closingMinutes !== null) {
-                    if (openingMinutes === closingMinutes) {
-                      toast.error("Opening time and closing time cannot be same")
-                      return
-                    }
-                    if (closingMinutes < openingMinutes) {
-                      toast.error("Closing time cannot be less than opening time")
-                      return
-                    }
-                  }
-                  setStep2({ ...step2, openingTime: nextOpening })
+                  setStep2({ ...step2, openingTime: e.target.value })
                 }}
                 autoComplete="off"
                 className="bg-white text-sm"
@@ -1424,20 +1425,7 @@ export default function AddRestaurant() {
                 type="time"
                 value={step2.closingTime || ""}
                 onChange={(e) => {
-                  const nextClosing = e.target.value
-                  const openingMinutes = timeStringToMinutes(step2.openingTime)
-                  const closingMinutes = timeStringToMinutes(nextClosing)
-                  if (openingMinutes !== null && closingMinutes !== null) {
-                    if (openingMinutes === closingMinutes) {
-                      toast.error("Opening time and closing time cannot be same")
-                      return
-                    }
-                    if (closingMinutes < openingMinutes) {
-                      toast.error("Closing time cannot be less than opening time")
-                      return
-                    }
-                  }
-                  setStep2({ ...step2, closingTime: nextClosing })
+                  setStep2({ ...step2, closingTime: e.target.value })
                 }}
                 autoComplete="off"
                 className="bg-white text-sm"
@@ -1564,11 +1552,17 @@ export default function AddRestaurant() {
             <Input value={step3.gstNumber || ""} onChange={(e) => setStep3({ ...step3, gstNumber: sanitizeGst(e.target.value) })} className="bg-white text-sm" placeholder="GST number*" maxLength={15} />
             <Input value={step3.gstLegalName || ""} onChange={(e) => setStep3({ ...step3, gstLegalName: normalizeName(e.target.value) })} className="bg-white text-sm" placeholder="Legal name*" />
             <Input value={step3.gstAddress || ""} onChange={(e) => setStep3({ ...step3, gstAddress: e.target.value })} className="bg-white text-sm" placeholder="Registered address*" />
-            <Input type="file" accept="image/*" onChange={(e) => setStep3({ ...step3, gstImage: e.target.files?.[0] || null })} className="bg-white text-sm" />
+            <Input type="file" accept="image/*,.pdf" onChange={(e) => setStep3({ ...step3, gstImage: e.target.files?.[0] || null })} className="bg-white text-sm" />
             {step3.gstImage && (
               <div className="flex items-center gap-3">
                 <div className="h-14 w-14 overflow-hidden rounded-md border border-gray-200 bg-gray-50">
-                  <img src={getStoredImageSrc(step3.gstImage)} alt="GST document" className="h-full w-full object-cover" />
+                  {isPdfFile(step3.gstImage) ? (
+                    <div className="flex h-full w-full items-center justify-center bg-gray-100 text-[10px] font-semibold uppercase tracking-wide text-gray-700">
+                      PDF
+                    </div>
+                  ) : (
+                    <img src={getStoredImageSrc(step3.gstImage)} alt="GST document" className="h-full w-full object-cover" />
+                  )}
                 </div>
                 <p className="text-xs text-gray-600">Selected: {getStoredFileLabel(step3.gstImage)}</p>
               </div>
@@ -1596,11 +1590,17 @@ export default function AddRestaurant() {
             />
           </div>
         </div>
-        <Input type="file" accept="image/*" onChange={(e) => setStep3({ ...step3, fssaiImage: e.target.files?.[0] || null })} className="bg-white text-sm" />
+        <Input type="file" accept="image/*,.pdf" onChange={(e) => setStep3({ ...step3, fssaiImage: e.target.files?.[0] || null })} className="bg-white text-sm" />
         {step3.fssaiImage && (
           <div className="flex items-center gap-3">
             <div className="h-14 w-14 overflow-hidden rounded-md border border-gray-200 bg-gray-50">
-              <img src={getStoredImageSrc(step3.fssaiImage)} alt="FSSAI document" className="h-full w-full object-cover" />
+              {isPdfFile(step3.fssaiImage) ? (
+                <div className="flex h-full w-full items-center justify-center bg-gray-100 text-[10px] font-semibold uppercase tracking-wide text-gray-700">
+                  PDF
+                </div>
+              ) : (
+                <img src={getStoredImageSrc(step3.fssaiImage)} alt="FSSAI document" className="h-full w-full object-cover" />
+              )}
             </div>
             <p className="text-xs text-gray-600">Selected: {getStoredFileLabel(step3.fssaiImage)}</p>
           </div>

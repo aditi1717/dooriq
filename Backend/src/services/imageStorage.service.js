@@ -13,6 +13,10 @@ const ALLOWED_MIME_TYPES = new Set([
     'image/gif'
 ]);
 
+const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
+    'application/pdf'
+]);
+
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 /**
@@ -87,6 +91,41 @@ export const processAndSaveImage = async (buffer, options = {}) => {
 
     // Return stored path format: /uploads/<filename>
     return `/uploads/${filename}`;
+};
+
+/**
+ * Saves an uploaded file buffer as either an optimized image or a raw PDF.
+ *
+ * @param {Buffer} buffer
+ * @param {Object} options
+ * @param {string} [options.mimeType]
+ * @param {string} [options.originalname]
+ * @returns {Promise<string>} Relative upload path
+ */
+export const processAndSaveUploadedFile = async (buffer, options = {}) => {
+    const mimeType = String(options.mimeType || '').toLowerCase();
+    const originalName = String(options.originalname || '');
+    const originalExt = path.extname(originalName).toLowerCase();
+
+    if (ALLOWED_DOCUMENT_MIME_TYPES.has(mimeType) || originalExt === '.pdf') {
+        if (!buffer || !Buffer.isBuffer(buffer)) {
+            throw new Error('Valid file buffer is required');
+        }
+
+        if (buffer.length > MAX_FILE_SIZE_BYTES) {
+            throw new Error(`File size exceeds limit of ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB`);
+        }
+
+        const storageDir = await ensureUploadStorageDirExists();
+        const uniqueSuffix = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+        const filename = `doc_${uniqueSuffix}.pdf`;
+        const filePath = path.join(storageDir, filename);
+
+        await fs.promises.writeFile(filePath, buffer);
+        return `/uploads/${filename}`;
+    }
+
+    return processAndSaveImage(buffer, options);
 };
 
 /**

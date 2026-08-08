@@ -1,6 +1,6 @@
 import express from 'express';
 import { upload } from '../../../middleware/upload.js';
-import { uploadImageBuffer } from '../../../services/cloudinary.service.js';
+import { processAndSaveUploadedFile } from '../../../services/imageStorage.service.js';
 
 const router = express.Router();
 
@@ -14,15 +14,14 @@ router.post('/image', upload.single('file'), async (req, res, next) => {
             });
         }
 
-        const folder = typeof req.body?.folder === 'string' && req.body.folder.trim()
-            ? req.body.folder.trim()
-            : 'uploads';
-
-        const url = await uploadImageBuffer(req.file.buffer, folder);
+        const url = await processAndSaveUploadedFile(req.file.buffer, {
+            mimeType: req.file.mimetype,
+            originalname: req.file.originalname
+        });
 
         return res.status(200).json({
             success: true,
-            message: 'Image uploaded successfully',
+            message: 'File uploaded successfully',
             data: {
                 url,
                 publicId: null
