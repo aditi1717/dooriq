@@ -77,7 +77,7 @@ const RootEntryRoute = () => {
 
   if (loading) return <PageLoader />
   if (!showLandingAtRoot) return <Navigate to="/food/user" replace />
-  return <LandingPage />
+  return <LaunchLandingPage />
 }
 
 
