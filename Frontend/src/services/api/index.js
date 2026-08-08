@@ -447,6 +447,12 @@ export const adminAPI = {
         contextModule: "admin",
       },
     ),
+  updateDeliveryPartnerStatus: (id, status) =>
+    apiClient.patch(
+      `/food/admin/delivery/${String(id)}/status`,
+      { status },
+      { contextModule: "admin" },
+    ),
   deleteDeliveryPartner: (id) =>
     apiClient.delete(`/food/admin/delivery/${String(id)}`, {
       contextModule: "admin",
@@ -938,7 +944,7 @@ export const adminAPI = {
   /** Backward-compatible alias used in UI */
   getApprovedRestaurants: (params = {}) =>
     apiClient.get("/food/admin/restaurants", {
-      params: { status: "approved", limit: 1000, ...params },
+      params: { status: "all", limit: 1000, ...params },
       contextModule: "admin",
     }),
 

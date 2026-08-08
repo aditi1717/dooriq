@@ -43,7 +43,7 @@ export default function ReferralInvitePage() {
     <div className="min-h-screen bg-gradient-to-br from-[#fff8f3] via-white to-[#eef7ff] text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-5 sm:px-6 lg:px-8">
         <div className="mb-6 flex items-center justify-between gap-4">
-          <Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900">
+          <Link to="/food/user" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900">
             <ArrowLeft className="h-4 w-4" />
             Back
           </Link>

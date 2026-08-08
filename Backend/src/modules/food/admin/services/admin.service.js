@@ -4218,8 +4218,14 @@ async function getBulkDeliveryPartnerStats(partnerIds) {
 
 // ----- Delivery partners (approved list) -----
 export async function getDeliveryPartners(query) {
-    const { page = 1, limit = 1000, search } = query;
-    const filter = { status: 'approved' };
+    const { page = 1, limit = 1000, search, status } = query;
+    const filter = {};
+    if (status && status !== 'all') {
+        filter.status = status;
+    } else {
+        filter.status = { $in: ['approved', 'deactivated', 'rejected'] };
+    }
+
     if (search && typeof search === 'string' && search.trim()) {
         const term = search.trim();
         filter.$or = [
@@ -5498,6 +5504,25 @@ export async function deleteDeliveryPartner(id) {
 
     return partner.toObject();
 }
+
+/**
+ * Block or unblock a delivery partner (admin)
+ */
+export async function updateDeliveryPartnerStatus(id, statusOrIsActive) {
+    const partner = await FoodDeliveryPartner.findById(id);
+    if (!partner) throw new NotFoundError('Delivery partner not found');
+
+    const isApproved = statusOrIsActive === true || statusOrIsActive === 'approved' || statusOrIsActive === 'active';
+    partner.status = isApproved ? 'approved' : 'deactivated';
+    if (isApproved) {
+        partner.approvedAt = new Date();
+    } else {
+        partner.rejectedAt = new Date();
+    }
+    await partner.save();
+
+    return partner.toObject();
+};
 
 /**
  * Fetch cash limit settlement (deposit) transactions

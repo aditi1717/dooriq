@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react"
-import { Search, Download, ChevronDown, Eye, User, Star, ArrowUpDown, Settings, FileText, FileSpreadsheet, Loader2, Check, Columns, ExternalLink, Calendar, MapPin, CreditCard, Mail, Phone, Bike, FileCheck, Pencil, Save, Trash2, X } from "lucide-react"
+import { Search, Download, ChevronDown, Eye, User, Star, ArrowUpDown, Settings, FileText, FileSpreadsheet, Loader2, Check, Columns, ExternalLink, Calendar, MapPin, CreditCard, Mail, Phone, Bike, FileCheck, Pencil, Save, Trash2, X, ShieldX, ShieldCheck } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
@@ -401,6 +401,52 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
     }
   }
 
+  const handleToggleBlock = async (deliveryman) => {
+    const deliverymanId = String(deliveryman?._id || "")
+    if (!deliverymanId) {
+      toast.error("Delivery partner not found")
+      return
+    }
+
+    const isBlocked = deliveryman.status === "deactivated" || deliveryman.status === "rejected"
+    const nextStatus = isBlocked // true to unblock (set status: approved), false to block (set status: deactivated)
+
+    const confirmed = window.confirm(
+      isBlocked
+        ? `Unblock ${deliveryman.name || "this delivery partner"}?\n\nThis will restore their account status to active.`
+        : `Block ${deliveryman.name || "this delivery partner"}?\n\nThis will block their account and prevent them from receiving order assignments.`
+    )
+
+    if (!confirmed) return
+
+    try {
+      setSavingDeliveryId(deliverymanId)
+      const response = await adminAPI.updateDeliveryPartnerStatus(deliverymanId, nextStatus)
+
+      if (response?.data?.success) {
+        const updatedStatus = nextStatus ? "approved" : "deactivated"
+        setDeliverymen((prev) =>
+          prev.map((item) =>
+            String(item._id) === deliverymanId
+              ? { ...item, status: updatedStatus }
+              : item
+          )
+        )
+        if (viewDetails && String(viewDetails._id) === deliverymanId) {
+          setViewDetails((prev) => prev ? { ...prev, status: updatedStatus } : null)
+        }
+        toast.success(`Delivery partner ${nextStatus ? "unblocked" : "blocked"} successfully`)
+      } else {
+        toast.error("Failed to update status")
+      }
+    } catch (err) {
+      debugError("Error updating delivery partner status:", err)
+      toast.error(err?.response?.data?.message || "Failed to update status")
+    } finally {
+      setSavingDeliveryId(null)
+    }
+  }
+
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
@@ -666,9 +712,16 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
                         )}
                         {visibleColumns.availabilityStatus && (
                           <td className="px-6 py-4">
-                            <div className="flex flex-col">
-                              <span className="text-xs">
-                                Active Status: <span className={`${dm.status === 'Online' ? 'text-blue-600' : 'text-slate-600'} underline`}>{dm.status}</span>
+                            <div className="flex flex-col gap-1">
+                              <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                (dm.status === 'deactivated' || dm.status === 'rejected')
+                                  ? 'bg-rose-100 text-rose-700'
+                                  : 'bg-emerald-100 text-emerald-700'
+                              }`}>
+                                {(dm.status === 'deactivated' || dm.status === 'rejected') ? 'Blocked' : 'Active'}
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                Duty: {dm.isOnline || dm.onlineStatus === 'Online' ? 'Online' : 'Offline'}
                               </span>
                             </div>
                           </td>
@@ -710,6 +763,22 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
                                 title="View Details"
                               >
                                 <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleToggleBlock(dm)}
+                                disabled={savingDeliveryId === String(dm._id)}
+                                className={`p-1.5 rounded transition-colors ${
+                                  (dm.status === 'deactivated' || dm.status === 'rejected')
+                                    ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                                    : "bg-amber-50 text-amber-600 hover:bg-amber-100"
+                                }`}
+                                title={(dm.status === 'deactivated' || dm.status === 'rejected') ? "Unblock Delivery Partner" : "Block Delivery Partner"}
+                              >
+                                {(dm.status === 'deactivated' || dm.status === 'rejected') ? (
+                                  <ShieldCheck className="w-4 h-4" />
+                                ) : (
+                                  <ShieldX className="w-4 h-4" />
+                                )}
                               </button>
                               <button
                                 onClick={() => handleDelete(dm)}

@@ -143,7 +143,7 @@ export default function MyBookings() {
         <AnimatedPage className="bg-slate-50 min-h-screen pb-10">
             {/* Header */}
             <div className="bg-white p-4 flex items-center shadow-sm sticky top-0 z-10">
-                <button onClick={() => navigate("/")}>
+                <button onClick={() => navigate("/food/user")}>
                     <ArrowLeft className="w-6 h-6 text-gray-700 cursor-pointer" />
                 </button>
                 <h1 className="ml-4 text-xl font-semibold text-gray-800">My Table Bookings</h1>

@@ -218,7 +218,7 @@ export default function RestaurantsList() {
         setLoading(true)
         setError(null)
 
-        const response = await adminAPI.getApprovedRestaurants({})
+        const response = await adminAPI.getApprovedRestaurants({ status: "all" })
 
         if (cancelled) return
 
@@ -260,20 +260,22 @@ export default function RestaurantsList() {
         }
 
         if (rawList.length > 0 || body?.success === true) {
-          const mappedRestaurants = rawList.map((restaurant, index) => ({
-            id: restaurant._id || restaurant.id || index + 1,
-            _id: restaurant._id,
-            name: restaurant.name || restaurant.restaurantName || "N/A",
-            ownerName: restaurant.ownerName || "N/A",
-            ownerPhone: restaurant.ownerPhone || restaurant.phone || "N/A",
-            zone: zoneLabelFromRestaurant(restaurant),
-            approvalStatus: normalizeApprovalStatus(restaurant),
-            isActive: restaurant.isActive !== false && restaurant.status === "approved",
-            rating: restaurant.rating || restaurant.ratings?.average || 0,
-            logo: getPrimaryRestaurantImage(restaurant, PLACEHOLDER_40),
-            pureVegRestaurant: restaurant.pureVegRestaurant === true,
-            originalData: restaurant,
-          }))
+          const mappedRestaurants = rawList
+            .filter((restaurant) => normalizeApprovalStatus(restaurant) !== "pending")
+            .map((restaurant, index) => ({
+              id: restaurant._id || restaurant.id || index + 1,
+              _id: restaurant._id,
+              name: restaurant.name || restaurant.restaurantName || "N/A",
+              ownerName: restaurant.ownerName || "N/A",
+              ownerPhone: restaurant.ownerPhone || restaurant.phone || "N/A",
+              zone: zoneLabelFromRestaurant(restaurant),
+              approvalStatus: normalizeApprovalStatus(restaurant),
+              isActive: restaurant.isActive !== false && restaurant.status === "approved",
+              rating: restaurant.rating || restaurant.ratings?.average || 0,
+              logo: getPrimaryRestaurantImage(restaurant, PLACEHOLDER_40),
+              pureVegRestaurant: restaurant.pureVegRestaurant === true,
+              originalData: restaurant,
+            }))
           if (!cancelled) setRestaurants(mappedRestaurants)
         } else {
           if (!cancelled) setRestaurants([])

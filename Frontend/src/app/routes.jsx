@@ -54,30 +54,7 @@ const parseFeatureEnabled = (value, fallback = true) => {
 }
 
 const RootEntryRoute = () => {
-  const [loading, setLoading] = useState(true)
-  const [showLandingAtRoot, setShowLandingAtRoot] = useState(true)
-
-  useEffect(() => {
-    const loadFeatureSettings = async () => {
-      try {
-        const res = await adminAPI.getPublicFeatureSettings()
-        const rows = Array.isArray(res?.data?.data) ? res.data.data : []
-        const feature = rows.find((row) => row.key === 'root_landing_and_unregistered_control')
-        if (feature) {
-          setShowLandingAtRoot(parseFeatureEnabled(feature.isEnabled, true))
-        }
-      } catch (_error) {
-        // fallback to landing page when API is unavailable
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadFeatureSettings()
-  }, [])
-
-  if (loading) return <PageLoader />
-  if (!showLandingAtRoot) return <Navigate to="/food/user" replace />
-  return <LaunchLandingPage />
+  return <Navigate to="/food/user" replace />
 }
 
 
@@ -116,9 +93,9 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      {/* Root → Master Landing Page */}
-      <Route path="/" element={<RootEntryRoute />} />
-      <Route path="/launch-aug-15" element={<LaunchLandingPage />} />
+      {/* Root → Redirect directly to Food Homepage */}
+      <Route path="/" element={<Navigate to="/food/user" replace />} />
+      <Route path="/launch-aug-15" element={<Navigate to="/food/user" replace />} />
       <Route path="/invite" element={<ReferralInvitePage />} />
       {/* Food Module */}
       <Route path="/food/*" element={<FoodAppWrapper />} />
@@ -147,7 +124,7 @@ const AppRoutes = () => {
       <Route path="/orders/*" element={<RedirectToFood />} />
 
       {/* Fallback 404 */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/food/user" replace />} />
     </Routes>
   )
 }
