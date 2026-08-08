@@ -189,7 +189,7 @@ export async function updateOrderAcceptanceSettings(req, res, next) {
 export async function updateBusinessSettings(req, res, next) {
     try {
         const data = req.body.data ? JSON.parse(req.body.data) : {};
-        const { companyName, email, phoneCountryCode, phoneNumber, address, state, pincode, region, restaurantTdsPercentage, deliveryBoyTdsPercentage } = data;
+        const { companyName, email, phoneCountryCode, phoneNumber, address, state, pincode, region, restaurantTdsPercentage, deliveryBoyTdsPercentage, launchCountdown } = data;
 
         // Validation
         if (!companyName || companyName.trim().length < 2 || companyName.trim().length > 50) {
@@ -243,6 +243,7 @@ export async function updateBusinessSettings(req, res, next) {
         if (region) settings.region = region;
         if (restaurantTdsPercentage !== undefined) settings.restaurantTdsPercentage = Number(restaurantTdsPercentage);
         if (deliveryBoyTdsPercentage !== undefined) settings.deliveryBoyTdsPercentage = Number(deliveryBoyTdsPercentage);
+        if (launchCountdown !== undefined) settings.launchCountdown = launchCountdown;
 
         // Handle file uploads
         if (req.files) {

@@ -53,6 +53,13 @@ export default function BusinessSetup() {
     region: "",
     restaurantTdsPercentage: 0,
     deliveryBoyTdsPercentage: 0,
+    launchCountdown: {
+      isEnabled: false,
+      timerTime: "",
+      timerText: "",
+      timerDescription: "",
+      showLaunchPageOnly: false
+    }
   });
 
   // Fetch business settings on mount
@@ -78,6 +85,13 @@ export default function BusinessSetup() {
           region: settings.region || "India",
           restaurantTdsPercentage: settings.restaurantTdsPercentage ?? 0,
           deliveryBoyTdsPercentage: settings.deliveryBoyTdsPercentage ?? 0,
+          launchCountdown: {
+            isEnabled: settings.launchCountdown?.isEnabled ?? false,
+            timerTime: settings.launchCountdown?.timerTime || "",
+            timerText: settings.launchCountdown?.timerText || "",
+            timerDescription: settings.launchCountdown?.timerDescription || "",
+            showLaunchPageOnly: settings.launchCountdown?.showLaunchPageOnly ?? false
+          }
         });
 
         // Set logo and favicon previews if they exist
@@ -171,6 +185,13 @@ export default function BusinessSetup() {
         region: formData.region,
         restaurantTdsPercentage: Number(formData.restaurantTdsPercentage || 0),
         deliveryBoyTdsPercentage: Number(formData.deliveryBoyTdsPercentage || 0),
+        launchCountdown: {
+          isEnabled: Boolean(formData.launchCountdown?.isEnabled),
+          timerTime: formData.launchCountdown?.timerTime || "",
+          timerText: formData.launchCountdown?.timerText || "",
+          timerDescription: formData.launchCountdown?.timerDescription || "",
+          showLaunchPageOnly: Boolean(formData.launchCountdown?.showLaunchPageOnly)
+        }
       };
 
       // Prepare files
@@ -834,6 +855,115 @@ export default function BusinessSetup() {
             </div>
           </div>
 
+          {/* Launch Countdown Settings */}
+          <div className="px-4 py-4 border-t border-slate-100">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <span>Launch Countdown Settings</span>
+            </h3>
+
+            <div className="space-y-4">
+              {/* Toggles */}
+              <div className="flex flex-col sm:flex-row gap-4 bg-slate-50 p-4 rounded-lg">
+                <div className="flex items-center gap-3 flex-1 justify-between sm:justify-start">
+                  <span className="text-xs font-semibold text-slate-700">Enable Countdown Banner on User Screen</span>
+                  <ToggleSwitch
+                    enabled={formData.launchCountdown?.isEnabled}
+                    onChange={(val) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        launchCountdown: {
+                          ...prev.launchCountdown,
+                          isEnabled: val
+                        }
+                      }));
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-center gap-3 flex-1 justify-between sm:justify-start border-t sm:border-t-0 sm:border-l border-slate-200 pt-3 sm:pt-0 sm:pl-4">
+                  <span className="text-xs font-semibold text-slate-700">Force Launch Page Overlay (App Lock)</span>
+                  <ToggleSwitch
+                    enabled={formData.launchCountdown?.showLaunchPageOnly}
+                    onChange={(val) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        launchCountdown: {
+                          ...prev.launchCountdown,
+                          showLaunchPageOnly: val
+                        }
+                      }));
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Timer Config Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Launch Date & Time
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={formData.launchCountdown?.timerTime || ""}
+                    onChange={(e) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        launchCountdown: {
+                          ...prev.launchCountdown,
+                          timerTime: e.target.value
+                        }
+                      }));
+                    }}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Countdown Title/Header Text
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Launching Soon!"
+                    value={formData.launchCountdown?.timerText || ""}
+                    onChange={(e) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        launchCountdown: {
+                          ...prev.launchCountdown,
+                          timerText: e.target.value
+                        }
+                      }));
+                    }}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Countdown Description
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. We are working hard to prepare something amazing. Stay tuned!"
+                    value={formData.launchCountdown?.timerDescription || ""}
+                    onChange={(e) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        launchCountdown: {
+                          ...prev.launchCountdown,
+                          timerDescription: e.target.value
+                        }
+                      }));
+                    }}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Save Button Section */}
           <div className="px-4 py-4 border-t border-slate-100">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -873,13 +1003,11 @@ export default function BusinessSetup() {
   );
 }
 
-function ToggleSwitch({ initial = false }) {
-  const [enabled, setEnabled] = useState(initial);
-
+function ToggleSwitch({ enabled = false, onChange }) {
   return (
     <button
       type="button"
-      onClick={() => setEnabled((prev) => !prev)}
+      onClick={() => onChange && onChange(!enabled)}
       className={`inline-flex items-center w-10 h-5 rounded-full border transition-all ${enabled ? "bg-blue-600 border-blue-600 justify-end" : "bg-slate-200 border-slate-300 justify-start"
         }`}
     >

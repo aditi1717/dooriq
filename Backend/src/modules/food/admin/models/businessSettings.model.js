@@ -60,7 +60,14 @@ const businessSettingsSchema = new mongoose.Schema(
             reviewUrl: { type: String, default: '' },
         },
         restaurantTdsPercentage: { type: Number, default: 0, min: 0, max: 100 },
-        deliveryBoyTdsPercentage: { type: Number, default: 0, min: 0, max: 100 }
+        deliveryBoyTdsPercentage: { type: Number, default: 0, min: 0, max: 100 },
+        launchCountdown: {
+            isEnabled: { type: Boolean, default: false },
+            timerTime: { type: String, default: '' },
+            timerText: { type: String, default: '' },
+            timerDescription: { type: String, default: '' },
+            showLaunchPageOnly: { type: Boolean, default: false }
+        }
     },
     { timestamps: true }
 );

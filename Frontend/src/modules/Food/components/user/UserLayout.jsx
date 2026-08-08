@@ -4,7 +4,9 @@ import { ProfileProvider } from "@food/context/ProfileContext"
 import LocationPrompt from "./LocationPrompt"
 import { CartProvider } from "@food/context/CartContext"
 import { OrdersProvider } from "@food/context/OrdersContext"
-import { WifiOff, RefreshCw } from "lucide-react"
+import { WifiOff, RefreshCw, Clock, Lock, Sparkles, PartyPopper, ArrowRight } from "lucide-react"
+import confetti from "canvas-confetti"
+import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -170,6 +172,108 @@ export default function UserLayout() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
   const [hasConnectionError, setHasConnectionError] = useState(false)
 
+  const [businessSettings, setBusinessSettings] = useState(null)
+  const [timeLeft, setTimeLeft] = useState(null)
+  const [dismissedLock, setDismissedLock] = useState(false)
+
+  const isTimerEnabled = Boolean(businessSettings?.launchCountdown?.isEnabled);
+  const isTimerZero = Boolean(
+    isTimerEnabled &&
+    timeLeft &&
+    timeLeft.days === 0 &&
+    timeLeft.hours === 0 &&
+    timeLeft.minutes === 0 &&
+    timeLeft.seconds === 0
+  );
+
+  useEffect(() => {
+    if (!isTimerZero) return;
+    try {
+      // Trigger backend auto-disable and auto-refresh the browser page
+      loadBusinessSettings().finally(() => {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      });
+    } catch (e) {
+      window.location.reload();
+    }
+  }, [isTimerZero]);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const cached = getCachedSettings();
+        if (cached) {
+          setBusinessSettings(cached);
+        }
+        const fresh = await loadBusinessSettings();
+        if (fresh) {
+          setBusinessSettings(fresh);
+        }
+      } catch (err) {
+        console.error("Failed to load settings in UserLayout", err);
+      }
+    };
+    loadSettings();
+
+    window.addEventListener('businessSettingsUpdated', loadSettings);
+    return () => {
+      window.removeEventListener('businessSettingsUpdated', loadSettings);
+    }
+  }, []);
+
+  useEffect(() => {
+    const rawTimerTime = businessSettings?.launchCountdown?.timerTime;
+    const isEnabled = businessSettings?.launchCountdown?.isEnabled;
+    const showLaunchPageOnly = businessSettings?.launchCountdown?.showLaunchPageOnly;
+
+    if ((!isEnabled && !showLaunchPageOnly) || !rawTimerTime) {
+      setTimeLeft(null);
+      return;
+    }
+
+    const parseTargetDate = (timeStr) => {
+      if (!timeStr) return null;
+      if (typeof timeStr === 'string' && timeStr.includes('T') && !timeStr.endsWith('Z') && !timeStr.includes('+')) {
+        const [datePart, timePart] = timeStr.split('T');
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hours, minutes] = timePart.split(':').map(Number);
+        return new Date(year, month - 1, day, hours || 0, minutes || 0);
+      }
+      const parsed = new Date(timeStr);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    };
+
+    const targetDate = parseTargetDate(rawTimerTime);
+    if (!targetDate) {
+      setTimeLeft(null);
+      return;
+    }
+
+    const calculateTimeLeft = () => {
+      const difference = +targetDate - +new Date();
+      if (difference <= 0) {
+        return { days: 0, hours: 0, minutes: 0, seconds: 0 };
+      }
+      return {
+        days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+        minutes: Math.floor((difference / 1000 / 60) % 60),
+        seconds: Math.floor((difference / 1000) % 60),
+      };
+    };
+
+    setTimeLeft(calculateTimeLeft());
+
+    const interval = setInterval(() => {
+      const nextTime = calculateTimeLeft();
+      setTimeLeft(nextTime);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [businessSettings]);
+
   useEffect(() => {
     const handleOnline = () => {
       setIsOffline(false)
@@ -267,28 +371,93 @@ export default function UserLayout() {
     )
   }
 
+  const isUserHomePage = normalizedPath === "/" || normalizedPath === "/user" || normalizedPath === "";
+  const isAppLocked = Boolean(businessSettings?.launchCountdown?.showLaunchPageOnly) && !dismissedLock;
+  const isBannerEnabled = Boolean(businessSettings?.launchCountdown?.isEnabled);
+  const showCountdownClock = Boolean((isBannerEnabled || isAppLocked) && timeLeft !== null);
+  const shouldShowTopPopup = (isAppLocked || isBannerEnabled) && !dismissedLock && timeLeft && isUserHomePage && !isTimerZero;
+
   return (
     <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] transition-colors duration-200">
-      <CartProvider>
-        <ProfileProvider>
-          <OrdersProvider>
-            <SearchOverlayProvider>
-              <LocationSelectorProvider>
-                {/* <Navbar /> */}
-                {/* Desktop Navbar - Hidden on mobile, visible on medium+ screens */}
-                <div className="hidden md:block">
-                  {showBottomNav && <DesktopNavbar showLogo={!isUnder250} />}
+      {/* Center Countdown Lock Modal (Middle of Screen) */}
+      {isAppLocked && isUserHomePage && !isTimerZero && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm select-none pointer-events-auto">
+          <div className="bg-white/95 dark:bg-zinc-950/90 border border-white/40 dark:border-zinc-800/80 shadow-2xl rounded-3xl p-8 sm:p-10 max-w-md w-full text-center relative overflow-hidden backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-300">
+            <div className="absolute -top-24 -left-24 w-48 h-48 bg-blue-500/10 rounded-full blur-[60px] pointer-events-none" />
+            <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-indigo-500/15 rounded-full blur-[60px] pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col items-center">
+              <div className="p-4 bg-gradient-to-tr from-blue-500/10 to-indigo-500/10 text-blue-600 dark:text-blue-400 rounded-3xl mb-6 flex-shrink-0 shadow-sm border border-blue-500/5 animate-pulse" style={{ animationDuration: '4s' }}>
+                <Clock className="w-9 h-9" />
+              </div>
+
+              {businessSettings?.launchCountdown?.timerText && (
+                <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-3 leading-tight px-2">
+                  {businessSettings.launchCountdown.timerText}
+                </h2>
+              )}
+
+              {businessSettings?.launchCountdown?.timerDescription && (
+                <p className="text-sm text-slate-500 dark:text-zinc-400 leading-relaxed max-w-sm px-4 mb-6">
+                  {businessSettings.launchCountdown.timerDescription}
+                </p>
+              )}
+
+              {showCountdownClock && (
+                <div className="flex items-center gap-3 font-mono bg-slate-50 dark:bg-zinc-900/60 px-6 py-4 rounded-2xl border border-slate-200/50 dark:border-zinc-800/40 shadow-inner w-full justify-center">
+                  <div className="flex flex-col items-center min-w-[52px]">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-blue-600 dark:text-blue-400 leading-none">
+                      {String(timeLeft.days).padStart(2, '0')}
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-zinc-500 uppercase font-sans tracking-wider mt-2 font-bold">days</span>
+                  </div>
+                  <span className="text-2xl text-slate-300 dark:text-zinc-700 self-start mt-0.5">:</span>
+                  <div className="flex flex-col items-center min-w-[52px]">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-blue-600 dark:text-blue-400 leading-none">
+                      {String(timeLeft.hours).padStart(2, '0')}
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-zinc-500 uppercase font-sans tracking-wider mt-2 font-bold">hours</span>
+                  </div>
+                  <span className="text-2xl text-slate-300 dark:text-zinc-700 self-start mt-0.5">:</span>
+                  <div className="flex flex-col items-center min-w-[52px]">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-blue-600 dark:text-blue-400 leading-none">
+                      {String(timeLeft.minutes).padStart(2, '0')}
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-zinc-500 uppercase font-sans tracking-wider mt-2 font-bold">mins</span>
+                  </div>
+                  <span className="text-2xl text-slate-300 dark:text-zinc-700 self-start mt-0.5">:</span>
+                  <div className="flex flex-col items-center min-w-[52px]">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-blue-600 dark:text-blue-400 leading-none animate-pulse">
+                      {String(timeLeft.seconds).padStart(2, '0')}
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-zinc-500 uppercase font-sans tracking-wider mt-2 font-bold">secs</span>
+                  </div>
                 </div>
-                {/* <LocationPrompt /> */}
-                <main className={showBottomNav ? "md:pt-40" : ""}>
-                  <Outlet />
-                </main>
-                {showBottomNav && <BottomNavigation />}
-              </LocationSelectorProvider>
-            </SearchOverlayProvider>
-          </OrdersProvider>
-        </ProfileProvider>
-      </CartProvider>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={`transition-all duration-300 ${isAppLocked ? "blur-md select-none pointer-events-none" : ""}`}>
+        <CartProvider>
+          <ProfileProvider>
+            <OrdersProvider>
+              <SearchOverlayProvider>
+                <LocationSelectorProvider>
+                  <div className="hidden md:block">
+                    {showBottomNav && <DesktopNavbar showLogo={!isUnder250} />}
+                  </div>
+                  <main className={showBottomNav ? "md:pt-40" : ""}>
+                    <Outlet />
+                  </main>
+                  {showBottomNav && <BottomNavigation />}
+                </LocationSelectorProvider>
+              </SearchOverlayProvider>
+            </OrdersProvider>
+          </ProfileProvider>
+        </CartProvider>
+      </div>
     </div>
   )
 }
