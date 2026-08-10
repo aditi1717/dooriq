@@ -47,12 +47,30 @@ async function listNearbyOnlineDeliveryPartners(
     .select("_id status lastLat lastLng lastLocationAt name")
     .lean();
 
+  const onlineIds = allOnline.map((p) => p._id).filter(Boolean);
+  const busyPartnerIds = new Set();
+  if (onlineIds.length > 0) {
+    const activeOrders = await FoodOrder.find({
+      'dispatch.deliveryPartnerId': { $in: onlineIds },
+      orderStatus: { $nin: ['delivered', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin'] },
+      'dispatch.status': { $in: ['assigned', 'accepted'] },
+    })
+      .select('dispatch.deliveryPartnerId')
+      .lean();
+
+    for (const order of activeOrders || []) {
+      const pid = order?.dispatch?.deliveryPartnerId;
+      if (pid) busyPartnerIds.add(String(pid));
+    }
+  }
+
   const scored = [];
   const allowedStatuses = process.env.NODE_ENV === 'production' ? ['approved'] : ['approved', 'pending'];
   const STALE_GPS_MS = 10 * 60 * 1000;
 
   for (const p of allOnline) {
     if (!allowedStatuses.includes(p.status)) continue;
+    if (busyPartnerIds.has(String(p._id))) continue;
 
     const isStale = !p.lastLocationAt || (Date.now() - new Date(p.lastLocationAt).getTime()) > STALE_GPS_MS;
     if (p.lastLat == null || p.lastLng == null || isStale) {
@@ -79,7 +97,7 @@ async function listNearbyOnlineDeliveryPartners(
       .lean();
 
     return {
-      partners: anyOnline.map((p) => ({
+      partners: anyOnline.filter((p) => !busyPartnerIds.has(String(p._id))).map((p) => ({
         partnerId: p._id,
         distanceKm: null,
         status: p.status,
@@ -336,6 +354,29 @@ export async function processDispatchTimeout(orderId, partnerId) {
 }
 
 
+async function cleanupFirebaseOffersForOrder(order) {
+  try {
+    const db = getFirebaseDB();
+    if (!db || !order?._id) return;
+
+    const orderKey = order._id.toString();
+    const offeredPartners = order.dispatch?.offeredTo || [];
+    for (const offer of offeredPartners) {
+      const pid = offer.partnerId?.toString?.();
+      if (!pid) continue;
+      db.ref(`delivery_offers/${pid}/${orderKey}`).remove().catch(() => {});
+    }
+
+    const currentPartnerId = order.dispatch?.deliveryPartnerId?.toString?.();
+    if (currentPartnerId) {
+      db.ref(`delivery_offers/${currentPartnerId}/${orderKey}`).remove().catch(() => {});
+    }
+  } catch (err) {
+    logger.warn(`cleanupFirebaseOffersForOrder failed: ${err?.message || err}`);
+  }
+}
+
+
 export async function resendDeliveryNotificationRestaurant(orderId, restaurantId) {
   const identity = buildOrderIdentityFilter(orderId);
   const order = await FoodOrder.findOne({
@@ -354,6 +395,7 @@ export async function resendDeliveryNotificationRestaurant(orderId, restaurantId
     throw new ValidationError('A delivery partner has already accepted this order.');
   }
 
+  await cleanupFirebaseOffersForOrder(order);
   order.dispatch.status = 'unassigned';
   order.dispatch.deliveryPartnerId = null;
   order.dispatch.offeredTo = [];
@@ -378,6 +420,7 @@ export async function resendDeliveryNotificationAdmin(orderId) {
     throw new ValidationError('A delivery partner has already accepted this order. Please use Deassign & Resend instead.');
   }
 
+  await cleanupFirebaseOffersForOrder(order);
   order.dispatch.status = 'unassigned';
   order.dispatch.deliveryPartnerId = null;
   order.dispatch.offeredTo = [];

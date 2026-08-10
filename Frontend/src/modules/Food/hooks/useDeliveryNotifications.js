@@ -5,6 +5,7 @@ import { deliveryAPI } from '@food/api';
 import alertSound from '@food/assets/audio/alert.mp3';
 import originalSound from '@food/assets/audio/original.mp3';
 import { dispatchNotificationInboxRefresh } from '@food/hooks/useNotificationInbox';
+import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { ref, onValue } from 'firebase/database';
 import { firebaseRealtimeDb, ensureFirebaseInitialized } from '@food/firebase';
 
@@ -190,7 +191,9 @@ export const useDeliveryNotifications = () => {
   const [orderStatusUpdate, setOrderStatusUpdate] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [deliveryPartnerId, setDeliveryPartnerId] = useState(null);
+  const activeTripOrder = useDeliveryStore((state) => state.activeOrder);
   const joinedDeliveryRoomRef = useRef(null);
+  const pendingIncomingOrdersRef = useRef([]);
   const ALERT_LOOP_INTERVAL_MS = 4500;
   const ALERT_LOOP_MAX_MS = 120000;
   const ALERT_DEDUPE_MS = 15000;
@@ -229,6 +232,12 @@ export const useDeliveryNotifications = () => {
     lastBrowserNotificationAtByOrderRef.current.set(key, now);
     return true;
   };
+
+  const isSameQueuedOrder = useCallback((left = {}, right = {}) => {
+    const leftKey = getOrderAlertKey(left);
+    const rightKey = getOrderAlertKey(right);
+    return Boolean(leftKey && rightKey && leftKey === rightKey);
+  }, []);
 
   const stopAlertLoop = useCallback(() => {
     if (alertLoopTimerRef.current) {
@@ -355,19 +364,136 @@ export const useDeliveryNotifications = () => {
     }
   }, []);
 
-  const handleIncomingOrderAlert = useCallback((orderData = {}) => {
+  const presentIncomingOrder = useCallback((orderData = {}) => {
     if (!shouldProcessOrderAlert(orderData)) {
       return;
     }
 
-    activeOrderRef.current = orderData || { id: Date.now() };
-    playNotificationSound(orderData);
+    const normalizedOrder = orderData || { id: Date.now() };
+    activeOrderRef.current = normalizedOrder;
+    setNewOrder(normalizedOrder);
+    playNotificationSound(normalizedOrder);
     startAlertLoop(playNotificationSound);
 
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-      showBackgroundOrderNotification(orderData);
+      showBackgroundOrderNotification(normalizedOrder);
     }
   }, [playNotificationSound, showBackgroundOrderNotification, startAlertLoop]);
+
+  const queueIncomingOrder = useCallback((orderData = {}) => {
+    const incomingKey = getOrderAlertKey(orderData);
+    if (!incomingKey) return;
+
+    const currentKey = getOrderAlertKey(activeOrderRef.current) || getOrderAlertKey(newOrder);
+    const alreadyQueued = pendingIncomingOrdersRef.current.some((queuedOrder) =>
+      isSameQueuedOrder(queuedOrder, orderData),
+    );
+
+    if (currentKey && currentKey === incomingKey) {
+      return;
+    }
+
+    if (alreadyQueued) {
+      return;
+    }
+
+    const riderBusyWithTrip = Boolean(activeTripOrder);
+    const riderHasVisibleOrder = Boolean(currentKey);
+
+    if (!riderBusyWithTrip && !riderHasVisibleOrder) {
+      presentIncomingOrder(orderData);
+      return;
+    }
+
+    pendingIncomingOrdersRef.current.push(orderData);
+    debugLog('Queued incoming order behind active offer/trip', {
+      orderId: incomingKey,
+      queueSize: pendingIncomingOrdersRef.current.length,
+      riderBusyWithTrip,
+      riderHasVisibleOrder,
+    });
+  }, [activeTripOrder, isSameQueuedOrder, newOrder, presentIncomingOrder]);
+
+  const handleIncomingOrderAlert = useCallback((orderData = {}) => {
+    queueIncomingOrder(orderData);
+  }, [queueIncomingOrder]);
+
+  const promoteNextIncomingOrder = useCallback(() => {
+    if (activeTripOrder) return;
+    if (activeOrderRef.current) return;
+
+    const nextOrder = pendingIncomingOrdersRef.current.shift();
+    if (!nextOrder) {
+      return;
+    }
+
+    presentIncomingOrder(nextOrder);
+  }, [activeTripOrder, presentIncomingOrder]);
+
+  const clearNewOrder = useCallback((options = {}) => {
+    const { advanceQueue = true } = options || {};
+    stopAlertLoop();
+    activeOrderRef.current = null;
+    setNewOrder(null);
+
+    if (!advanceQueue) {
+      return;
+    }
+
+    if (activeTripOrder) {
+      return;
+    }
+
+    promoteNextIncomingOrder();
+  }, [activeTripOrder, promoteNextIncomingOrder, stopAlertLoop]);
+
+  const removeIncomingOrderByKey = useCallback((orderData = {}) => {
+    const orderKey = getOrderAlertKey(orderData);
+    if (!orderKey) return false;
+
+    const currentKey = getOrderAlertKey(activeOrderRef.current) || getOrderAlertKey(newOrder);
+    const beforeLength = pendingIncomingOrdersRef.current.length;
+
+    pendingIncomingOrdersRef.current = pendingIncomingOrdersRef.current.filter((queuedOrder) => (
+      !isSameQueuedOrder(queuedOrder, orderData)
+    ));
+
+    const removedFromQueue = pendingIncomingOrdersRef.current.length !== beforeLength;
+
+    if (currentKey && currentKey === orderKey) {
+      clearNewOrder();
+      return true;
+    }
+
+    return removedFromQueue;
+  }, [clearNewOrder, isSameQueuedOrder, newOrder]);
+
+  const syncIncomingOrdersWithFirebaseSnapshot = useCallback((snapshotOrders = []) => {
+    const snapshotKeySet = new Set(
+      snapshotOrders
+        .map((order) => getOrderAlertKey(order))
+        .filter(Boolean),
+    );
+
+    if (snapshotKeySet.size === 0) {
+      clearNewOrder({ advanceQueue: false });
+      pendingIncomingOrdersRef.current = [];
+      return;
+    }
+
+    const activeKey = getOrderAlertKey(activeOrderRef.current) || getOrderAlertKey(newOrder);
+    pendingIncomingOrdersRef.current = pendingIncomingOrdersRef.current.filter((queuedOrder) => {
+      const queuedKey = getOrderAlertKey(queuedOrder);
+      if (!queuedKey) return false;
+      if (activeKey && queuedKey === activeKey) return true;
+      return snapshotKeySet.has(queuedKey);
+    });
+
+    if (!activeTripOrder && activeKey && !snapshotKeySet.has(activeKey)) {
+      clearNewOrder({ advanceQueue: false });
+      promoteNextIncomingOrder();
+    }
+  }, [activeTripOrder, clearNewOrder, newOrder, promoteNextIncomingOrder]);
 
   const recoverDeliveryState = useCallback(async () => {
     if (!deliveryPartnerId) return;
@@ -418,7 +544,6 @@ export const useDeliveryNotifications = () => {
 
       if (recoverableOrder && !activeOrderRef.current) {
         debugLog('Recovered available delivery order after reconnect/focus:', recoverableOrder);
-        setNewOrder(recoverableOrder);
         handleIncomingOrderAlert(recoverableOrder);
       }
     } catch (error) {
@@ -488,6 +613,12 @@ export const useDeliveryNotifications = () => {
       }
     };
   }, [deliveryPartnerId, isConnected]);
+
+  useEffect(() => {
+    if (activeTripOrder) return;
+    if (newOrder) return;
+    promoteNextIncomingOrder();
+  }, [activeTripOrder, newOrder, promoteNextIncomingOrder]);
 
   // Step 4: All effects (unconditional hook calls, conditional logic inside)
   useEffect(() => {
@@ -911,10 +1042,8 @@ export const useDeliveryNotifications = () => {
         ...(statusData || {}),
         status: 'cancelled'
       });
-      const targetId = getOrderAlertKey(statusData);
-      const activeId = getOrderAlertKey(activeOrderRef.current) || getOrderAlertKey(newOrder);
-      if (targetId && activeId && targetId === activeId) {
-        clearNewOrder();
+      const removed = removeIncomingOrderByKey(statusData);
+      if (removed) {
         window.location.reload();
       }
     });
@@ -925,22 +1054,17 @@ export const useDeliveryNotifications = () => {
         ...(statusData || {}),
         status: 'deleted'
       });
-      const targetId = getOrderAlertKey(statusData);
-      const activeId = getOrderAlertKey(activeOrderRef.current) || getOrderAlertKey(newOrder);
-      if (targetId && activeId && targetId === activeId) {
-        clearNewOrder();
+      const removed = removeIncomingOrderByKey(statusData);
+      if (removed) {
         window.location.reload();
       }
     });
 
     socketRef.current.on('order_claimed', (data) => {
       debugLog('?? Order claimed by another partner:', data);
-      const currentActiveId = getOrderAlertKey(activeOrderRef.current);
-      const claimedId = getOrderAlertKey(data);
-      
-      if (currentActiveId && claimedId && currentActiveId === claimedId) {
+      const removed = removeIncomingOrderByKey(data);
+      if (removed) {
         debugLog('?? Removing claimed order from local state');
-        clearNewOrder();
       }
     });
 
@@ -957,8 +1081,7 @@ export const useDeliveryNotifications = () => {
     socketRef.current.on('order_deassigned', (data) => {
       debugLog('Delivery order deassigned by admin:', data);
       stopAlertLoop();
-      activeOrderRef.current = null;
-      setNewOrder(null);
+      removeIncomingOrderByKey(data);
       setOrderStatusUpdate({
         ...(data || {}),
         status: 'deassigned'
@@ -1043,13 +1166,6 @@ export const useDeliveryNotifications = () => {
     }
   }, [deliveryPartnerId, joinDeliveryRoomIfPossible, recoverDeliveryState]);
 
-  // Helper functions
-  const clearNewOrder = () => {
-    stopAlertLoop();
-    activeOrderRef.current = null;
-    setNewOrder(null);
-  };
-
   const clearOrderReady = () => {
     setOrderReady(null);
   };
@@ -1086,16 +1202,44 @@ export const useDeliveryNotifications = () => {
       debugLog('Firebase delivery_offers update received:', data);
 
       if (data) {
-        const offerKeys = Object.keys(data);
-        if (offerKeys.length > 0) {
-          const orderId = offerKeys[0];
-          const orderData = data[orderId];
-          if (orderData) {
-            setNewOrder(orderData);
-            handleIncomingOrderAlert(orderData);
-          }
+        const offers = Object.entries(data)
+          .map(([firebaseOrderKey, orderData]) => {
+            if (!orderData || typeof orderData !== 'object') return null;
+            const orderKey = String(
+              orderData.orderMongoId ||
+              orderData.order_mongo_id ||
+              orderData.orderId ||
+              orderData.order_id ||
+              firebaseOrderKey ||
+              ''
+            ).trim();
+
+            return {
+              ...orderData,
+              orderMongoId: orderData.orderMongoId || orderData.order_mongo_id || orderKey,
+              orderId: orderData.orderId || orderData.order_id || orderKey,
+              _firebaseOrderKey: firebaseOrderKey,
+              _offerSortTs: Number(orderData.offeredAt || orderData.createdAt || orderData.updatedAt || 0) || 0,
+            };
+          })
+          .filter(Boolean)
+          .sort((a, b) => {
+            if (b._offerSortTs !== a._offerSortTs) {
+              return b._offerSortTs - a._offerSortTs;
+            }
+            return String(b.orderId || '').localeCompare(String(a.orderId || ''));
+          });
+
+        if (offers.length > 0) {
+          syncIncomingOrdersWithFirebaseSnapshot(offers);
+          offers.forEach((offer) => {
+            handleIncomingOrderAlert(offer);
+          });
+        } else {
+          syncIncomingOrdersWithFirebaseSnapshot([]);
         }
       } else {
+        syncIncomingOrdersWithFirebaseSnapshot([]);
         clearNewOrder();
       }
     }, (error) => {

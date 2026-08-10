@@ -134,10 +134,25 @@ export default function RestaurantsList() {
     estimatedDeliveryTime: "",
     openingTime: "",
     closingTime: "",
+    panNumber: "",
+    gstRegistered: false,
+    gstNumber: "",
+    gstLegalName: "",
+    gstAddress: "",
+    fssaiNumber: "",
+    fssaiExpiry: "",
+    accountHolderName: "",
+    accountNumber: "",
+    accountType: "",
+    ifscCode: "",
+    upiId: "",
     isActive: true,
   })
   const [profileImageFile, setProfileImageFile] = useState(null)
   const [profileImagePreview, setProfileImagePreview] = useState("")
+  const [panDocumentFile, setPanDocumentFile] = useState(null)
+  const [gstDocumentFile, setGstDocumentFile] = useState(null)
+  const [fssaiDocumentFile, setFssaiDocumentFile] = useState(null)
   const [isEditingLocation, setIsEditingLocation] = useState(false)
   const [savingLocation, setSavingLocation] = useState(false)
   const [locationEditError, setLocationEditError] = useState("")
@@ -980,6 +995,13 @@ export default function RestaurantsList() {
   }
 
   const buildDetailsFormFromRestaurant = (restaurant) => {
+    const formatDateForInput = (value) => {
+      if (!value) return ""
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return ""
+      return date.toISOString().slice(0, 10)
+    }
+
     if (!restaurant) {
       return {
         name: "",
@@ -992,6 +1014,18 @@ export default function RestaurantsList() {
         estimatedDeliveryTime: "",
         openingTime: "",
         closingTime: "",
+        panNumber: "",
+        gstRegistered: false,
+        gstNumber: "",
+        gstLegalName: "",
+        gstAddress: "",
+        fssaiNumber: "",
+        fssaiExpiry: "",
+        accountHolderName: "",
+        accountNumber: "",
+        accountType: "",
+        ifscCode: "",
+        upiId: "",
         isActive: true,
       }
     }
@@ -1025,6 +1059,18 @@ export default function RestaurantsList() {
       estimatedDeliveryTime: estimatedDeliveryTimeValue,
       openingTime: openingTimeValue,
       closingTime: closingTimeValue,
+      panNumber: restaurant.panNumber || restaurant.onboarding?.step3?.pan?.panNumber || "",
+      gstRegistered: restaurant.gstRegistered !== undefined ? Boolean(restaurant.gstRegistered) : Boolean(restaurant.onboarding?.step3?.gst?.isRegistered),
+      gstNumber: restaurant.gstNumber || restaurant.onboarding?.step3?.gst?.gstNumber || "",
+      gstLegalName: restaurant.gstLegalName || restaurant.onboarding?.step3?.gst?.legalName || "",
+      gstAddress: restaurant.gstAddress || restaurant.onboarding?.step3?.gst?.address || "",
+      fssaiNumber: restaurant.fssaiNumber || restaurant.onboarding?.step3?.fssai?.registrationNumber || "",
+      fssaiExpiry: formatDateForInput(restaurant.fssaiExpiry || restaurant.onboarding?.step3?.fssai?.expiryDate),
+      accountHolderName: restaurant.accountHolderName || restaurant.onboarding?.step3?.bank?.accountHolderName || "",
+      accountNumber: restaurant.accountNumber || restaurant.onboarding?.step3?.bank?.accountNumber || "",
+      accountType: restaurant.accountType || restaurant.onboarding?.step3?.bank?.accountType || "",
+      ifscCode: restaurant.ifscCode || restaurant.onboarding?.step3?.bank?.ifscCode || "",
+      upiId: restaurant.upiId || restaurant.onboarding?.step3?.bank?.upiId || "",
       isActive: restaurant.isActive !== false,
     }
   }
@@ -1034,6 +1080,9 @@ export default function RestaurantsList() {
     setDetailsForm(buildDetailsFormFromRestaurant(source))
     setProfileImageFile(null)
     setProfileImagePreview(getPrimaryRestaurantImage(source))
+    setPanDocumentFile(null)
+    setGstDocumentFile(null)
+    setFssaiDocumentFile(null)
     setIsEditingLocation(true)
     setIsEditingDetails(true)
   }
@@ -1042,6 +1091,9 @@ export default function RestaurantsList() {
     setIsEditingDetails(false)
     setProfileImageFile(null)
     setProfileImagePreview("")
+    setPanDocumentFile(null)
+    setGstDocumentFile(null)
+    setFssaiDocumentFile(null)
   }
 
   const handleSaveDetails = async () => {
@@ -1067,6 +1119,39 @@ export default function RestaurantsList() {
         }
       }
 
+      let panImage = undefined
+      if (panDocumentFile) {
+        const uploadRes = await uploadAPI.uploadMedia(panDocumentFile, {
+          folder: "dooriq/restaurant/documents/pan",
+        })
+        const media = uploadRes?.data?.data?.file || uploadRes?.data?.data || uploadRes?.data?.file
+        if (media?.url) {
+          panImage = { url: media.url, publicId: media.publicId || media.public_id }
+        }
+      }
+
+      let gstImage = undefined
+      if (gstDocumentFile) {
+        const uploadRes = await uploadAPI.uploadMedia(gstDocumentFile, {
+          folder: "dooriq/restaurant/documents/gst",
+        })
+        const media = uploadRes?.data?.data?.file || uploadRes?.data?.data || uploadRes?.data?.file
+        if (media?.url) {
+          gstImage = { url: media.url, publicId: media.publicId || media.public_id }
+        }
+      }
+
+      let fssaiImage = undefined
+      if (fssaiDocumentFile) {
+        const uploadRes = await uploadAPI.uploadMedia(fssaiDocumentFile, {
+          folder: "dooriq/restaurant/documents/fssai",
+        })
+        const media = uploadRes?.data?.data?.file || uploadRes?.data?.data || uploadRes?.data?.file
+        if (media?.url) {
+          fssaiImage = { url: media.url, publicId: media.publicId || media.public_id }
+        }
+      }
+
       const normalizedOpeningTime = normalizeTimeValue(detailsForm.openingTime.trim())
       const normalizedClosingTime = normalizeTimeValue(detailsForm.closingTime.trim())
 
@@ -1081,11 +1166,32 @@ export default function RestaurantsList() {
         estimatedDeliveryTime: detailsForm.estimatedDeliveryTime.trim(),
         openingTime: normalizedOpeningTime,
         closingTime: normalizedClosingTime,
+        panNumber: detailsForm.panNumber.trim(),
+        gstRegistered: detailsForm.gstRegistered === true,
+        gstNumber: detailsForm.gstNumber.trim(),
+        gstLegalName: detailsForm.gstLegalName.trim(),
+        gstAddress: detailsForm.gstAddress.trim(),
+        fssaiNumber: detailsForm.fssaiNumber.trim(),
+        fssaiExpiry: detailsForm.fssaiExpiry || undefined,
+        accountHolderName: detailsForm.accountHolderName.trim(),
+        accountNumber: detailsForm.accountNumber.trim(),
+        accountType: detailsForm.accountType.trim(),
+        ifscCode: detailsForm.ifscCode.trim(),
+        upiId: detailsForm.upiId.trim(),
         isActive: detailsForm.isActive,
       }
 
       if (profileImage) {
         payload.profileImage = profileImage
+      }
+      if (panImage) {
+        payload.panImage = panImage
+      }
+      if (gstImage) {
+        payload.gstImage = gstImage
+      }
+      if (fssaiImage) {
+        payload.fssaiImage = fssaiImage
       }
 
       const response = await adminAPI.updateRestaurant(restaurantId, payload)
@@ -1117,6 +1223,9 @@ export default function RestaurantsList() {
 
       setIsEditingDetails(false)
       setProfileImageFile(null)
+      setPanDocumentFile(null)
+      setGstDocumentFile(null)
+      setFssaiDocumentFile(null)
       alert("Restaurant details updated successfully")
     } catch (err) {
       debugError("Error updating restaurant details:", err)
@@ -1711,6 +1820,157 @@ export default function RestaurantsList() {
                       <input type="text" value={detailsForm.estimatedDeliveryTime} onChange={(e) => setDetailsForm((prev) => ({ ...prev, estimatedDeliveryTime: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
                     </div>
                   </div>
+
+                  <div className="pt-4 border-t border-slate-100">
+                    <h4 className="text-sm font-bold text-slate-900 uppercase tracking-widest mb-4">Compliance & Banking</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">FSSAI Number</label>
+                        <input type="text" value={detailsForm.fssaiNumber} onChange={(e) => setDetailsForm((prev) => ({ ...prev, fssaiNumber: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">FSSAI Expiry</label>
+                        <input type="date" value={detailsForm.fssaiExpiry} onChange={(e) => setDetailsForm((prev) => ({ ...prev, fssaiExpiry: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+                      </div>
+                      <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">FSSAI Document</p>
+                          <p className="text-xs text-slate-500">Replace the current FSSAI file if needed.</p>
+                        </div>
+                        {(restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant)?.fssaiImage && (
+                          <a
+                            href={typeof (restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant)?.fssaiImage === "string"
+                              ? (restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant)?.fssaiImage
+                              : ((restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant)?.fssaiImage?.url || "#")}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            View existing FSSAI document
+                          </a>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          onChange={(e) => setFssaiDocumentFile(e.target.files?.[0] || null)}
+                          className="block w-full text-sm text-slate-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
+                        />
+                        {fssaiDocumentFile && <p className="text-xs text-slate-600">Selected: {fssaiDocumentFile.name}</p>}
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Account Holder Name</label>
+                        <input type="text" value={detailsForm.accountHolderName} onChange={(e) => setDetailsForm((prev) => ({ ...prev, accountHolderName: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Account Number</label>
+                        <input type="text" value={detailsForm.accountNumber} onChange={(e) => setDetailsForm((prev) => ({ ...prev, accountNumber: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Account Type</label>
+                        <input type="text" value={detailsForm.accountType} onChange={(e) => setDetailsForm((prev) => ({ ...prev, accountType: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">IFSC Code</label>
+                        <input type="text" value={detailsForm.ifscCode} onChange={(e) => setDetailsForm((prev) => ({ ...prev, ifscCode: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm uppercase" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">UPI ID</label>
+                        <input type="text" value={detailsForm.upiId} onChange={(e) => setDetailsForm((prev) => ({ ...prev, upiId: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">PAN Number</label>
+                        <input type="text" value={detailsForm.panNumber} onChange={(e) => setDetailsForm((prev) => ({ ...prev, panNumber: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm uppercase" />
+                      </div>
+                      <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">PAN Document</p>
+                          <p className="text-xs text-slate-500">Replace the current PAN file if needed.</p>
+                        </div>
+                        {(restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant)?.panImage && (
+                          <a
+                            href={typeof (restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant)?.panImage === "string"
+                              ? (restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant)?.panImage
+                              : ((restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant)?.panImage?.url || "#")}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            View existing PAN document
+                          </a>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          onChange={(e) => setPanDocumentFile(e.target.files?.[0] || null)}
+                          className="block w-full text-sm text-slate-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
+                        />
+                        {panDocumentFile && <p className="text-xs text-slate-600">Selected: {panDocumentFile.name}</p>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-100">
+                    <h4 className="text-sm font-bold text-slate-900 uppercase tracking-widest mb-4">GST Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2 flex items-center gap-3">
+                        <input
+                          id="gstRegistered"
+                          type="checkbox"
+                          checked={detailsForm.gstRegistered === true}
+                          onChange={(e) => setDetailsForm((prev) => ({ ...prev, gstRegistered: e.target.checked }))}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <label htmlFor="gstRegistered" className="text-sm font-medium text-slate-700">
+                          GST Registered
+                        </label>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">GST Number</label>
+                        <input type="text" value={detailsForm.gstNumber} onChange={(e) => setDetailsForm((prev) => ({ ...prev, gstNumber: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm uppercase" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Legal Name</label>
+                        <input type="text" value={detailsForm.gstLegalName} onChange={(e) => setDetailsForm((prev) => ({ ...prev, gstLegalName: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-xs text-slate-500 mb-1">GST Address</label>
+                        <textarea
+                          rows={3}
+                          value={detailsForm.gstAddress}
+                          onChange={(e) => setDetailsForm((prev) => ({ ...prev, gstAddress: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm resize-none"
+                        />
+                      </div>
+                      <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">GST Document</p>
+                          <p className="text-xs text-slate-500">Optional. Replace the current GST file if needed.</p>
+                        </div>
+                        {(restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant)?.gstImage && (
+                          <a
+                            href={typeof (restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant)?.gstImage === "string"
+                              ? (restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant)?.gstImage
+                              : ((restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant)?.gstImage?.url || "#")}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            View existing GST document
+                          </a>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          onChange={(e) => setGstDocumentFile(e.target.files?.[0] || null)}
+                          className="block w-full text-sm text-slate-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
+                        />
+                        {gstDocumentFile && <p className="text-xs text-slate-600">Selected: {gstDocumentFile.name}</p>}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1922,6 +2182,7 @@ export default function RestaurantsList() {
                         )}
                       </div>
                     </div>
+
                   </div>
 
                   {/* Timings */}

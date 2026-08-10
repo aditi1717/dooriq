@@ -1010,8 +1010,24 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                   <NewOrderModal
                     order={incomingOrder}
                     riderLocation={riderLocation}
-                    onAccept={(o) => { acceptOrder(o); setIncomingOrder(null); clearNewOrder(); }}
-                    onReject={() => { rejectOrder(incomingOrder); setIncomingOrder(null); clearNewOrder(); }}
+                    onAccept={async (o) => {
+                      try {
+                        await acceptOrder(o);
+                        setIncomingOrder(null);
+                        clearNewOrder({ advanceQueue: false });
+                      } catch (_) {
+                        // Keep the current offer visible if accept fails.
+                      }
+                    }}
+                    onReject={async () => {
+                      try {
+                        await rejectOrder(incomingOrder);
+                        setIncomingOrder(null);
+                        clearNewOrder();
+                      } catch (_) {
+                        // Keep the current offer visible if reject fails.
+                      }
+                    }}
                     onMinimize={() => setIsModalMinimized(true)}
                   />
                 )}

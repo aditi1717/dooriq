@@ -22,6 +22,7 @@
     "migrate:outlet-timings-from-opening-closing": "node scripts/sync-outlet-timings-from-opening-closing.js",
     "cleanup:legacy-collections": "node scripts/cleanup-legacy-collections.js",
     "clear:orders": "node scratch_clear_all_orders.js",
+    "check:resend-cleanup": "node scratch_check_resend_cleanup.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
