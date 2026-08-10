@@ -7,7 +7,7 @@ import { config } from './src/config/env.js';
 import { validateConfig } from './src/config/validateEnv.js';
 import { connectDB, disconnectDB } from './src/config/db.js';
 import { connectRedis, closeRedis } from './src/config/redis.js';
-import { initRedisEmitter } from './src/config/socket.js';
+import { initSocket, initRedisEmitter } from './src/config/socket.js';
 import { initializeQueues, closeBullMQConnection } from './src/queues/index.js';
 import { expireExpiredOffers } from './src/modules/food/admin/services/admin.service.js';
 import { syncExpiredFssaiNotifications } from './src/modules/food/restaurant/services/fssaiExpiry.service.js';
@@ -60,8 +60,9 @@ const startServer = async () => {
             initRedisEmitter();
         }
 
-        // 3. Create HTTP server from Express app
+        // 3. Create HTTP server from Express app and initialize Socket.IO
         const httpServer = http.createServer(app);
+        await initSocket(httpServer);
 
         // 4. Watchdog: Recover stuck orders from previous run
         try {

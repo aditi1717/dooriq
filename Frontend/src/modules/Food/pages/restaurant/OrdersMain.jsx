@@ -1838,6 +1838,18 @@ export default function OrdersMain() {
       setCancelReason("");
     } catch (error) {
       debugError("? Error cancelling order:", error);
+      const isNetworkError =
+        error?.code === "ERR_NETWORK" || error?.message === "Network Error";
+
+      if (isNetworkError) {
+        requestOrdersRefresh();
+        toast.info("Cancel request sent. Refreshing order status...");
+        setShowCancelPopup(false);
+        setOrderToCancel(null);
+        setCancelReason("");
+        return;
+      }
+
       toast.error(error.response?.data?.message || "Failed to cancel order");
     }
   };
