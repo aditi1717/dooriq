@@ -2115,22 +2115,20 @@ export default function Home() {
           );
 
           const sortRestaurantsForDisplay = (restaurants) => {
-            if (!userLat || !userLng) return restaurants;
             return [...restaurants].sort((a, b) => {
-              // Available restaurants first, then unavailable
+              // Keep the same homepage list and card logic.
+              // Only move offline/closed restaurants below online/open ones.
               const aAvailable = getRestaurantAvailabilityStatus(
                 a,
                 new Date(),
-                { ignoreOperationalStatus: true },
               ).isOpen;
               const bAvailable = getRestaurantAvailabilityStatus(
                 b,
                 new Date(),
-                { ignoreOperationalStatus: true },
               ).isOpen;
 
               if (aAvailable !== bAvailable) {
-                return aAvailable ? -1 : 1; // Available restaurants come first
+                return aAvailable ? -1 : 1;
               }
 
               // Apply secondary sort based on sortBy filter
@@ -2147,7 +2145,9 @@ export default function Home() {
                 return (a.rating || 0) - (b.rating || 0);
               }
 
-              // Default: sort by distance
+              // Default: keep distance ordering when location is available.
+              if (!userLat || !userLng) return 0;
+
               const aDistance =
                 a.distanceInKm !== null ? a.distanceInKm : Infinity;
               const bDistance =

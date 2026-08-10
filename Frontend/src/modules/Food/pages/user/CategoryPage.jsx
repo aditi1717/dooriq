@@ -592,6 +592,13 @@ export default function CategoryPage() {
       })
     }
 
+    nextRows.sort((left, right) => {
+      const leftOpen = getRestaurantAvailabilityStatus(left, new Date(availabilityTick)).isOpen
+      const rightOpen = getRestaurantAvailabilityStatus(right, new Date(availabilityTick)).isOpen
+      if (leftOpen !== rightOpen) return leftOpen ? -1 : 1
+      return 0
+    })
+
     return uniqueByRestaurant(nextRows)
   }
 
@@ -1258,12 +1265,6 @@ export default function CategoryPage() {
       return true;
     })
 
-    // Filter by availability
-    filtered = filtered.filter(row => {
-      const availability = getRestaurantAvailabilityStatus(row, new Date(availabilityTick));
-      return availability.isOpen;
-    })
-
     return applyFiltersAndSorting(filtered)
   }, [selectedCategory, activeFilters, deferredSearchQuery, restaurantsData, categoryKeywords, vegMode, approvedFoodsData, sortBy, availabilityTick, zoneId])
 
@@ -1321,12 +1322,6 @@ export default function CategoryPage() {
         return false;
       }
       return true;
-    })
-
-    // Filter by availability
-    filtered = filtered.filter(row => {
-      const availability = getRestaurantAvailabilityStatus(row, new Date(availabilityTick));
-      return availability.isOpen;
     })
 
     return applyFiltersAndSorting(filtered)

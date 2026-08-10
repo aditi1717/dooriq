@@ -670,6 +670,13 @@ export default function SearchResults() {
       })
     }
 
+    filtered.sort((a, b) => {
+      const aOpen = getRestaurantAvailabilityStatus(a, new Date(availabilityTick)).isOpen
+      const bOpen = getRestaurantAvailabilityStatus(b, new Date(availabilityTick)).isOpen
+      if (aOpen !== bOpen) return aOpen ? -1 : 1
+      return 0
+    })
+
     return uniqueRestaurants(filtered)
   }, [deferredQuery, selectedCategory, activeFilters, restaurantsData, categoryKeywords, loadingCategories, availabilityTick])
 
@@ -781,6 +788,13 @@ export default function SearchResults() {
     if (activeFilters.has('flat-50-off')) {
       filtered = filtered.filter(r => r.offer && r.offer.includes('50%'))
     }
+
+    filtered.sort((a, b) => {
+      const aOpen = getRestaurantAvailabilityStatus(a, new Date(availabilityTick)).isOpen
+      const bOpen = getRestaurantAvailabilityStatus(b, new Date(availabilityTick)).isOpen
+      if (aOpen !== bOpen) return aOpen ? -1 : 1
+      return 0
+    })
 
     return uniqueRestaurants(filtered)
   }, [deferredQuery, selectedCategory, activeFilters, restaurantsData, categoryKeywords, loadingCategories, availabilityTick])

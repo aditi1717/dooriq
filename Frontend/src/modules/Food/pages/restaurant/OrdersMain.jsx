@@ -1060,8 +1060,54 @@ export default function OrdersMain() {
     return "rgba(244, 63, 94, 0.16)";
   };
 
+  const getOrderIdentityKeys = (orderLike) =>
+    [
+      orderLike?.orderMongoId,
+      orderLike?.orderId,
+      orderLike?._id,
+      orderLike?.id,
+      orderLike?.order_id,
+      orderLike?.mongoId,
+    ]
+      .map((v) => (v == null ? "" : String(v).trim()))
+      .filter(Boolean);
+
+  const isPopupVisibleForStatus = (statusValue) => {
+    const normalizedStatus = String(statusValue || "").trim().toLowerCase();
+    return (
+      !normalizedStatus ||
+      normalizedStatus === "pending" ||
+      normalizedStatus === "created" ||
+      normalizedStatus === "confirmed"
+    );
+  };
+
+  const dismissPopupOrder = ({
+    resetPrepTime = false,
+    resetCountdown = false,
+  } = {}) => {
+    setShowNewOrderPopup(false);
+    setPopupOrder(null);
+    clearNewOrder();
+    if (resetPrepTime) setPrepTime(11);
+    if (resetCountdown) setCountdown(0);
+    setAcceptSwipeProgress(0);
+    setIsAcceptingOrder(false);
+  };
+
+  const findMatchingLiveOrder = (orders = [], orderLike) => {
+    const activeKeys = new Set(getOrderIdentityKeys(orderLike));
+    if (activeKeys.size === 0) return null;
+
+    return (
+      orders.find((order) =>
+        getOrderIdentityKeys(order).some((key) => activeKeys.has(key)),
+      ) || null
+    );
+  };
+
   // Restaurant notifications hook for real-time orders
-  const { newOrder, clearNewOrder, isConnected } = useRestaurantNotifications();
+  const { newOrder, clearNewOrder, isConnected, playNotificationSound } = useRestaurantNotifications();
 
   const rejectReasons = [
     "Restaurant is too busy",
@@ -1254,9 +1300,10 @@ export default function OrdersMain() {
 
         if (isMatch) {
           debugLog("?? Current popup order was handled externally:", incomingOrderId || incomingMongoId, "new status:", status);
-          setShowNewOrderPopup(false);
-          setPopupOrder(null);
-          clearNewOrder();
+          dismissPopupOrder({
+            resetPrepTime: true,
+            resetCountdown: true,
+          });
           
           if (status?.includes('cancelled') || status?.includes('rejected')) {
             toast.info(`Order #${orderId || ""} was cancelled/rejected`, {
@@ -1460,9 +1507,63 @@ export default function OrdersMain() {
     };
   }, []);
 
+  // Final truth fallback: if socket/FCM close event is missed, close from live backend status.
+  useEffect(() => {
+    if (!showNewOrderPopup) return;
+
+    const activePopupOrder = popupOrder || newOrder;
+    if (!activePopupOrder) return;
+
+    let cancelled = false;
+
+    const syncPopupOrderStatus = async () => {
+      try {
+        const response = await getSharedOrdersResponse(0);
+        if (cancelled) return;
+
+        const orders = response?.data?.data?.orders || [];
+        const liveOrder = findMatchingLiveOrder(orders, activePopupOrder);
+
+        if (!liveOrder) {
+          dismissPopupOrder({
+            resetPrepTime: true,
+            resetCountdown: true,
+          });
+          requestOrdersRefresh();
+          return;
+        }
+
+        const liveStatus = liveOrder.status || liveOrder.orderStatus || "";
+        if (!isPopupVisibleForStatus(liveStatus)) {
+          dismissPopupOrder({
+            resetPrepTime: true,
+            resetCountdown: true,
+          });
+          requestOrdersRefresh();
+        }
+      } catch (error) {
+        if (cancelled) return;
+        if (error?.response?.status !== 401) {
+          debugError("Error syncing popup order status:", error);
+        }
+      }
+    };
+
+    syncPopupOrderStatus();
+    const intervalId = setInterval(syncPopupOrderStatus, 3000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [showNewOrderPopup, popupOrder, newOrder]);
+
   // Play audio when popup opens
   useEffect(() => {
     if (showNewOrderPopup && !isMuted) {
+      if (!audioRef.current && typeof window !== "undefined") {
+        audioRef.current = new Audio(notificationSound);
+      }
       if (audioRef.current) {
         audioRef.current.loop = true;
         audioRef.current.muted = false;
@@ -1470,14 +1571,40 @@ export default function OrdersMain() {
         audioRef.current.currentTime = 0;
         audioRef.current
           .play()
-          .catch((err) => debugLog("Audio play failed:", err));
+          .catch((err) => {
+            debugWarn("Initial audio autoplay blocked, waiting for user tap:", err);
+          });
       }
+
+      // Retry playback immediately on any click/touch/keypress on the screen if autoplay was blocked
+      const handleUserInteraction = () => {
+        if (!isMutedRef.current && audioRef.current) {
+          audioRef.current.muted = false;
+          audioRef.current.volume = 1;
+          audioRef.current.play().catch(() => {});
+        }
+      };
+
+      window.addEventListener("pointerdown", handleUserInteraction, { passive: true });
+      window.addEventListener("click", handleUserInteraction, { passive: true });
+      window.addEventListener("keydown", handleUserInteraction, { passive: true });
+      window.addEventListener("touchstart", handleUserInteraction, { passive: true });
+
+      return () => {
+        window.removeEventListener("pointerdown", handleUserInteraction);
+        window.removeEventListener("click", handleUserInteraction);
+        window.removeEventListener("keydown", handleUserInteraction);
+        window.removeEventListener("touchstart", handleUserInteraction);
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        }
+      };
     } else if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
   }, [showNewOrderPopup, isMuted]);
-
   // Countdown timer
   useEffect(() => {
     if (!showNewOrderPopup) return;
@@ -1488,9 +1615,7 @@ export default function OrdersMain() {
       const remaining = getOrderCountdownSeconds(activePopupOrder);
       setCountdown(remaining);
       if (remaining <= 0) {
-        setShowNewOrderPopup(false);
-        setPopupOrder(null);
-        clearNewOrder();
+        dismissPopupOrder();
         requestOrdersRefresh();
       }
     }, 1000);
@@ -1643,13 +1768,10 @@ export default function OrdersMain() {
       }
     }
 
-    setShowNewOrderPopup(false);
-    setPopupOrder(null);
-    clearNewOrder();
-    setCountdown(0);
-    setPrepTime(11);
-    setAcceptSwipeProgress(0);
-    setIsAcceptingOrder(false);
+    dismissPopupOrder({
+      resetPrepTime: true,
+      resetCountdown: true,
+    });
 
     // Note: PreparingOrders component will automatically refresh orders via its own useEffect
     // No need to manually refresh here as the component polls every 10 seconds
@@ -1685,12 +1807,11 @@ export default function OrdersMain() {
       audioRef.current.currentTime = 0;
     }
     setShowRejectPopup(false);
-    setShowNewOrderPopup(false);
-    setPopupOrder(null);
-    clearNewOrder();
+    dismissPopupOrder({
+      resetPrepTime: true,
+      resetCountdown: true,
+    });
     setRejectReason("");
-    setCountdown(0);
-    setPrepTime(11);
   };
 
   const handleRejectCancel = () => {
@@ -1734,6 +1855,7 @@ export default function OrdersMain() {
       if (!isMuted) {
         audioRef.current.pause();
       } else {
+        playNotificationSound((popupOrder || newOrder) || {});
         audioRef.current.muted = false;
         audioRef.current.volume = 1;
         audioRef.current.currentTime = 0;

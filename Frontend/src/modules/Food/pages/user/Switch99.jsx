@@ -324,10 +324,6 @@ export default function Under250() {
   // Sort and filter restaurants based on selected sort and filters
   const sortedAndFilteredRestaurants = useMemo(() => {
     let filtered = under250Restaurants
-      .filter(r => {
-        const availability = getRestaurantAvailabilityStatus(r, new Date(availabilityTick));
-        return availability.isOpen;
-      })
       .map(r => ({ ...r, menuItems: [...(r.menuItems || [])] }))
 
     // Apply local restaurant search query
@@ -362,6 +358,15 @@ export default function Under250() {
       filtered = filtered.filter(restaurant => {
         const deliveryTime = parseDeliveryTime(restaurant.deliveryTime)
         return deliveryTime <= 30
+      })
+    }
+
+    const sortByAvailabilityFirst = (rows) => {
+      rows.sort((a, b) => {
+        const aOpen = getRestaurantAvailabilityStatus(a, new Date(availabilityTick)).isOpen
+        const bOpen = getRestaurantAvailabilityStatus(b, new Date(availabilityTick)).isOpen
+        if (aOpen !== bOpen) return aOpen ? -1 : 1
+        return 0
       })
     }
 
@@ -404,6 +409,8 @@ export default function Under250() {
       // Default: Relevance (keep original order from backend - already sorted by rating)
       // No additional sorting needed
     }
+
+    sortByAvailabilityFirst(filtered)
 
     return filtered
   }, [under250Restaurants, selectedSort, under30MinsFilter, activeCategory, categories, availabilityTick, restaurantSearchQuery])
