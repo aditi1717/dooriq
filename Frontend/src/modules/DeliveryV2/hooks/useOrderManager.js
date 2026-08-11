@@ -5,6 +5,72 @@ import { toast } from 'sonner';
 const canonicalOrderId = (order) =>
   order?.orderMongoId || order?._id || order?.orderId || order?.id || null;
 
+const normalizeId = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return String(value?._id || value?.id || value);
+};
+
+const safeReadJson = (key) => {
+  try {
+    return JSON.parse(localStorage.getItem(key) || 'null');
+  } catch (_) {
+    return null;
+  }
+};
+
+const decodeJwtPayload = (token) => {
+  try {
+    const [, body] = String(token || '').split('.');
+    if (!body) return null;
+    const json = atob(body.replace(/-/g, '+').replace(/_/g, '/'));
+    return JSON.parse(json);
+  } catch (_) {
+    return null;
+  }
+};
+
+const getStoredDeliveryPartnerId = () => {
+  if (typeof localStorage === 'undefined') return '';
+
+  const directId =
+    localStorage.getItem('deliveryPartnerId') ||
+    localStorage.getItem('deliveryPartnerMongoId') ||
+    localStorage.getItem('deliveryBoyId') ||
+    '';
+  if (directId) return String(directId);
+
+  const storedUser =
+    safeReadJson('delivery_user') ||
+    safeReadJson('deliveryUser') ||
+    safeReadJson('user') ||
+    {};
+  const userId =
+    storedUser?._id ||
+    storedUser?.id ||
+    storedUser?.userId ||
+    storedUser?.deliveryPartnerId ||
+    storedUser?.deliveryPartner?._id ||
+    storedUser?.deliveryPartner?.id;
+  if (userId) return String(userId);
+
+  const token =
+    localStorage.getItem('delivery_accessToken') ||
+    localStorage.getItem('accessToken') ||
+    '';
+  const payload = decodeJwtPayload(token);
+  return String(payload?.userId || payload?.id || payload?._id || payload?.sub || '');
+};
+
+const getAcceptedDeliveryPartnerId = (order) =>
+  normalizeId(
+    order?.acceptedDeliveryPartnerId ||
+      order?.dispatch?.deliveryPartnerId ||
+      order?.deliveryPartnerId ||
+      order?.deliveryPartner?._id ||
+      order?.deliveryPartner?.id,
+  );
+
 /**
  * useOrderManager - Professional hook for real-world trip lifecycle actions.
  * Connects directly to the backend API services.
@@ -26,6 +92,14 @@ export const useOrderManager = () => {
       
       if (response?.data?.success) {
         const fullOrder = response.data.data?.order || order;
+        const acceptedPartnerId = getAcceptedDeliveryPartnerId(fullOrder);
+        const myPartnerId = getStoredDeliveryPartnerId();
+
+        if (acceptedPartnerId && myPartnerId && String(acceptedPartnerId) !== String(myPartnerId)) {
+          const raceError = new Error('Order already accepted by another rider');
+          raceError.code = 'ORDER_CLAIMED_BY_OTHER';
+          throw raceError;
+        }
         
         // Robustly determine locations from multiple possible formats (Populated API vs Socket)
         const getLoc = (ref, keysLat, keysLng) => {
@@ -77,7 +151,13 @@ export const useOrderManager = () => {
       }
     } catch (error) {
       console.error('Accept Order Error:', error);
-      toast.error('Network error. Please try again.');
+      const status = error?.response?.status;
+      const serverMessage = error?.response?.data?.message || '';
+      const isClaimRace =
+        error?.code === 'ORDER_CLAIMED_BY_OTHER' ||
+        [403, 409, 422].includes(status) ||
+        /already accepted|no longer available/i.test(serverMessage);
+      toast.error(isClaimRace ? 'Order already accepted by another rider' : 'Network error. Please try again.');
       throw error;
     }
   };

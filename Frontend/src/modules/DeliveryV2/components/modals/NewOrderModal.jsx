@@ -9,7 +9,7 @@ import { getHaversineDistance, calculateETA } from '@/modules/DeliveryV2/utils/g
  * NewOrderModal - Ported to Original 1:1 Theme with Slider Accept.
  * Matches the Zomato/Swiggy style Green Header + White Card.
  */
-export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
+export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDisabled = false }) => {
   const { riderLocation } = useDeliveryStore();
 
   const getStoredDeliveryPartnerId = () => {
@@ -286,6 +286,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
           <ActionSlider 
             label="Slide to Accept" 
             onConfirm={() => onAccept(order)} 
+            disabled={acceptDisabled}
             color="bg-emerald-600"
             successLabel="Order Accepted ✓"
           />

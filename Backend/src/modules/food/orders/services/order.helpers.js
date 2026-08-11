@@ -49,6 +49,9 @@ export function sanitizeOrderForExternal(orderDoc) {
     };
   }
   o.orderMongoId = (o._id || orderDoc?._id || "").toString();
+  o.acceptedDeliveryPartnerId = o.dispatch?.deliveryPartnerId
+    ? String(o.dispatch.deliveryPartnerId?._id || o.dispatch.deliveryPartnerId)
+    : null;
   // Ensure orderId field for UI always contains the pretty ID
   o.orderId = o.order_id || o.orderMongoId; 
   return o;

@@ -52,6 +52,19 @@ const getStoredDeliveryPartnerId = () => {
   }
 };
 
+const getOrderRaceKey = (order) =>
+  String(order?.orderMongoId || order?._id || order?.orderId || order?.id || '');
+
+const isAcceptRaceLoss = (error) => {
+  const status = error?.response?.status;
+  const message = error?.response?.data?.message || error?.message || '';
+  return (
+    error?.code === 'ORDER_CLAIMED_BY_OTHER' ||
+    [403, 409, 422].includes(status) ||
+    /already accepted|no longer available/i.test(message)
+  );
+};
+
 /** Minimal bottom-sheet popup (Restored from legacy FeedNavbar) */
 function BottomPopup({ isOpen, onClose, title, children, maxHeight = "85vh" }) {
   if (!isOpen) return null;
@@ -104,6 +117,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const { unreadCount: notificationUnreadCount } = useNotificationInbox("delivery", { limit: 20 });
 
   const [incomingOrder, setIncomingOrder] = useState(null);
+  const [acceptingOrderKey, setAcceptingOrderKey] = useState(null);
   const [currentTab, setCurrentTab] = useState(tab);
 
   // Track URL changes (Prop changes) to update sub-page content
@@ -1033,16 +1047,27 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
               <div className="w-full pointer-events-auto relative">
                 {incomingOrder && (
                   <NewOrderModal
+                    key={getOrderRaceKey(incomingOrder) || 'incoming-order'}
                     order={incomingOrder}
                     riderLocation={riderLocation}
+                    acceptDisabled={acceptingOrderKey === getOrderRaceKey(incomingOrder)}
                     onAccept={async (o) => {
                       const orderToAccept = o || incomingOrder;
+                      const orderKey = getOrderRaceKey(orderToAccept);
+                      if (!orderKey || acceptingOrderKey) return;
+                      setAcceptingOrderKey(orderKey);
                       try {
                         await acceptOrder(orderToAccept);
                         clearAllOffers();
                         setIncomingOrder(null);
-                      } catch (_) {
-                        // Keep the current offer visible if accept fails.
+                      } catch (error) {
+                        if (isAcceptRaceLoss(error)) {
+                          setIncomingOrder(null);
+                          clearNewOrder({ advance: true });
+                        }
+                        // Keep the current offer visible for transient network failures.
+                      } finally {
+                        setAcceptingOrderKey(null);
                       }
                     }}
                     onReject={async (action = 'rejected') => {
