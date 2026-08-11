@@ -55,6 +55,7 @@ const debugError = (...args) => { };
 const USER_SESSION_PREFERENCE_KEYS = ["userVegMode", "food-under-250-filters"];
 
 import { registerWebPushForCurrentModule } from "@food/utils/firebaseMessaging";
+import DeleteAccountModal from "@food/components/DeleteAccountModal";
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation";
 
 export default function Profile() {
