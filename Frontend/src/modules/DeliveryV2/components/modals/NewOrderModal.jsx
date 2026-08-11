@@ -44,7 +44,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
 
   useEffect(() => {
     if (timeLeft <= 0) {
-      onReject();
+      onReject?.('timeout');
       return;
     }
     const timer = setInterval(() => setTimeLeft((t) => t - 1), 1000);
@@ -291,7 +291,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
           />
 
           <button 
-            onClick={onReject}
+            onClick={() => onReject?.('rejected')}
             className="w-full text-gray-400 font-black text-[11px] uppercase tracking-[0.2em] hover:text-red-500 transition-colors active:scale-95 py-2"
           >
             Pass this task

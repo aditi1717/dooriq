@@ -2,6 +2,9 @@ import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { deliveryAPI } from '@food/api';
 import { toast } from 'sonner';
 
+const canonicalOrderId = (order) =>
+  order?.orderMongoId || order?._id || order?.orderId || order?.id || null;
+
 /**
  * useOrderManager - Professional hook for real-world trip lifecycle actions.
  * Connects directly to the backend API services.
@@ -12,7 +15,7 @@ export const useOrderManager = () => {
   } = useDeliveryStore();
 
   const acceptOrder = async (order) => {
-    const orderId = order?.orderId || order?._id || order?.id;
+    const orderId = canonicalOrderId(order);
     if (!orderId) {
       toast.error('Invalid order data');
       return;
@@ -59,7 +62,9 @@ export const useOrderManager = () => {
 
         setActiveOrder({
           ...fullOrder,
-          orderId: orderId,
+          orderMongoId: fullOrder.orderMongoId || fullOrder._id || orderId,
+          orderId: fullOrder.order_id || fullOrder.orderId || order?.orderId || orderId,
+          displayOrderId: fullOrder.order_id || fullOrder.orderId || order?.orderId || null,
           restaurantLocation: resLoc,
           customerLocation: cusLoc
         });
@@ -81,7 +86,7 @@ export const useOrderManager = () => {
    * Mark "Reached Pickup" (Arrival at restaurant)
    */
   const reachPickup = async () => {
-    const orderId = activeOrder?.orderId;
+    const orderId = canonicalOrderId(activeOrder);
     try {
       const response = await deliveryAPI.confirmReachedPickup(orderId);
       if (response?.data?.success) {
@@ -100,7 +105,7 @@ export const useOrderManager = () => {
    * Mark "Picked Up" (Confirm order ID & start delivery)
    */
   const pickUpOrder = async (billImageUrl) => {
-    const orderId = activeOrder?.orderId;
+    const orderId = canonicalOrderId(activeOrder);
     try {
       // confirmOrderId(orderId, confirmedOrderId, location, data)
       const response = await deliveryAPI.confirmOrderId(
@@ -126,7 +131,7 @@ export const useOrderManager = () => {
    * Mark "Reached Drop" (Arrival at customer)
    */
   const reachDrop = async () => {
-    const orderId = activeOrder?.orderId;
+    const orderId = canonicalOrderId(activeOrder);
     try {
       const response = await deliveryAPI.confirmReachedDrop(orderId);
       if (response?.data?.success) {
@@ -145,7 +150,7 @@ export const useOrderManager = () => {
    * Finalize Delivery with OTP Check
    */
   const completeDelivery = async (otp) => {
-    const orderId = activeOrder?.orderId;
+    const orderId = canonicalOrderId(activeOrder);
     try {
       const paymentMethod = (
         activeOrder?.paymentMethod ||
@@ -200,23 +205,25 @@ export const useOrderManager = () => {
     }
   };
 
-  const rejectOrder = async (order) => {
-    const orderId = order?.orderId || order?._id || order?.id;
+  const rejectOrder = async (order, body = {}) => {
+    const orderId = canonicalOrderId(order);
     if (!orderId) {
       toast.error('Invalid order data');
       return;
     }
 
     try {
-      const response = await deliveryAPI.rejectOrder(orderId);
+      const response = await deliveryAPI.rejectOrder(orderId, body);
       if (response?.data?.success) {
         toast.info('Order passed/rejected successfully.');
       } else {
         toast.error(response?.data?.message || 'Failed to reject order');
+        throw new Error('Reject failed');
       }
     } catch (error) {
       console.error('Reject Order Error:', error);
       toast.error('Network error. Please try again.');
+      throw error;
     }
   };
 

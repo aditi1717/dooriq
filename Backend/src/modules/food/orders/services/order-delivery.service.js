@@ -28,8 +28,29 @@ import {
   notifyOwnersSafely,
   pushStatusHistory,
   sanitizeOrderForExternal,
+  haversineKm,
   isStatusAdvance,
 } from './order.helpers.js';
+
+const TERMINAL_ORDER_STATUSES = [
+  'delivered',
+  'cancelled_by_user',
+  'cancelled_by_restaurant',
+  'cancelled_by_admin',
+];
+
+async function partnerHasActiveDelivery(deliveryPartnerId) {
+  if (!deliveryPartnerId) return false;
+
+  const partnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
+  const activeOrder = await FoodOrder.exists({
+    'dispatch.deliveryPartnerId': partnerId,
+    'dispatch.status': 'accepted',
+    orderStatus: { $nin: TERMINAL_ORDER_STATUSES },
+  });
+
+  return Boolean(activeOrder);
+}
 
 function emitOrderUpdate(order, deliveryPartnerId) {
   try {
@@ -180,47 +201,47 @@ export async function getCurrentTripDelivery(deliveryPartnerId) {
 export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
   const { page, limit, skip } = buildPaginationOptions(query);
   const partnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
-  const filter = {
-    $or: [
-      {
-        'dispatch.status': 'unassigned',
-        'dispatch.offeredTo': {
-          $not: {
-            $elemMatch: {
-              partnerId,
-              action: 'deassigned',
-            },
-          },
-        },
-        orderStatus: { $in: ['confirmed', 'preparing', 'ready_for_pickup'] },
-      },
-      {
-        'dispatch.deliveryPartnerId': partnerId,
-        orderStatus: {
-          $nin: [
-            'delivered',
-            'cancelled_by_user',
-            'cancelled_by_restaurant',
-            'cancelled_by_admin',
-          ],
-        },
-      },
-    ],
-  };
+  const hasActiveDelivery = await partnerHasActiveDelivery(deliveryPartnerId);
 
-  const [docs, total] = await Promise.all([
-    FoodOrder.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate('userId', 'name phone email')
-      .populate(
-        'restaurantId',
-        'restaurantName name address phone ownerPhone location profileImage',
-      )
-      .lean(),
-    FoodOrder.countDocuments(filter),
-  ]);
+  const filter = hasActiveDelivery
+    ? {
+        'dispatch.deliveryPartnerId': partnerId,
+        'dispatch.status': 'accepted',
+        orderStatus: { $nin: TERMINAL_ORDER_STATUSES },
+      }
+    : {
+        $or: [
+          {
+            'dispatch.status': 'unassigned',
+            'dispatch.offeredTo': {
+              $not: {
+                $elemMatch: {
+                  partnerId,
+                  action: { $in: ['rejected', 'timeout', 'deassigned'] },
+                },
+              },
+            },
+            orderStatus: { $in: ['confirmed', 'preparing', 'ready_for_pickup'] },
+          },
+          {
+            'dispatch.deliveryPartnerId': partnerId,
+            'dispatch.status': { $in: ['assigned', 'accepted'] },
+            orderStatus: { $nin: TERMINAL_ORDER_STATUSES },
+          },
+        ],
+      };
+
+  const queryLimit = hasActiveDelivery ? limit : Math.max(limit * 5, 50);
+
+  const docs = await FoodOrder.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(queryLimit)
+    .populate('userId', 'name phone email')
+    .populate(
+      'restaurantId',
+      'restaurantName name address phone ownerPhone location profileImage',
+    )
+    .lean();
 
   const orderIds = (docs || []).map((d) => d?._id).filter(Boolean);
   const txRows = orderIds.length
@@ -228,7 +249,7 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
     : [];
   const txByOrderId = new Map(txRows.map((t) => [String(t.orderId), t]));
 
-  const enriched = (docs || []).map((doc) => {
+  let enriched = (docs || []).map((doc) => {
     const tx = txByOrderId.get(String(doc?._id)) || null;
     if (!tx) return doc;
     return {
@@ -241,7 +262,85 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
     };
   });
 
-  return buildPaginatedResult({ docs: enriched, total, page, limit });
+  if (!hasActiveDelivery) {
+    const partner = await FoodDeliveryPartner.findById(partnerId)
+      .select('lastLat lastLng lastLocationAt')
+      .lean();
+
+    const MAX_OFFER_KM = 20;
+    const partnerLat = partner?.lastLat;
+    const partnerLng = partner?.lastLng;
+    const hasPartnerGps =
+      partnerLat != null &&
+      partnerLng != null &&
+      Number.isFinite(Number(partnerLat)) &&
+      Number.isFinite(Number(partnerLng));
+
+    const withMeta = enriched.map((order) => {
+      const assignedToMe = Boolean(
+        order?.dispatch?.deliveryPartnerId &&
+          String(order.dispatch.deliveryPartnerId) === String(partnerId),
+      );
+
+      const offeredToMe = Array.isArray(order?.dispatch?.offeredTo)
+        ? order.dispatch.offeredTo.some(
+            (entry) =>
+              String(entry?.partnerId) === String(partnerId) &&
+              String(entry?.action || 'offered') === 'offered',
+          )
+        : false;
+      const ignoredByMe = Array.isArray(order?.dispatch?.offeredTo)
+        ? order.dispatch.offeredTo.some(
+            (entry) =>
+              String(entry?.partnerId) === String(partnerId) &&
+              ['rejected', 'timeout', 'deassigned'].includes(
+                String(entry?.action || '').toLowerCase(),
+              ),
+          )
+        : false;
+
+      let distanceKm = null;
+      const coords = order?.restaurantId?.location?.coordinates;
+      if (hasPartnerGps && Array.isArray(coords) && coords.length >= 2) {
+        const [rLng, rLat] = coords;
+        const d = haversineKm(
+          Number(partnerLat),
+          Number(partnerLng),
+          Number(rLat),
+          Number(rLng),
+        );
+        if (Number.isFinite(d)) distanceKm = d;
+      }
+
+      return { order, assignedToMe, offeredToMe, ignoredByMe, distanceKm };
+    });
+
+    const kept = withMeta.filter(({ assignedToMe, offeredToMe, ignoredByMe, distanceKm }) => {
+      if (ignoredByMe) return false;
+      if (assignedToMe) return true;
+      if (!hasPartnerGps) return offeredToMe;
+      if (distanceKm == null) return offeredToMe;
+      if (distanceKm <= MAX_OFFER_KM) return true;
+      return offeredToMe && distanceKm <= MAX_OFFER_KM * 1.5;
+    });
+
+    kept.sort((a, b) => {
+      if (a.assignedToMe !== b.assignedToMe) return a.assignedToMe ? -1 : 1;
+      if (a.offeredToMe !== b.offeredToMe) return a.offeredToMe ? -1 : 1;
+      const da = a.distanceKm == null ? Infinity : a.distanceKm;
+      const db = b.distanceKm == null ? Infinity : b.distanceKm;
+      return da - db;
+    });
+
+    enriched = kept.map(({ order }) => order);
+  }
+
+  const total = enriched.length;
+  const paged = hasActiveDelivery
+    ? enriched.slice(0, limit)
+    : enriched.slice(skip, skip + limit);
+
+  return buildPaginatedResult({ docs: paged, total, page, limit });
 }
 
 export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
@@ -256,6 +355,30 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
     'cancelled_by_restaurant',
     'cancelled_by_admin',
   ];
+
+  const alreadyOnTrip = await partnerHasActiveDelivery(deliveryPartnerId);
+  if (alreadyOnTrip) {
+    const existingActive = await FoodOrder.findOne({
+      'dispatch.deliveryPartnerId': partnerId,
+      'dispatch.status': 'accepted',
+      orderStatus: { $nin: TERMINAL_ORDER_STATUSES },
+    })
+      .select('_id order_id orderId')
+      .lean();
+
+    const activeOrderKey = String(existingActive?._id || '');
+    const requestedOrder = await FoodOrder.findOne(identity).select('_id').lean();
+    const requestedOrderKey = String(requestedOrder?._id || '');
+
+    if (activeOrderKey && requestedOrderKey && activeOrderKey === requestedOrderKey) {
+      const acceptedOrder = await FoodOrder.findOne(identity).populate('restaurantId userId');
+      return acceptedOrder ? sanitizeOrderForExternal(acceptedOrder) : null;
+    }
+
+    throw new ValidationError(
+      'You already have an active delivery. Complete it before accepting another order.',
+    );
+  }
 
   const statusHistoryEntry = {
     byRole: 'DELIVERY_PARTNER',
@@ -277,7 +400,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
             $not: {
               $elemMatch: {
                 partnerId,
-                action: 'deassigned',
+                action: { $in: ['rejected', 'timeout', 'deassigned'] },
               },
             },
           },
@@ -468,34 +591,45 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
   return responseOrder;
 }
 
-export async function rejectOrderDelivery(orderId, deliveryPartnerId) {
+export async function rejectOrderDelivery(orderId, deliveryPartnerId, action = 'rejected') {
   const identity = buildOrderIdentityFilter(orderId);
   if (!identity) throw new ValidationError('Order id required');
 
   const order = await FoodOrder.findOne(identity).select('+deliveryOtp');
   if (!order) throw new NotFoundError('Order not found');
-  if (order.dispatch.deliveryPartnerId?.toString() !== deliveryPartnerId.toString()) {
-    throw new ForbiddenError('Not your order');
-  }
-
+  const safeAction = String(action).toLowerCase() === 'timeout' ? 'timeout' : 'rejected';
+  const assignedToMe =
+    order.dispatch.deliveryPartnerId?.toString() === deliveryPartnerId.toString();
   const offer = order.dispatch.offeredTo.find(
     (item) =>
       String(item.partnerId) === String(deliveryPartnerId) &&
       item.action === 'offered',
   );
-  if (offer) offer.action = 'rejected';
 
-  order.dispatch.status = 'unassigned';
-  order.dispatch.deliveryPartnerId = undefined;
-  order.dispatch.assignedAt = undefined;
-  order.dispatch.acceptedAt = undefined;
-  pushStatusHistory(order, {
-    byRole: 'DELIVERY_PARTNER',
-    byId: deliveryPartnerId,
-    from: 'assigned',
-    to: 'unassigned',
-    note: 'Rejected',
-  });
+  if (!assignedToMe && !offer) {
+    throw new ForbiddenError('Not your order');
+  }
+
+  const existingOffer = offer || order.dispatch.offeredTo.find(
+    (item) =>
+      String(item.partnerId) === String(deliveryPartnerId),
+  );
+  if (existingOffer) existingOffer.action = safeAction;
+
+  if (assignedToMe) {
+    const fromStatus = order.dispatch.status || 'assigned';
+    order.dispatch.status = 'unassigned';
+    order.dispatch.deliveryPartnerId = undefined;
+    order.dispatch.assignedAt = undefined;
+    order.dispatch.acceptedAt = undefined;
+    pushStatusHistory(order, {
+      byRole: 'DELIVERY_PARTNER',
+      byId: deliveryPartnerId,
+      from: fromStatus,
+      to: 'unassigned',
+      note: safeAction === 'timeout' ? 'Offer timed out' : 'Rejected',
+    });
+  }
   await order.save();
 
   const db = getFirebaseDB();
@@ -507,6 +641,7 @@ export async function rejectOrderDelivery(orderId, deliveryPartnerId) {
     orderMongoId: order._id?.toString?.(),
     orderId: order._id.toString(),
     deliveryPartnerId,
+    action: safeAction,
   });
 
   void dispatchService

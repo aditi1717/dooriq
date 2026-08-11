@@ -209,7 +209,7 @@ export async function rejectOrderDeliveryController(req, res, next) {
     try {
         const deliveryPartnerId = req.user?.userId;
         const orderId = req.params.orderId;
-        const order = await orderService.rejectOrderDelivery(orderId, deliveryPartnerId);
+        const order = await orderService.rejectOrderDelivery(orderId, deliveryPartnerId, req.body?.action);
         return sendResponse(res, 200, 'Order rejected', { order });
     } catch (err) {
         next(err);

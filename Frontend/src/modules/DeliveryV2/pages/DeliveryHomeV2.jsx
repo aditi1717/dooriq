@@ -99,7 +99,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const { isOnline, toggleOnline, activeOrder, tripStatus, setRiderLocation, setActiveOrder, updateTripStatus, clearActiveOrder, riderLocation } = useDeliveryStore();
   const { isWithinRange, distanceToTarget } = useProximityCheck();
   const { acceptOrder, rejectOrder, reachPickup, pickUpOrder, reachDrop, completeDelivery, resetTrip } = useOrderManager();
-  const { newOrder, clearNewOrder, orderStatusUpdate, clearOrderStatusUpdate, isConnected: isSocketConnected, emitLocation } = useDeliveryNotifications();
+  const { newOrder, clearNewOrder, clearAllOffers, orderStatusUpdate, clearOrderStatusUpdate, isConnected: isSocketConnected, emitLocation } = useDeliveryNotifications();
   const companyName = useCompanyName();
   const { unreadCount: notificationUnreadCount } = useNotificationInbox("delivery", { limit: 20 });
 
@@ -402,6 +402,14 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     deliveryAPI.updateOnlineStatus(isOnline).catch(() => { });
   }, [isOnline]);
 
+  useEffect(() => {
+    if (isOnline) return;
+
+    clearAllOffers();
+    setIncomingOrder(null);
+    setIsModalMinimized(false);
+  }, [clearAllOffers, isOnline]);
+
   // 3. Location logic (Smart Frequency Tracking) - MOCKED TO FIXED POINT FOR NOW
   useEffect(() => {
     if (!isOnline) {
@@ -622,13 +630,21 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     return () => clearInterval(pingInterval);
   }, [activeOrder, isOnline]);
 
-  useEffect(() => { setIncomingOrder(newOrder); }, [newOrder]);
+  useEffect(() => {
+    if (!isOnline || !newOrder || activeOrder) {
+      setIncomingOrder(null);
+      return;
+    }
+
+    setIncomingOrder(newOrder);
+  }, [activeOrder, isOnline, newOrder]);
 
   useEffect(() => {
     if (activeOrder && incomingOrder) {
       setIncomingOrder(null);
+      clearAllOffers();
     }
-  }, [activeOrder, incomingOrder]);
+  }, [activeOrder, clearAllOffers, incomingOrder]);
 
   useEffect(() => {
     if (!isOnline) return;
@@ -673,7 +689,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         });
 
         if (!cancelled && nextIncomingOrder) {
+          // Only hydrate when there is no live offer already; do not overwrite the socket queue head.
           setIncomingOrder((prev) => {
+            if (prev || newOrder) return prev;
             const prevId = prev?.orderId || prev?._id || prev?.orderMongoId;
             const nextId =
               nextIncomingOrder?.orderId ||
@@ -692,7 +710,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       if (!document.hidden) {
         void hydrateAvailableOrder();
       }
-    }, isSocketConnected ? 12000 : 5000);
+    }, isSocketConnected ? 30000 : 15000);
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         void hydrateAvailableOrder();
@@ -705,15 +723,22 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       window.clearInterval(poller);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [activeOrder, currentTab, isOnline, isSocketConnected, setActiveOrder]);
+  }, [activeOrder, currentTab, isOnline, isSocketConnected, newOrder, setActiveOrder]);
 
   useEffect(() => {
     if (orderStatusUpdate) {
       if (orderStatusUpdate.status === 'cancelled') {
         toast.error('Order cancelled');
+        clearAllOffers();
+        setIncomingOrder(null);
+        resetTrip();
+      } else if (orderStatusUpdate.status === 'deleted') {
+        toast.error('Order removed');
+        clearAllOffers();
+        setIncomingOrder(null);
         resetTrip();
       } else if (orderStatusUpdate.status === 'deassigned') {
-        clearNewOrder();
+        clearAllOffers();
         setIncomingOrder(null);
         clearActiveOrder();
         setShowVerification(false);
@@ -731,7 +756,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     orderStatusUpdate,
     resetTrip,
     clearOrderStatusUpdate,
-    clearNewOrder,
+    clearAllOffers,
     clearActiveOrder,
   ]);
 
@@ -1011,21 +1036,26 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                     order={incomingOrder}
                     riderLocation={riderLocation}
                     onAccept={async (o) => {
+                      const orderToAccept = o || incomingOrder;
                       try {
-                        await acceptOrder(o);
+                        await acceptOrder(orderToAccept);
+                        clearAllOffers();
                         setIncomingOrder(null);
-                        clearNewOrder({ advanceQueue: false });
                       } catch (_) {
                         // Keep the current offer visible if accept fails.
                       }
                     }}
-                    onReject={async () => {
+                    onReject={async (action = 'rejected') => {
+                      const orderToReject = incomingOrder;
+                      // Persist pass/timeout so refresh does not resurrect this rider's offer.
                       try {
-                        await rejectOrder(incomingOrder);
+                        if (orderToReject) {
+                          await rejectOrder(orderToReject, { action });
+                        }
                         setIncomingOrder(null);
-                        clearNewOrder();
+                        clearNewOrder({ advance: true });
                       } catch (_) {
-                        // Keep the current offer visible if reject fails.
+                        // Keep the offer visible if the server did not record the pass/timeout.
                       }
                     }}
                     onMinimize={() => setIsModalMinimized(true)}

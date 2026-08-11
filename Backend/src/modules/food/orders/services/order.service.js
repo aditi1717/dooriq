@@ -1602,8 +1602,8 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
   return deliveryService.acceptOrderDelivery(orderId, deliveryPartnerId);
 }
 
-export async function rejectOrderDelivery(orderId, deliveryPartnerId) {
-  return deliveryService.rejectOrderDelivery(orderId, deliveryPartnerId);
+export async function rejectOrderDelivery(orderId, deliveryPartnerId, action) {
+  return deliveryService.rejectOrderDelivery(orderId, deliveryPartnerId, action);
 }
 
 export async function confirmReachedPickupDelivery(orderId, deliveryPartnerId) {
@@ -1809,11 +1809,59 @@ export async function assignDeliveryPartnerAdmin(
   if (!partner || partner.status !== "approved")
     throw new ValidationError("Delivery partner not available");
 
+    const previousDispatchStatus = order.dispatch.status;
     order.dispatch.status = 'assigned';
     order.dispatch.deliveryPartnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
     order.dispatch.assignedAt = new Date();
-    pushStatusHistory(order, { byRole: 'ADMIN', byId: adminId, from: order.dispatch.status, to: 'assigned' });
+    pushStatusHistory(order, { byRole: 'ADMIN', byId: adminId, from: previousDispatchStatus, to: 'assigned' });
     await order.save();
+
+    try {
+      const assignedOrder = await FoodOrder.findById(order._id)
+        .populate('restaurantId')
+        .populate('userId')
+        .lean();
+      const payload = buildDeliverySocketPayload(
+        assignedOrder || order,
+        assignedOrder?.restaurantId || order.restaurantId,
+      );
+      const orderKey = order._id.toString();
+      const assignedPartnerKey = String(deliveryPartnerId);
+      const offeredPartners = order.dispatch?.offeredTo || [];
+      const db = getFirebaseDB();
+
+      if (db) {
+        for (const offer of offeredPartners) {
+          const pid = offer.partnerId?.toString?.();
+          if (pid && pid !== assignedPartnerKey) {
+            db.ref(`delivery_offers/${pid}/${orderKey}`).remove().catch(() => {});
+          }
+        }
+        db.ref(`delivery_offers/${assignedPartnerKey}/${orderKey}`).set({
+          ...payload,
+          offeredAt: Date.now(),
+        }).catch(() => {});
+      }
+
+      const io = getIO();
+      if (io) {
+        io.to(rooms.delivery(assignedPartnerKey)).emit('new_order', payload);
+        const claimedPayload = {
+          orderId: orderKey,
+          orderMongoId: orderKey,
+          claimedBy: assignedPartnerKey,
+        };
+        for (const offer of offeredPartners) {
+          const pid = offer.partnerId?.toString?.();
+          if (pid && pid !== assignedPartnerKey) {
+            io.to(rooms.delivery(pid)).emit('order_claimed', claimedPayload);
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(`Manual delivery assignment notification failed: ${err?.message || err}`);
+    }
+
     enqueueOrderEvent('delivery_partner_assigned', {
         orderMongoId: order._id?.toString?.(),
         orderId: order._id.toString(),

@@ -170,7 +170,7 @@ export async function tryAutoAssign(orderId, options = {}) {
     const offeredIds = (order.dispatch?.offeredTo || []).map(o => o.partnerId.toString());
     const permanentlyExcludedIds = new Set(
       (order.dispatch?.offeredTo || [])
-        .filter((offer) => offer.action === 'deassigned')
+        .filter((offer) => ['rejected', 'timeout', 'deassigned'].includes(offer.action))
         .map((offer) => offer.partnerId.toString())
     );
     

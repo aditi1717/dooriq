@@ -191,14 +191,32 @@ export const useDeliveryNotifications = () => {
   const [orderStatusUpdate, setOrderStatusUpdate] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [deliveryPartnerId, setDeliveryPartnerId] = useState(null);
-  const activeTripOrder = useDeliveryStore((state) => state.activeOrder);
+  const activeOrder = useDeliveryStore((state) => state.activeOrder);
+  const tripStatus = useDeliveryStore((state) => state.tripStatus);
+  const isOnline = useDeliveryStore((state) => state.isOnline);
   const joinedDeliveryRoomRef = useRef(null);
+  const newOrderRef = useRef(null);
   const pendingIncomingOrdersRef = useRef([]);
+  const activeTripRef = useRef(null);
   const ALERT_LOOP_INTERVAL_MS = 4500;
   const ALERT_LOOP_MAX_MS = 120000;
   const ALERT_DEDUPE_MS = 15000;
   const BROWSER_NOTIFICATION_DEDUPE_MS = 20000;
   const NOTIFICATION_PERMISSION_ASKED_KEY = 'delivery_notification_permission_asked';
+
+  useEffect(() => {
+    newOrderRef.current = newOrder;
+  }, [newOrder]);
+
+  useEffect(() => {
+    const hasActiveTrip =
+      Boolean(activeOrder) &&
+      tripStatus !== 'IDLE' &&
+      tripStatus !== 'COMPLETED';
+    activeTripRef.current = hasActiveTrip ? activeOrder : null;
+  }, [activeOrder, tripStatus]);
+
+  const isPartnerBusy = useCallback(() => Boolean(activeTripRef.current), []);
 
   // Step 3: All callbacks before effects (unconditional)
   const getOrderAlertKey = (orderData = {}) => (
@@ -364,94 +382,102 @@ export const useDeliveryNotifications = () => {
     }
   }, []);
 
-  const presentIncomingOrder = useCallback((orderData = {}) => {
+  const enqueueOffer = useCallback((orderData) => {
+    if (!orderData || !isOnline || isPartnerBusy()) return false;
+
+    const key = getOrderAlertKey(orderData);
+    if (!key) return false;
+
+    const current = newOrderRef.current;
+    if (current && isSameQueuedOrder(current, orderData)) {
+      return false;
+    }
+
+    if (
+      pendingIncomingOrdersRef.current.some((queued) =>
+        isSameQueuedOrder(queued, orderData),
+      )
+    ) {
+      return false;
+    }
+
+    if (current) {
+      pendingIncomingOrdersRef.current = [...pendingIncomingOrdersRef.current, orderData];
+      debugLog('Queued concurrent delivery offer', {
+        currentOrderId: getOrderAlertKey(current),
+        queuedOrderId: key,
+        queueLength: pendingIncomingOrdersRef.current.length,
+      });
+      return 'queued';
+    }
+
+    setNewOrder(orderData);
+    return 'shown';
+  }, [isOnline, isPartnerBusy, isSameQueuedOrder]);
+
+  const handleIncomingOrderAlert = useCallback((orderData = {}) => {
+    if (!isOnline) {
+      debugLog('Skipping incoming order alert because partner is offline');
+      return;
+    }
+
+    if (isPartnerBusy()) {
+      debugLog('Skipping incoming order alert because partner already has an active trip');
+      return;
+    }
+
     if (!shouldProcessOrderAlert(orderData)) {
       return;
     }
 
-    const normalizedOrder = orderData || { id: Date.now() };
-    activeOrderRef.current = normalizedOrder;
-    setNewOrder(normalizedOrder);
-    playNotificationSound(normalizedOrder);
+    activeOrderRef.current = orderData || { id: Date.now() };
+    playNotificationSound(orderData);
     startAlertLoop(playNotificationSound);
 
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-      showBackgroundOrderNotification(normalizedOrder);
+      showBackgroundOrderNotification(orderData);
     }
-  }, [playNotificationSound, showBackgroundOrderNotification, startAlertLoop]);
-
-  const queueIncomingOrder = useCallback((orderData = {}) => {
-    const incomingKey = getOrderAlertKey(orderData);
-    if (!incomingKey) return;
-
-    const currentKey = getOrderAlertKey(activeOrderRef.current) || getOrderAlertKey(newOrder);
-    const alreadyQueued = pendingIncomingOrdersRef.current.some((queuedOrder) =>
-      isSameQueuedOrder(queuedOrder, orderData),
-    );
-
-    if (currentKey && currentKey === incomingKey) {
-      return;
-    }
-
-    if (alreadyQueued) {
-      return;
-    }
-
-    const riderBusyWithTrip = Boolean(activeTripOrder);
-    const riderHasVisibleOrder = Boolean(currentKey);
-
-    if (!riderBusyWithTrip && !riderHasVisibleOrder) {
-      presentIncomingOrder(orderData);
-      return;
-    }
-
-    pendingIncomingOrdersRef.current.push(orderData);
-    debugLog('Queued incoming order behind active offer/trip', {
-      orderId: incomingKey,
-      queueSize: pendingIncomingOrdersRef.current.length,
-      riderBusyWithTrip,
-      riderHasVisibleOrder,
-    });
-  }, [activeTripOrder, isSameQueuedOrder, newOrder, presentIncomingOrder]);
-
-  const handleIncomingOrderAlert = useCallback((orderData = {}) => {
-    queueIncomingOrder(orderData);
-  }, [queueIncomingOrder]);
-
-  const promoteNextIncomingOrder = useCallback(() => {
-    if (activeTripOrder) return;
-    if (activeOrderRef.current) return;
-
-    const nextOrder = pendingIncomingOrdersRef.current.shift();
-    if (!nextOrder) {
-      return;
-    }
-
-    presentIncomingOrder(nextOrder);
-  }, [activeTripOrder, presentIncomingOrder]);
+  }, [isOnline, isPartnerBusy, playNotificationSound, showBackgroundOrderNotification, startAlertLoop]);
 
   const clearNewOrder = useCallback((options = {}) => {
-    const { advanceQueue = true } = options || {};
+    const advance =
+      options?.advance !== false &&
+      options?.advanceQueue !== false;
+
     stopAlertLoop();
     activeOrderRef.current = null;
-    setNewOrder(null);
 
-    if (!advanceQueue) {
+    if (!advance) {
+      pendingIncomingOrdersRef.current = [];
+      setNewOrder(null);
       return;
     }
 
-    if (activeTripOrder) {
-      return;
+    const next = pendingIncomingOrdersRef.current.shift() || null;
+    pendingIncomingOrdersRef.current = [...pendingIncomingOrdersRef.current];
+    if (next && !isPartnerBusy()) {
+      setNewOrder(next);
+      handleIncomingOrderAlert(next);
+    } else {
+      setNewOrder(null);
     }
+  }, [handleIncomingOrderAlert, isPartnerBusy, stopAlertLoop]);
 
-    promoteNextIncomingOrder();
-  }, [activeTripOrder, promoteNextIncomingOrder, stopAlertLoop]);
+  const clearAllOffers = useCallback(() => {
+    clearNewOrder({ advance: false });
+  }, [clearNewOrder]);
+
+  useEffect(() => {
+    if (!isOnline) {
+      clearAllOffers();
+    }
+  }, [clearAllOffers, isOnline]);
 
   const removeIncomingOrderByKey = useCallback((orderData = {}) => {
     const orderKey = getOrderAlertKey(orderData);
     if (!orderKey) return false;
 
-    const currentKey = getOrderAlertKey(activeOrderRef.current) || getOrderAlertKey(newOrder);
+    const currentKey = getOrderAlertKey(activeOrderRef.current) || getOrderAlertKey(newOrderRef.current);
     const beforeLength = pendingIncomingOrdersRef.current.length;
 
     pendingIncomingOrdersRef.current = pendingIncomingOrdersRef.current.filter((queuedOrder) => (
@@ -461,12 +487,12 @@ export const useDeliveryNotifications = () => {
     const removedFromQueue = pendingIncomingOrdersRef.current.length !== beforeLength;
 
     if (currentKey && currentKey === orderKey) {
-      clearNewOrder();
+      clearNewOrder({ advance: true });
       return true;
     }
 
     return removedFromQueue;
-  }, [clearNewOrder, isSameQueuedOrder, newOrder]);
+  }, [clearNewOrder, isSameQueuedOrder]);
 
   const syncIncomingOrdersWithFirebaseSnapshot = useCallback((snapshotOrders = []) => {
     const snapshotKeySet = new Set(
@@ -476,12 +502,12 @@ export const useDeliveryNotifications = () => {
     );
 
     if (snapshotKeySet.size === 0) {
-      clearNewOrder({ advanceQueue: false });
+      clearNewOrder({ advance: false });
       pendingIncomingOrdersRef.current = [];
       return;
     }
 
-    const activeKey = getOrderAlertKey(activeOrderRef.current) || getOrderAlertKey(newOrder);
+    const activeKey = getOrderAlertKey(activeOrderRef.current) || getOrderAlertKey(newOrderRef.current);
     pendingIncomingOrdersRef.current = pendingIncomingOrdersRef.current.filter((queuedOrder) => {
       const queuedKey = getOrderAlertKey(queuedOrder);
       if (!queuedKey) return false;
@@ -489,14 +515,13 @@ export const useDeliveryNotifications = () => {
       return snapshotKeySet.has(queuedKey);
     });
 
-    if (!activeTripOrder && activeKey && !snapshotKeySet.has(activeKey)) {
-      clearNewOrder({ advanceQueue: false });
-      promoteNextIncomingOrder();
+    if (!isPartnerBusy() && activeKey && !snapshotKeySet.has(activeKey)) {
+      clearNewOrder({ advance: true });
     }
-  }, [activeTripOrder, clearNewOrder, newOrder, promoteNextIncomingOrder]);
+  }, [clearNewOrder, isPartnerBusy]);
 
   const recoverDeliveryState = useCallback(async () => {
-    if (!deliveryPartnerId) return;
+    if (!deliveryPartnerId || !isOnline) return;
 
     try {
       const [availableResult, currentTripResult] = await Promise.allSettled([
@@ -542,14 +567,19 @@ export const useDeliveryNotifications = () => {
         );
       });
 
-      if (recoverableOrder && !activeOrderRef.current) {
-        debugLog('Recovered available delivery order after reconnect/focus:', recoverableOrder);
-        handleIncomingOrderAlert(recoverableOrder);
+      if (recoverableOrder && !activeOrderRef.current && !isPartnerBusy()) {
+        if (!newOrderRef.current && pendingIncomingOrdersRef.current.length === 0) {
+          debugLog('Recovered available delivery order after reconnect/focus:', recoverableOrder);
+          const result = enqueueOffer(recoverableOrder);
+          if (result === 'shown') {
+            handleIncomingOrderAlert(recoverableOrder);
+          }
+        }
       }
     } catch (error) {
       debugWarn('Delivery recovery sync failed:', error?.message || error);
     }
-  }, [deliveryPartnerId, handleIncomingOrderAlert]);
+  }, [deliveryPartnerId, enqueueOffer, handleIncomingOrderAlert, isOnline, isPartnerBusy]);
 
   const joinDeliveryRoomIfPossible = useCallback(() => {
     if (!socketRef.current?.connected || !deliveryPartnerId) {
@@ -613,12 +643,6 @@ export const useDeliveryNotifications = () => {
       }
     };
   }, [deliveryPartnerId, isConnected]);
-
-  useEffect(() => {
-    if (activeTripOrder) return;
-    if (newOrder) return;
-    promoteNextIncomingOrder();
-  }, [activeTripOrder, newOrder, promoteNextIncomingOrder]);
 
   // Step 4: All effects (unconditional hook calls, conditional logic inside)
   useEffect(() => {
@@ -984,27 +1008,57 @@ export const useDeliveryNotifications = () => {
     });
 
     socketRef.current.on('new_order', (orderData) => {
-      debugLog('New order received via socket', {
-        orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
-        dispatchStatus: orderData?.dispatch?.status,
-      });
-      setNewOrder(orderData);
-      handleIncomingOrderAlert(orderData);
+      if (isPartnerBusy()) {
+        debugLog('Ignoring new_order because partner already has an active trip', {
+          orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
+        });
+        return;
+      }
+
+      const result = enqueueOffer(orderData);
+      if (result === 'shown') {
+        debugLog('New order received via socket', {
+          orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
+          dispatchStatus: orderData?.dispatch?.status,
+        });
+        handleIncomingOrderAlert(orderData);
+      } else if (result === 'queued') {
+        debugLog('New order queued behind current offer', {
+          orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
+        });
+      }
     });
 
     // Listen for priority-based order notifications (new_order_available)
     socketRef.current.on('new_order_available', (orderData) => {
-      debugLog('New order available received via socket', {
-        orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
-        phase: orderData?.phase || 'unknown',
-        dispatchStatus: orderData?.dispatch?.status,
-      });
-      // Treat it the same as new_order for now - delivery boy can accept it
-      setNewOrder(orderData);
-      handleIncomingOrderAlert(orderData);
+      if (isPartnerBusy()) {
+        debugLog('Ignoring new_order_available because partner already has an active trip', {
+          orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
+        });
+        return;
+      }
+
+      const result = enqueueOffer(orderData);
+      if (result === 'shown') {
+        debugLog('New order available received via socket', {
+          orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
+          phase: orderData?.phase || 'unknown',
+          dispatchStatus: orderData?.dispatch?.status,
+        });
+        handleIncomingOrderAlert(orderData);
+      } else if (result === 'queued') {
+        debugLog('new_order_available queued behind current offer', {
+          orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
+        });
+      }
     });
 
     socketRef.current.on('play_notification_sound', (data) => {
+      if (isPartnerBusy()) {
+        debugLog('Ignoring play_notification_sound because partner already has an active trip');
+        return;
+      }
+
       debugLog('play_notification_sound received', {
         orderId: data?.orderId || data?.orderMongoId || data?.order_id,
       });
@@ -1013,14 +1067,10 @@ export const useDeliveryNotifications = () => {
         orderMongoId: data?.orderMongoId || data?.order_mongo_id,
         ...data
       };
-      // Force immediate buzz for notification events, even if dedupe would skip.
-      activeOrderRef.current = normalizedData || { id: Date.now() };
-      playNotificationSound(normalizedData);
-      startAlertLoop(playNotificationSound);
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-        showBackgroundOrderNotification(normalizedData);
+      const result = enqueueOffer(normalizedData);
+      if (result === 'shown') {
+        handleIncomingOrderAlert(normalizedData);
       }
-      handleIncomingOrderAlert(normalizedData);
     });
 
     socketRef.current.on('order_ready', (orderData) => {
@@ -1038,26 +1088,26 @@ export const useDeliveryNotifications = () => {
 
     socketRef.current.on('order_cancelled', (statusData) => {
       debugLog('?? Delivery order cancelled event received via socket:', statusData);
+      const removed = removeIncomingOrderByKey(statusData);
+      if (removed) {
+        debugLog('?? Removed cancelled order from local offer state');
+      }
       setOrderStatusUpdate({
         ...(statusData || {}),
         status: 'cancelled'
       });
-      const removed = removeIncomingOrderByKey(statusData);
-      if (removed) {
-        window.location.reload();
-      }
     });
 
     socketRef.current.on('order_deleted', (statusData) => {
       debugLog('?? Delivery order deleted event received via socket:', statusData);
+      const removed = removeIncomingOrderByKey(statusData);
+      if (removed) {
+        debugLog('?? Removed deleted order from local offer state');
+      }
       setOrderStatusUpdate({
         ...(statusData || {}),
         status: 'deleted'
       });
-      const removed = removeIncomingOrderByKey(statusData);
-      if (removed) {
-        window.location.reload();
-      }
     });
 
     socketRef.current.on('order_claimed', (data) => {
@@ -1072,21 +1122,17 @@ export const useDeliveryNotifications = () => {
       debugLog('?? Order reassigned to another partner:', data);
       if (data.orderId === activeOrderRef.current?._id || data.orderId === activeOrderRef.current?.orderId) {
         debugLog('?? Removing reassigned order from local state');
-        stopAlertLoop();
-        activeOrderRef.current = null;
-        setNewOrder(null);
+        clearAllOffers();
       }
     });
 
     socketRef.current.on('order_deassigned', (data) => {
       debugLog('Delivery order deassigned by admin:', data);
-      stopAlertLoop();
       removeIncomingOrderByKey(data);
       setOrderStatusUpdate({
         ...(data || {}),
         status: 'deassigned'
       });
-      window.location.reload();
     });
 
     socketRef.current.on('admin_notification', (payload) => {
@@ -1146,7 +1192,7 @@ export const useDeliveryNotifications = () => {
         socketRef.current = null;
       }
     };
-  }, [deliveryPartnerId, handleIncomingOrderAlert, joinDeliveryRoomIfPossible, playNotificationSound, recoverDeliveryState, showBackgroundOrderNotification, startAlertLoop, stopAlertLoop]);
+  }, [clearAllOffers, deliveryPartnerId, enqueueOffer, handleIncomingOrderAlert, isPartnerBusy, joinDeliveryRoomIfPossible, playNotificationSound, recoverDeliveryState, removeIncomingOrderByKey, showBackgroundOrderNotification, startAlertLoop, stopAlertLoop]);
 
   useEffect(() => {
     if (!deliveryPartnerId) {
@@ -1185,7 +1231,10 @@ export const useDeliveryNotifications = () => {
 
   // Listen for Firebase Realtime Database delivery offers
   useEffect(() => {
-    if (!deliveryPartnerId) return;
+    if (!deliveryPartnerId || !isOnline) {
+      clearAllOffers();
+      return;
+    }
 
     ensureFirebaseInitialized({ enableRealtimeDb: true });
     const dbInstance = firebaseRealtimeDb;
@@ -1233,14 +1282,17 @@ export const useDeliveryNotifications = () => {
         if (offers.length > 0) {
           syncIncomingOrdersWithFirebaseSnapshot(offers);
           offers.forEach((offer) => {
-            handleIncomingOrderAlert(offer);
+            const result = enqueueOffer(offer);
+            if (result === 'shown') {
+              handleIncomingOrderAlert(offer);
+            }
           });
         } else {
           syncIncomingOrdersWithFirebaseSnapshot([]);
         }
       } else {
         syncIncomingOrdersWithFirebaseSnapshot([]);
-        clearNewOrder();
+        clearAllOffers();
       }
     }, (error) => {
       debugError('Firebase delivery_offers subscription failed:', error.message);
@@ -1249,11 +1301,12 @@ export const useDeliveryNotifications = () => {
     return () => {
       unsubscribe();
     };
-  }, [deliveryPartnerId, handleIncomingOrderAlert]);
+  }, [clearAllOffers, deliveryPartnerId, enqueueOffer, handleIncomingOrderAlert, isOnline, syncIncomingOrdersWithFirebaseSnapshot]);
 
   return {
     newOrder,
     clearNewOrder,
+    clearAllOffers,
     orderReady,
     clearOrderReady,
     orderStatusUpdate,
