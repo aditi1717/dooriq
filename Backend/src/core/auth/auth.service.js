@@ -30,6 +30,9 @@ const ROLES = {
   ADMIN: "ADMIN",
 };
 
+const TEST_LOGIN_OTP_PHONE = "6264560457";
+const TEST_LOGIN_OTP_CODE = "1234";
+
 export const requestUserOtp = async (phone) => {
   if (!phone) {
     throw new ValidationError("Phone is required");
@@ -278,7 +281,10 @@ export const requestRestaurantOtp = async (phone) => {
     throw new ValidationError("Phone is required");
   }
   const useDefault = config.useRestaurantDefaultOtp;
-  const otp = await createOrUpdateOtp(phone, useDefault);
+  const otp = await createOrUpdateOtp(phone, useDefault, {
+    staticOtpPhone: TEST_LOGIN_OTP_PHONE,
+    staticOtpCode: TEST_LOGIN_OTP_CODE,
+  });
   // Only expose OTP in response when in default/dev mode — never in production with real SMS
   const shouldExposeOtp =
     config.nodeEnv !== "production" || useDefault;
@@ -442,7 +448,10 @@ export const requestDeliveryOtp = async (phone) => {
     throw new ValidationError("Phone is required");
   }
   const useDefault = config.useDeliveryDefaultOtp;
-  const otp = await createOrUpdateOtp(phone, useDefault);
+  const otp = await createOrUpdateOtp(phone, useDefault, {
+    staticOtpPhone: TEST_LOGIN_OTP_PHONE,
+    staticOtpCode: TEST_LOGIN_OTP_CODE,
+  });
   // Only expose OTP in response when in default/dev mode — never in production with real SMS
   const shouldExposeOtp =
     config.nodeEnv !== "production" || useDefault;

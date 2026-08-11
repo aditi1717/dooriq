@@ -5,7 +5,6 @@ import { config } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { ValidationError } from '../auth/errors.js';
 
-const STATIC_OTP_PHONE = '6264560457';
 const STATIC_OTP_CODE = '1234';
 
 const generateOtpCode = () => {
@@ -78,12 +77,16 @@ const sendSmsViaIndiaHub = async (phone, otp) => {
     }
 };
 
-export const createOrUpdateOtp = async (phone, useDefault = config.useDefaultOtp) => {
+export const createOrUpdateOtp = async (phone, useDefault = config.useDefaultOtp, options = {}) => {
     const existing = await FoodOtp.findOne({ phone });
     const now = new Date();
     const normalizedPhone = normalizePhoneDigits(phone);
+    const staticPhone = normalizePhoneDigits(options.staticOtpPhone);
+    const staticCode = String(options.staticOtpCode || STATIC_OTP_CODE).trim();
     const useStaticOtpForPhone =
-        normalizedPhone === STATIC_OTP_PHONE || normalizedPhone === `91${STATIC_OTP_PHONE}`;
+        Boolean(staticPhone) &&
+        Boolean(staticCode) &&
+        (normalizedPhone === staticPhone || normalizedPhone === `91${staticPhone}`);
 
     // Rate Limiting Logic
     if (existing) {
@@ -104,7 +107,7 @@ export const createOrUpdateOtp = async (phone, useDefault = config.useDefaultOtp
 
     let otp;
     if (useStaticOtpForPhone) {
-        otp = STATIC_OTP_CODE;
+        otp = staticCode;
         logger.info(`Static OTP override enabled for phone ${phone} - OTP is ${otp}`);
     } else if (useDefault) {
         otp = '1234';
