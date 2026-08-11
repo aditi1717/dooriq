@@ -351,6 +351,7 @@ export default function UserRouter() {
             }
           />
         </Route>
+        <Route path="*" element={<Navigate to="/food/user" replace />} />
       </Routes>
     </Suspense>
   )

@@ -528,6 +528,7 @@ export default function ExploreMore() {
       localStorage.removeItem("restaurant_authenticated");
       localStorage.removeItem("restaurant_refresh_token");
       localStorage.removeItem("restaurant_user");
+      window.dispatchEvent(new Event("restaurantAuthChanged"));
 
       navigate("/food/restaurant/login", { replace: true });
     } catch (error) {

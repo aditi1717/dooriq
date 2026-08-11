@@ -1313,6 +1313,7 @@ export async function listOrdersRestaurant(restaurantId, query) {
   const [docs, total] = await Promise.all([
     FoodOrder.find(filter)
       .populate("userId", "name phone email profileImage")
+      .populate("dispatch.deliveryPartnerId", "name fullName phone phoneNumber")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)

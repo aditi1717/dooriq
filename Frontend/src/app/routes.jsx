@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { AppShellSkeleton } from '@food/components/ui/loading-skeletons'
-import LandingPage from './LandingPage'
 import LaunchLandingPage from './LaunchLandingPage'
 import { adminAPI } from '@/services/api'
 import { registerWebPushForCurrentModule } from '@food/utils/firebaseMessaging'
@@ -54,7 +53,43 @@ const parseFeatureEnabled = (value, fallback = true) => {
 }
 
 const RootEntryRoute = () => {
-  return <Navigate to="/food/user" replace />
+  const [rootLandingEnabled, setRootLandingEnabled] = useState(null)
+
+  useEffect(() => {
+    let isCancelled = false
+
+    const loadRootLandingSetting = async () => {
+      try {
+        const response = await adminAPI.getFeatureSettingsPublic()
+        const rows = Array.isArray(response?.data?.data) ? response.data.data : []
+        const setting = rows.find((item) => item.key === 'root_landing_and_unregistered_control')
+        const enabled = parseFeatureEnabled(setting?.isEnabled, true)
+        if (!isCancelled) {
+          setRootLandingEnabled(enabled)
+        }
+      } catch {
+        if (!isCancelled) {
+          setRootLandingEnabled(true)
+        }
+      }
+    }
+
+    loadRootLandingSetting()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [])
+
+  if (rootLandingEnabled === null) {
+    return <PageLoader />
+  }
+
+  if (!rootLandingEnabled) {
+    return <Navigate to="/food/user" replace />
+  }
+
+  return <LaunchLandingPage />
 }
 
 
@@ -94,8 +129,8 @@ const AppRoutes = () => {
   return (
     <Routes>
       {/* Root → Redirect directly to Food Homepage */}
-      <Route path="/" element={<Navigate to="/food/user" replace />} />
-      <Route path="/launch-aug-15" element={<Navigate to="/food/user" replace />} />
+      <Route path="/" element={<RootEntryRoute />} />
+      <Route path="/launch-aug-15" element={<LaunchLandingPage />} />
       <Route path="/invite" element={<ReferralInvitePage />} />
       {/* Food Module */}
       <Route path="/food/*" element={<FoodAppWrapper />} />

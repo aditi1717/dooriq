@@ -60,6 +60,30 @@ const getAllOrdersTimestamp = (order) =>
   order?.createdAt ||
   new Date().toISOString();
 
+const getAssignedDeliveryPartner = (order) =>
+  order?.deliveryPartner ||
+  order?.deliveryPartnerId ||
+  order?.dispatch?.deliveryPartnerId ||
+  null;
+
+const getAssignedDeliveryPartnerId = (order) => {
+  const partner = getAssignedDeliveryPartner(order);
+  if (!partner) return null;
+  return typeof partner === "string" ? partner : partner._id || partner.id || null;
+};
+
+const getAssignedDeliveryPartnerName = (order) => {
+  const partner = getAssignedDeliveryPartner(order);
+  if (!partner || typeof partner === "string") return "";
+  return partner.name || partner.fullName || partner.ownerName || "";
+};
+
+const getAssignedDeliveryPartnerPhone = (order) => {
+  const partner = getAssignedDeliveryPartner(order);
+  if (!partner || typeof partner === "string") return "";
+  return partner.phone || partner.phoneNumber || partner.mobile || "";
+};
+
 const transformOrderForList = (order) => ({
   orderId: order.orderId || order._id,
   mongoId: order._id,
@@ -83,7 +107,9 @@ const transformOrderForList = (order) => ({
   photoUrl: order.items?.[0]?.image || null,
   photoAlt: order.items?.[0]?.name || "Order",
   paymentMethod: order.paymentMethod || order.payment?.method || null,
-  deliveryPartnerId: order.deliveryPartnerId || null,
+  deliveryPartnerId: getAssignedDeliveryPartnerId(order),
+  deliveryPartnerName: getAssignedDeliveryPartnerName(order),
+  deliveryPartnerPhone: getAssignedDeliveryPartnerPhone(order),
   dispatchStatus: order.dispatch?.status || null,
   preparingTimestamp: order.tracking?.preparing?.timestamp
     ? new Date(order.tracking.preparing.timestamp)
@@ -2919,10 +2945,21 @@ export default function OrdersMain() {
                   <span className="text-[11px] text-gray-500">
                     {selectedOrder.timePlaced}
                   </span>
+                  {selectedOrder.deliveryPartnerId && (
+                    <div className="text-right text-[11px] leading-tight text-gray-600">
+                      <p className="font-semibold text-gray-900">
+                        {selectedOrder.deliveryPartnerName || "Assigned rider"}
+                      </p>
+                      {selectedOrder.deliveryPartnerPhone && (
+                        <p>{selectedOrder.deliveryPartnerPhone}</p>
+                      )}
+                    </div>
+                  )}
                   {/* Delivery Resend Button - Only for preparing/ready orders with no partner */}
                   {(String(selectedOrder.status).toLowerCase() === "preparing" ||
                     String(selectedOrder.status).toLowerCase() === "ready") &&
                     !selectedOrder.deliveryPartnerId &&
+                    !selectedOrder.deliveryPartnerName &&
                     selectedOrder.dispatchStatus !== "accepted" && (
                       <div className="mt-1">
                         <ResendNotificationButton
@@ -3004,6 +3041,8 @@ function OrderCard({
   photoUrl,
   photoAlt,
   deliveryPartnerId,
+  deliveryPartnerName,
+  deliveryPartnerPhone,
   dispatchStatus,
   onSelect,
   onCancel,
@@ -3058,7 +3097,22 @@ function OrderCard({
 
       {/* ── Body: photo + items ── */}
       <div
-        onClick={() => onSelect?.({ orderId, status, customerName, type, tableOrToken, timePlaced, eta, itemsSummary, paymentMethod })}
+        onClick={() => onSelect?.({
+          orderId,
+          mongoId,
+          status,
+          customerName,
+          type,
+          tableOrToken,
+          timePlaced,
+          eta,
+          itemsSummary,
+          paymentMethod,
+          deliveryPartnerId,
+          deliveryPartnerName,
+          deliveryPartnerPhone,
+          dispatchStatus,
+        })}
         className="flex items-center gap-3 px-3 pb-3 cursor-pointer">
         {/* Food image */}
         <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 shrink-0">
@@ -3092,7 +3146,17 @@ function OrderCard({
               {deliveryPartnerId ? "Assigned" : "Not Assigned"}
             </span>
           )}
-          {!deliveryPartnerId && dispatchStatus !== "accepted" && (isPreparing || isReady || normalizedStatus === "confirmed") && (
+          {deliveryPartnerId && (deliveryPartnerName || deliveryPartnerPhone) && (
+            <div className="text-[10px] leading-tight text-gray-600">
+              {deliveryPartnerName && (
+                <p className="font-semibold text-gray-800">{deliveryPartnerName}</p>
+              )}
+              {deliveryPartnerPhone && (
+                <p>{deliveryPartnerPhone}</p>
+              )}
+            </div>
+          )}
+          {!deliveryPartnerId && !deliveryPartnerName && dispatchStatus !== "accepted" && (isPreparing || isReady || normalizedStatus === "confirmed") && (
             <ResendNotificationButton orderId={orderId} mongoId={mongoId} onSuccess={onSelect} />
           )}
         </div>
@@ -3188,7 +3252,9 @@ function PreparingOrders({
                   .join(", ") || "No items",
               photoUrl: order.items?.[0]?.image || null,
               photoAlt: order.items?.[0]?.name || "Order",
-              deliveryPartnerId: order.deliveryPartnerId || null,
+              deliveryPartnerId: getAssignedDeliveryPartnerId(order),
+              deliveryPartnerName: getAssignedDeliveryPartnerName(order),
+              deliveryPartnerPhone: getAssignedDeliveryPartnerPhone(order),
               dispatchStatus: order.dispatch?.status || null,
               paymentMethod:
                 order.paymentMethod || order.payment?.method || null,
@@ -3445,6 +3511,8 @@ function PreparingOrders({
                 photoAlt={order.photoAlt}
                 paymentMethod={order.paymentMethod}
                 deliveryPartnerId={order.deliveryPartnerId}
+                deliveryPartnerName={order.deliveryPartnerName}
+                deliveryPartnerPhone={order.deliveryPartnerPhone}
                 dispatchStatus={order.dispatchStatus}
                 onSelect={onSelectOrder}
                 onCancel={onCancel}
@@ -3504,7 +3572,9 @@ function ReadyOrders({ onSelectOrder, refreshToken = 0 }) {
             photoUrl: order.items?.[0]?.image || null,
             photoAlt: order.items?.[0]?.name || "Order",
             paymentMethod: order.paymentMethod || order.payment?.method || null,
-            deliveryPartnerId: order.deliveryPartnerId || null,
+            deliveryPartnerId: getAssignedDeliveryPartnerId(order),
+            deliveryPartnerName: getAssignedDeliveryPartnerName(order),
+            deliveryPartnerPhone: getAssignedDeliveryPartnerPhone(order),
             dispatchStatus: order.dispatch?.status || null,
           }));
 
@@ -3622,7 +3692,9 @@ const OutForDeliveryOrders = ({ onSelectOrder, refreshToken = 0 }) => {
             photoUrl: order.items?.[0]?.image || null,
             photoAlt: order.items?.[0]?.name || "Order",
             paymentMethod: order.paymentMethod || order.payment?.method || null,
-            deliveryPartnerId: order.deliveryPartnerId || null,
+            deliveryPartnerId: getAssignedDeliveryPartnerId(order),
+            deliveryPartnerName: getAssignedDeliveryPartnerName(order),
+            deliveryPartnerPhone: getAssignedDeliveryPartnerPhone(order),
             dispatchStatus: order.dispatch?.status || null,
           }));
 

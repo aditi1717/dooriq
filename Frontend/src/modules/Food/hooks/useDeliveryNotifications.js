@@ -8,6 +8,7 @@ import { dispatchNotificationInboxRefresh } from '@food/hooks/useNotificationInb
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { ref, onValue } from 'firebase/database';
 import { firebaseRealtimeDb, ensureFirebaseInitialized } from '@food/firebase';
+import { isModuleAuthenticated } from '@food/utils/auth';
 
 const shouldLogDeliverySocket = () => {
   if (typeof window === 'undefined') return import.meta.env.DEV;
@@ -191,6 +192,7 @@ export const useDeliveryNotifications = () => {
   const [orderStatusUpdate, setOrderStatusUpdate] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [deliveryPartnerId, setDeliveryPartnerId] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => isModuleAuthenticated('delivery'));
   const activeOrder = useDeliveryStore((state) => state.activeOrder);
   const tripStatus = useDeliveryStore((state) => state.tripStatus);
   const isOnline = useDeliveryStore((state) => state.isOnline);
@@ -467,6 +469,49 @@ export const useDeliveryNotifications = () => {
     clearNewOrder({ advance: false });
   }, [clearNewOrder]);
 
+  const cleanupDeliveryNotificationSession = useCallback(() => {
+    stopAlertLoop();
+    activeOrderRef.current = null;
+    newOrderRef.current = null;
+    pendingIncomingOrdersRef.current = [];
+    joinedDeliveryRoomRef.current = null;
+    setNewOrder(null);
+    setOrderReady(null);
+    setOrderStatusUpdate(null);
+    setDeliveryPartnerId(null);
+    setIsConnected(false);
+
+    if (socketRef.current) {
+      socketRef.current.removeAllListeners();
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  }, [stopAlertLoop]);
+
+  useEffect(() => {
+    const handleAuthChange = () => {
+      const nextAuthenticated = isModuleAuthenticated('delivery');
+      setIsAuthenticated(nextAuthenticated);
+
+      if (!nextAuthenticated) {
+        cleanupDeliveryNotificationSession();
+      }
+    };
+
+    window.addEventListener('deliveryAuthChanged', handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+
+    return () => {
+      window.removeEventListener('deliveryAuthChanged', handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, [cleanupDeliveryNotificationSession]);
+
   useEffect(() => {
     if (!isOnline) {
       clearAllOffers();
@@ -521,7 +566,7 @@ export const useDeliveryNotifications = () => {
   }, [clearNewOrder, isPartnerBusy]);
 
   const recoverDeliveryState = useCallback(async () => {
-    if (!deliveryPartnerId || !isOnline) return;
+    if (!isAuthenticated || !deliveryPartnerId || !isOnline) return;
 
     try {
       const [availableResult, currentTripResult] = await Promise.allSettled([
@@ -579,7 +624,7 @@ export const useDeliveryNotifications = () => {
     } catch (error) {
       debugWarn('Delivery recovery sync failed:', error?.message || error);
     }
-  }, [deliveryPartnerId, enqueueOffer, handleIncomingOrderAlert, isOnline, isPartnerBusy]);
+  }, [deliveryPartnerId, enqueueOffer, handleIncomingOrderAlert, isAuthenticated, isOnline, isPartnerBusy]);
 
   const joinDeliveryRoomIfPossible = useCallback(() => {
     if (!socketRef.current?.connected || !deliveryPartnerId) {
@@ -793,6 +838,12 @@ export const useDeliveryNotifications = () => {
 
   // Fetch delivery partner ID
   useEffect(() => {
+    if (!isAuthenticated) {
+      setDeliveryPartnerId(null);
+      return;
+    }
+
+    let isCancelled = false;
     const fallbackId = resolveDeliveryPartnerIdFromClient();
     if (fallbackId) {
       setDeliveryPartnerId(fallbackId);
@@ -808,7 +859,7 @@ export const useDeliveryNotifications = () => {
             const id = deliveryPartner.id?.toString() || 
                       deliveryPartner._id?.toString() || 
                       deliveryPartner.deliveryId;
-            if (id) {
+            if (id && !isCancelled) {
               setDeliveryPartnerId(id);
               debugLog('? Delivery Partner ID fetched:', id);
             } else {
@@ -825,10 +876,20 @@ export const useDeliveryNotifications = () => {
       }
     };
     fetchDeliveryPartnerId();
-  }, []);
+    return () => {
+      isCancelled = true;
+    };
+  }, [isAuthenticated]);
 
   // Socket connection effect (no backend when API_BASE_URL is empty)
   useEffect(() => {
+    const token = localStorage.getItem('delivery_accessToken');
+    if (!isAuthenticated || !token) {
+      setIsConnected(false);
+      joinedDeliveryRoomRef.current = null;
+      return;
+    }
+
     if (!API_BASE_URL || !String(API_BASE_URL).trim()) {
       setIsConnected(false);
       return;
@@ -893,7 +954,6 @@ export const useDeliveryNotifications = () => {
       return; // Don't try to connect with invalid URL
     }
 
-    const token = localStorage.getItem('delivery_accessToken') || localStorage.getItem('accessToken');
     const tokenPreview = token ? `${String(token).slice(0, 12)}...` : null;
     debugLog('Preparing socket auth payload', {
       tokenPresent: Boolean(token),
@@ -1142,14 +1202,23 @@ export const useDeliveryNotifications = () => {
 
     // Auth change/refresh listeners
     const handleAuthChange = () => {
-      const newToken = localStorage.getItem('delivery_accessToken') || localStorage.getItem('accessToken');
-      if (socketRef.current && newToken) {
-        debugLog('?? Auth changed, updating socket token');
+      const stillAuthenticated = isModuleAuthenticated('delivery');
+      const newToken = localStorage.getItem('delivery_accessToken');
+      setIsAuthenticated(stillAuthenticated);
+
+      if (!stillAuthenticated || !newToken) {
+        cleanupDeliveryNotificationSession();
+        return;
+      }
+
+      if (socketRef.current) {
+        debugLog('?? Auth changed, updating delivery socket token');
         socketRef.current.auth.token = newToken;
-        // Only reconnect if not already connecting/connected or if token changed significantly
-        if (!socketRef.current.connected) {
-          socketRef.current.connect();
-        }
+        socketRef.current.io.opts.query = { token: newToken };
+      }
+
+      if (socketRef.current && !socketRef.current.connected) {
+        socketRef.current.connect();
       }
     };
 
@@ -1192,10 +1261,10 @@ export const useDeliveryNotifications = () => {
         socketRef.current = null;
       }
     };
-  }, [clearAllOffers, deliveryPartnerId, enqueueOffer, handleIncomingOrderAlert, isPartnerBusy, joinDeliveryRoomIfPossible, playNotificationSound, recoverDeliveryState, removeIncomingOrderByKey, showBackgroundOrderNotification, startAlertLoop, stopAlertLoop]);
+  }, [cleanupDeliveryNotificationSession, clearAllOffers, deliveryPartnerId, enqueueOffer, handleIncomingOrderAlert, isAuthenticated, isPartnerBusy, joinDeliveryRoomIfPossible, playNotificationSound, recoverDeliveryState, removeIncomingOrderByKey, showBackgroundOrderNotification, startAlertLoop, stopAlertLoop]);
 
   useEffect(() => {
-    if (!deliveryPartnerId) {
+    if (!isAuthenticated || !deliveryPartnerId) {
       debugLog('? Waiting for deliveryPartnerId...');
       return;
     }
@@ -1210,7 +1279,7 @@ export const useDeliveryNotifications = () => {
       socketRef.current.emit('resync');
       void recoverDeliveryState();
     }
-  }, [deliveryPartnerId, joinDeliveryRoomIfPossible, recoverDeliveryState]);
+  }, [deliveryPartnerId, isAuthenticated, joinDeliveryRoomIfPossible, recoverDeliveryState]);
 
   const clearOrderReady = () => {
     setOrderReady(null);
@@ -1231,7 +1300,7 @@ export const useDeliveryNotifications = () => {
 
   // Listen for Firebase Realtime Database delivery offers
   useEffect(() => {
-    if (!deliveryPartnerId || !isOnline) {
+    if (!isAuthenticated || !deliveryPartnerId || !isOnline) {
       clearAllOffers();
       return;
     }
@@ -1301,7 +1370,7 @@ export const useDeliveryNotifications = () => {
     return () => {
       unsubscribe();
     };
-  }, [clearAllOffers, deliveryPartnerId, enqueueOffer, handleIncomingOrderAlert, isOnline, syncIncomingOrdersWithFirebaseSnapshot]);
+  }, [clearAllOffers, deliveryPartnerId, enqueueOffer, handleIncomingOrderAlert, isAuthenticated, isOnline, syncIncomingOrdersWithFirebaseSnapshot]);
 
   return {
     newOrder,

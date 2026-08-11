@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useNavigate } from "react-router-dom"
+import { clearModuleAuth } from "@food/utils/auth"
 import { 
   User,
   Utensils,
@@ -150,8 +151,7 @@ export default function MenuOverlay({ showMenu, setShowMenu }) {
                           // Handle logout
                           if (window.confirm("Are you sure you want to logout?")) {
                             // Clear authentication state
-                            localStorage.removeItem("restaurant_authenticated")
-                            localStorage.removeItem("restaurant_user")
+                            clearModuleAuth("restaurant")
                             setIsAuthenticated(false)
                             // Dispatch custom event for same-tab updates
                             window.dispatchEvent(new Event('restaurantAuthChanged'))

@@ -36,6 +36,17 @@ const createStubAPI = () =>
 export default apiClient;
 export { API_ENDPOINTS };
 
+const removeFcmTokenForModule = (moduleName, token, platform = "web") => {
+  if (!token) return Promise.resolve({ data: { success: true } });
+  return apiClient.delete(
+    `/fcm-tokens/remove/${encodeURIComponent(String(token))}`,
+    {
+      data: { token: String(token), platform },
+      contextModule: moduleName,
+    },
+  );
+};
+
 // Stub for non-auth endpoints so we don't hit backend for unimplemented routes (avoids 404s and extra calls).
 // Auth is done via authAPI/authService which use apiClient directly.
 const emptyDataStub = () =>
@@ -1552,6 +1563,9 @@ export const restaurantAPI = {
         : null);
     const fcmToken = typeof localStorage !== "undefined" ? localStorage.getItem("fcm_web_registered_token_restaurant") : null;
     const resolvedPlatform = platform || (typeof window !== "undefined" && window.flutter_inappwebview ? "mobile" : "web");
+    if (!token && fcmToken) {
+      return removeFcmTokenForModule("restaurant", fcmToken, resolvedPlatform);
+    }
     return authService.logout(token, fcmToken, resolvedPlatform);
   },
   /** Backend has no email/password login; use phone OTP only. */
@@ -1905,6 +1919,9 @@ export const deliveryAPI = {
         : null);
     const fcmToken = typeof localStorage !== "undefined" ? localStorage.getItem("fcm_web_registered_token_delivery") : null;
     const resolvedPlatform = platform || (typeof window !== "undefined" && window.flutter_inappwebview ? "mobile" : "web");
+    if (!token && fcmToken) {
+      return removeFcmTokenForModule("delivery", fcmToken, resolvedPlatform);
+    }
     return authService.logout(token, fcmToken, resolvedPlatform);
   },
   /** POST /food/delivery/register - multipart FormData (new partner, no token). */

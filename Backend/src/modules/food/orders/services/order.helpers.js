@@ -154,6 +154,17 @@ export function normalizeOrderForClient(orderDoc) {
   else if (String(cancellationEntry?.byRole || "").toUpperCase() === "ADMIN")
     cancelledBy = "admin";
 
+  const deliveryPartner =
+    order?.dispatch?.deliveryPartnerId || order?.deliveryPartnerId || null;
+  const deliveryPartnerName =
+    deliveryPartner && typeof deliveryPartner === "object"
+      ? deliveryPartner.name || deliveryPartner.fullName || ""
+      : "";
+  const deliveryPartnerPhone =
+    deliveryPartner && typeof deliveryPartner === "object"
+      ? deliveryPartner.phone || deliveryPartner.phoneNumber || deliveryPartner.mobile || ""
+      : "";
+
   return {
     ...order,
     orderMongoId: mongoId,
@@ -164,8 +175,9 @@ export function normalizeOrderForClient(orderDoc) {
     cancelledAt: cancellationEntry?.at || null,
     deliveredAt:
       order?.deliveryState?.deliveredAt || order?.deliveredAt || null,
-    deliveryPartnerId:
-      order?.dispatch?.deliveryPartnerId || order?.deliveryPartnerId || null,
+    deliveryPartnerId: deliveryPartner,
+    deliveryPartnerName,
+    deliveryPartnerPhone,
     rating: order?.ratings?.restaurant?.rating ?? order?.rating ?? null,
     deliveryState: {
       ...(order?.deliveryState || {}),

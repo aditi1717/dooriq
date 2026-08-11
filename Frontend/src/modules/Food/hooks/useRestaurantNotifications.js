@@ -102,7 +102,9 @@ export const useRestaurantNotifications = () => {
         setRestaurantId(null);
         setNewOrder(null);
         setIsConnected(false);
+        activeOrderRef.current = null;
         if (socketRef.current) {
+          socketRef.current.removeAllListeners();
           socketRef.current.disconnect();
           socketRef.current = null;
         }
@@ -236,6 +238,10 @@ export const useRestaurantNotifications = () => {
   };
 
   const handleIncomingOrderAlert = (orderData) => {
+    if (!isModuleAuthenticated("restaurant")) {
+      return;
+    }
+
     if (!shouldProcessOrderAlert(orderData)) {
       return;
     }
@@ -611,7 +617,7 @@ export const useRestaurantNotifications = () => {
       debugLog('? Restaurant Socket disconnected:', reason);
       setIsConnected(false);
       
-      if (reason === 'io server disconnect') {
+      if (reason === 'io server disconnect' && isModuleAuthenticated("restaurant")) {
         // Server disconnected the socket, reconnect manually
         socketRef.current.connect();
       }
@@ -635,6 +641,7 @@ export const useRestaurantNotifications = () => {
 
     // Listen for new order notifications
     socketRef.current.on('new_order', (orderData) => {
+      if (!isModuleAuthenticated("restaurant")) return;
       debugLog('?? New order received:', orderData);
       setNewOrder(orderData);
 
@@ -643,6 +650,7 @@ export const useRestaurantNotifications = () => {
 
     // Listen for sound notification event
     socketRef.current.on('play_notification_sound', (data) => {
+      if (!isModuleAuthenticated("restaurant")) return;
       debugLog('?? Sound notification:', data);
       const normalizedData = {
         orderId: data?.orderId || data?.order_id,
@@ -702,6 +710,7 @@ export const useRestaurantNotifications = () => {
     return () => {
       stopAlertLoop();
       if (socketRef.current) {
+        socketRef.current.removeAllListeners();
         socketRef.current.disconnect();
         socketRef.current = null;
       }
@@ -709,6 +718,7 @@ export const useRestaurantNotifications = () => {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      activeOrderRef.current = null;
     };
   }, [restaurantId, isAuthenticated]);
 

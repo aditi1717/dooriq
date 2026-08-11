@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
-import { Eye, Printer, ArrowUpDown, Loader2, Check, X, Trash2, RefreshCw, Volume2 } from "lucide-react"
+import { Eye, Printer, ArrowUpDown, Loader2, Check, X, Trash2, Volume2 } from "lucide-react"
 
 const getStatusColor = (orderStatus) => {
   const colors = {
@@ -37,7 +37,6 @@ export default function OrdersTable({
   onAcceptOrder,
   onRejectOrder,
   onCancelOrder,
-  onDeassignAndResend,
   onResendNotification,
   actionLoadingOrderId,
   deletingOrderId,
@@ -63,26 +62,24 @@ export default function OrdersTable({
     return name
   }
 
+  const hasAssignedDeliveryPartner = (order) => {
+    const partner =
+      order?.dispatch?.deliveryPartnerId ||
+      order?.deliveryPartnerId ||
+      order?.deliveryPartnerName
+    return Boolean(partner) || order?.dispatch?.status === "accepted"
+  }
+
   const canShowCancelAction = (order) => {
     const currentStatus = String(order?.orderStatus || "").trim().toLowerCase()
-    return [
+    const cancellableStatus = [
       "pending",
       "accepted",
       "processing",
       "food on the way",
     ].includes(currentStatus)
-  }
 
-  const canDeassignAndResend = (order) => {
-    const backendStatus = String(order?.status || "").trim().toLowerCase()
-    const phase = String(order?.deliveryState?.currentPhase || "").trim().toLowerCase()
-    return (
-      ["confirmed", "preparing", "ready_for_pickup", "reached_pickup"].includes(backendStatus) &&
-      order?.dispatch?.status === "accepted" &&
-      Boolean(order?.dispatch?.deliveryPartnerId) &&
-      !order?.deliveryState?.pickedUpAt &&
-      !["en_route_to_delivery", "at_drop", "delivered", "completed"].includes(phase)
-    )
+    return cancellableStatus && !hasAssignedDeliveryPartner(order)
   }
 
   const canResendNotification = (order) => {
@@ -410,17 +407,13 @@ export default function OrdersTable({
                 {visibleColumns.actions && (
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     <div className="flex items-center justify-center gap-2">
-                      {onCancelOrder ? (
+                      {onCancelOrder && canShowCancelAction(order) ? (
                         <button
-                          onClick={() => canShowCancelAction(order) && onCancelOrder(order)}
+                          onClick={() => onCancelOrder(order)}
                           disabled={
-                            actionLoadingOrderId === (order.id || order.orderId) ||
-                            !canShowCancelAction(order)
+                            actionLoadingOrderId === (order.id || order.orderId)
                           }
-                          className={`inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${canShowCancelAction(order)
-                              ? "bg-red-600 text-white hover:bg-red-700"
-                              : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                            } disabled:opacity-60 disabled:cursor-not-allowed`}
+                          className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded text-xs font-medium transition-colors bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
                           title="Cancel Order"
                         >
                           {actionLoadingOrderId === (order.id || order.orderId) ? (
@@ -456,33 +449,6 @@ export default function OrdersTable({
                             <Volume2 className="h-3.5 w-3.5" />
                           )}
                           <span>Resend</span>
-                        </button>
-                      ) : null}
-                      {onDeassignAndResend ? (
-                        <button
-                          onClick={() =>
-                            canDeassignAndResend(order) && onDeassignAndResend(order)
-                          }
-                          disabled={
-                            actionLoadingOrderId === (order.id || order.orderId) ||
-                            !canDeassignAndResend(order)
-                          }
-                          className={`inline-flex items-center justify-center gap-1 rounded px-3 py-1.5 text-xs font-medium transition-colors ${canDeassignAndResend(order)
-                              ? "bg-red-600 text-white hover:bg-red-700"
-                              : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                            } disabled:cursor-not-allowed disabled:opacity-60`}
-                          title={
-                            canDeassignAndResend(order)
-                              ? "Remove the current delivery partner and resend this order"
-                              : "Available only for an accepted delivery before pickup"
-                          }
-                        >
-                          {actionLoadingOrderId === (order.id || order.orderId) ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-3.5 w-3.5" />
-                          )}
-                          <span>Deassign &amp; Resend</span>
                         </button>
                       ) : null}
                     </div>

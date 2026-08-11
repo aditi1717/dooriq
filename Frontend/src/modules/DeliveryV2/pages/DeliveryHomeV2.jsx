@@ -177,6 +177,8 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     localStorage.removeItem('delivery_refreshToken');
     localStorage.removeItem('delivery_authenticated');
     localStorage.removeItem('delivery_user');
+    localStorage.removeItem('app:isOnline');
+    window.dispatchEvent(new Event('deliveryAuthChanged'));
 
     // 2. Alert user and redirect
     toast.error("Session Expired", { description: "Please log in again." });

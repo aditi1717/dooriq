@@ -85,6 +85,7 @@ export const ProfileV2 = () => {
       toast.success("Account deleted successfully");
       clearModuleAuth("delivery");
       localStorage.removeItem("app:isOnline");
+      window.dispatchEvent(new Event("deliveryAuthChanged"));
       navigate("/food/delivery/login", { replace: true });
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to delete account");
@@ -100,6 +101,7 @@ export const ProfileV2 = () => {
     } catch (error) {}
     clearModuleAuth("delivery")
     localStorage.removeItem("app:isOnline")
+    window.dispatchEvent(new Event("deliveryAuthChanged"))
     toast.success("Logged out successfully")
     navigate("/food/delivery/login", { replace: true })
     setLogoutSubmitting(false)
