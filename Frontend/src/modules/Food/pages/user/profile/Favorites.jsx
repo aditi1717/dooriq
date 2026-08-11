@@ -56,7 +56,7 @@ export default function Favorites() {
               style={{ color: "var(--module-theme-color, #FA0272)" }}
             />
             <p className="text-muted-foreground text-lg mb-4">You haven't added any favorites yet</p>
-            <Link to="/user">
+            <Link to="/food/user">
               <Button
                 className="text-white border-0"
                 style={{

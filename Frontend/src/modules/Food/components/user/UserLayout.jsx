@@ -172,6 +172,15 @@ export default function UserLayout() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
   const [hasConnectionError, setHasConnectionError] = useState(false)
 
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('last_active_module', 'user')
+        sessionStorage.setItem('entered_food_app', 'true')
+      }
+    } catch {}
+  }, [])
+
   const [businessSettings, setBusinessSettings] = useState(null)
   const [timeLeft, setTimeLeft] = useState(null)
   const [dismissedLock, setDismissedLock] = useState(false)

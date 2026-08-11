@@ -142,13 +142,21 @@ export default function useAppBackNavigation() {
   const location = useLocation()
 
   return useCallback(() => {
-    // If there is history within our app (idx > 0), navigate back in history.
-    // This returns the user to their exact previous page (search, collection, home, etc.)
-    // preserving scroll position, search query, and filters.
-    if (window.history.state && typeof window.history.state.idx === "number" && window.history.state.idx > 0) {
+    const explicitBackPath = toFoodPath(location.state?.backTo) || toFoodPath(location.state?.from)
+    if (explicitBackPath && explicitBackPath !== location.pathname) {
+      navigate(explicitBackPath)
+      return
+    }
+
+    // React Router tracks history index in window.history.state.idx
+    // If idx > 1, going back (-1) stays inside the user food app (idx - 1 >= 1).
+    // If idx <= 1, going back (-1) would pop back to idx = 0 (which is the root "/" Launch Landing Page).
+    // In that case, navigate explicitly to resolveBackPath(location) (e.g. "/food/user") instead of escaping to the landing page.
+    if (window.history.state && typeof window.history.state.idx === "number" && window.history.state.idx > 1) {
       navigate(-1)
     } else {
       navigate(resolveBackPath(location))
     }
   }, [location, navigate])
 }
+

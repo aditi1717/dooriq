@@ -55,13 +55,14 @@ const debugError = (...args) => { };
 const USER_SESSION_PREFERENCE_KEYS = ["userVegMode", "food-under-250-filters"];
 
 import { registerWebPushForCurrentModule } from "@food/utils/firebaseMessaging";
-import DeleteAccountModal from "@food/components/DeleteAccountModal";
+import useAppBackNavigation from "@food/hooks/useAppBackNavigation";
 
 export default function Profile() {
   const { userProfile, vegMode, setVegMode, getDefaultAddress, addresses } =
     useProfile();
   const { openLocationSelector } = useLocationSelector();
   const navigate = useNavigate();
+  const goBack = useAppBackNavigation();
   const companyName = useCompanyName();
   const defaultAddress = getDefaultAddress?.();
   const savedAddressSummary = defaultAddress

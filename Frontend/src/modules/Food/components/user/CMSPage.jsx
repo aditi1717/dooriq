@@ -65,12 +65,7 @@ export default function CMSPage({ endpoint, title: defaultTitle, module = "USER"
   }
 
   const handleBack = () => {
-    const explicitBackPath = location.state?.backTo || location.state?.from
-    if (explicitBackPath) {
-      navigate(explicitBackPath)
-    } else {
-      navigate(-1)
-    }
+    goBack()
   }
 
   const toggleFaq = (idx) => {

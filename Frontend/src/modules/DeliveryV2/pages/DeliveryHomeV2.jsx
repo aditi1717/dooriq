@@ -166,6 +166,31 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const [simProgress, setSimProgress] = useState(0); // 0 to 1 between points
   const [activePolyline, setActivePolyline] = useState(null);
   const mapRef = useRef(null);
+  const latestGpsStateRef = useRef({
+    activeOrder: null,
+    activePolyline: null,
+    distanceToTarget: null,
+    emitLocation: null,
+    eta: null,
+    isOnline: false,
+    reachDrop: null,
+    reachPickup: null,
+    tripStatus: 'IDLE',
+  });
+
+  useEffect(() => {
+    latestGpsStateRef.current = {
+      activeOrder,
+      activePolyline,
+      distanceToTarget,
+      emitLocation,
+      eta,
+      isOnline,
+      reachDrop,
+      reachPickup,
+      tripStatus,
+    };
+  }, [activeOrder, activePolyline, distanceToTarget, emitLocation, eta, isOnline, reachDrop, reachPickup, tripStatus]);
 
   const isLoggingOut = useRef(false);
   const handleLogout = useCallback(() => {
@@ -426,43 +451,83 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     setIsModalMinimized(false);
   }, [clearAllOffers, isOnline]);
 
-  // 3. Location logic (Smart Frequency Tracking) - MOCKED TO FIXED POINT FOR NOW
+  // 3. Location logic (Smart Frequency Tracking)
   useEffect(() => {
-    if (!isOnline) {
+    if (isSimMode) {
       return;
     }
 
-    // Fixed mock coordinates (Indore, India)
-    const lat = 22.7196;
-    const lng = 75.8577;
-    const heading = 0;
-    const speed = 0;
-    const now = Date.now();
+    if (!navigator.geolocation) {
+      toast.error('GPS is not supported on this device.');
+      return;
+    }
 
-    const currentRiderPos = { lat, lng, heading: 0 };
-    setRiderLocation(currentRiderPos);
-    lastCoordRef.current = { lat, lng };
+    const handlePosition = (pos, options = {}) => {
+      const latest = latestGpsStateRef.current;
+      const { latitude: lat, longitude: lng, heading, speed } = pos.coords;
+      const now = Date.now();
+      const normalizedHeading = Number.isFinite(heading) ? heading : 0;
+      const normalizedSpeed = Number.isFinite(speed) ? speed : 0;
+      const accuracy = Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null;
 
-    const syncMockLocation = () => {
+      setRiderLocation({ lat, lng, heading: normalizedHeading });
+
+      if (normalizedSpeed > 0) {
+        rollingSpeedRef.current = [...rollingSpeedRef.current.slice(-4), normalizedSpeed];
+      }
+
+      if (
+        latest.isOnline &&
+        !import.meta.env.DEV &&
+        latest.distanceToTarget &&
+        latest.distanceToTarget <= 100 &&
+        !lastAutoArrivalRef.current[latest.tripStatus]
+      ) {
+        if (latest.tripStatus === 'PICKING_UP') {
+          lastAutoArrivalRef.current[latest.tripStatus] = true;
+          latest.reachPickup?.().catch(() => { lastAutoArrivalRef.current[latest.tripStatus] = false; });
+        } else if (latest.tripStatus === 'PICKED_UP') {
+          lastAutoArrivalRef.current[latest.tripStatus] = true;
+          latest.reachDrop?.().catch(() => { lastAutoArrivalRef.current[latest.tripStatus] = false; });
+        }
+      }
+
+      if (latest.distanceToTarget > 200) {
+        lastAutoArrivalRef.current[latest.tripStatus] = false;
+      }
+
+      const distMoved = lastCoordRef.current
+        ? getHaversineDistance(lat, lng, lastCoordRef.current.lat, lastCoordRef.current.lng)
+        : 1000;
+
+      lastCoordRef.current = { lat, lng };
+
+      if (!latest.isOnline) {
+        return;
+      }
+
+      if (!options.force && distMoved < 25 && (now - lastLocationSentAt.current < 7000)) {
+        return;
+      }
+
+      lastLocationSentAt.current = now;
       const payload = {
         lat,
         lng,
-        heading: 0,
-        speed: 0,
-        accuracy: 10,
-        orderId: activeOrder?.orderId || activeOrder?._id,
+        heading: normalizedHeading,
+        speed: normalizedSpeed,
+        accuracy,
+        orderId: latest.activeOrder?.orderId || latest.activeOrder?._id,
         status: 'on_the_way',
-        polyline: activePolyline
+        polyline: latest.activePolyline
       };
 
-      // A. HTTP Backup
       deliveryAPI.updateLocation(lat, lng, true, {
-        heading: 0,
-        speed: 0,
-        accuracy: 10
+        heading: normalizedHeading,
+        speed: normalizedSpeed,
+        accuracy
       }).catch(() => { });
 
-      // B. ADMIN LIVE TRACKING NODE
       const deliveryPartnerId = deliveryPartnerIdRef.current || getStoredDeliveryPartnerId();
       deliveryPartnerIdRef.current = deliveryPartnerId;
       if (deliveryPartnerId) {
@@ -470,121 +535,41 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
           deliveryId: deliveryPartnerId,
           lat,
           lng,
-          heading: 0,
-          speed: 0,
-          accuracy: 10,
+          heading: normalizedHeading,
+          speed: normalizedSpeed,
+          accuracy,
           isOnline: true,
           activeOrderId: payload.orderId || null,
-          timestamp: Date.now()
+          timestamp: now
         }).catch(() => { });
       }
 
-      // C. SOCKET LIVE
-      if (payload.orderId) emitLocation(payload);
+      if (payload.orderId) latest.emitLocation?.(payload);
 
-      // D. FIREBASE REALTIME DB
       if (payload.orderId) {
         writeOrderTracking(payload.orderId, {
           lat,
           lng,
-          heading: 0,
-          polyline: activePolyline,
-          status: tripStatus,
-          eta: eta
+          heading: normalizedHeading,
+          polyline: latest.activePolyline,
+          status: latest.tripStatus,
+          eta: latest.eta
         }).catch(() => { });
       }
     };
 
-    syncMockLocation();
-    const intervalId = setInterval(syncMockLocation, 10000);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => handlePosition(pos, { force: true }),
+      () => {},
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 8000
+      }
+    );
 
-    /*
-    // ORIGINAL LIVE LOCATION TRACKING (COMMENTED OUT FOR TESTING)
     const watchId = navigator.geolocation.watchPosition((pos) => {
-      if (isSimMode) return;
-
-      const { latitude: lat, longitude: lng, heading, speed } = pos.coords;
-      const now = Date.now();
-
-      const currentRiderPos = { lat, lng, heading: heading || 0 };
-      setRiderLocation(currentRiderPos);
-
-      if (speed && speed > 0) {
-        rollingSpeedRef.current = [...rollingSpeedRef.current.slice(-4), speed];
-      }
-
-      const avgSpeed = rollingSpeedRef.current.length > 0
-        ? rollingSpeedRef.current.reduce((a, b) => a + b, 0) / rollingSpeedRef.current.length
-        : speed || 0;
-
-      if (!isSimMode && !import.meta.env.DEV && distanceToTarget && distanceToTarget <= 100 && !lastAutoArrivalRef.current[tripStatus]) {
-        if (tripStatus === 'PICKING_UP') {
-          lastAutoArrivalRef.current[tripStatus] = true;
-          reachPickup().catch(() => { lastAutoArrivalRef.current[tripStatus] = false; });
-        } else if (tripStatus === 'PICKED_UP') {
-          lastAutoArrivalRef.current[tripStatus] = true;
-          reachDrop().catch(() => { lastAutoArrivalRef.current[tripStatus] = false; });
-        }
-      }
-
-      if (distanceToTarget > 200) {
-        lastAutoArrivalRef.current[tripStatus] = false;
-      }
-
-      const distMoved = lastCoordRef.current
-        ? getHaversineDistance(lat, lng, lastCoordRef.current.lat, lastCoordRef.current.lng)
-        : 1000;
-
-      if (distMoved >= 25 || (now - lastLocationSentAt.current >= 7000)) {
-        lastLocationSentAt.current = now;
-        lastCoordRef.current = { lat, lng };
-
-        const payload = {
-          lat,
-          lng,
-          heading: heading || 0,
-          speed: speed || 0,
-          accuracy: pos.coords.accuracy,
-          orderId: activeOrder?.orderId || activeOrder?._id,
-          status: 'on_the_way',
-          polyline: activePolyline
-        };
-
-        deliveryAPI.updateLocation(lat, lng, true, {
-          heading: heading || 0,
-          speed: speed || 0,
-          accuracy: pos.coords.accuracy
-        }).catch(() => { });
-
-        const deliveryPartnerId = deliveryPartnerIdRef.current || getStoredDeliveryPartnerId();
-        deliveryPartnerIdRef.current = deliveryPartnerId;
-        if (deliveryPartnerId) {
-          writeDeliveryLocation({
-            deliveryId: deliveryPartnerId,
-            lat,
-            lng,
-            heading: heading || 0,
-            speed: speed || 0,
-            accuracy: pos.coords.accuracy,
-            isOnline: true,
-            activeOrderId: payload.orderId || null,
-            timestamp: now
-          }).catch(() => { });
-        }
-
-        if (payload.orderId) emitLocation(payload);
-
-        if (payload.orderId) {
-          writeOrderTracking(payload.orderId, {
-            lat,
-            lng,
-            heading: heading || 0,
-            polyline: activePolyline,
-            status: tripStatus,
-            eta: eta
-          }).catch(() => { });
-        }
-      }
+      handlePosition(pos);
     }, (error) => {
       if (error.code === error.PERMISSION_DENIED) {
         toast.error('GPS Permission Denied! Please enable location access in settings.');
@@ -600,13 +585,11 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       maximumAge: 3000,
       timeout: 10000
     });
-    */
 
     return () => {
-      clearInterval(intervalId);
-      // if (watchId) navigator.geolocation.clearWatch(watchId);
+      navigator.geolocation.clearWatch(watchId);
     };
-  }, [isOnline, setRiderLocation, activeOrder, activePolyline, tripStatus, eta]);
+  }, [isSimMode, setRiderLocation]);
 
   // 3.5. Background Ping / Heartbeat
   // If watchPosition stops firing (e.g. app in background or device stationary),

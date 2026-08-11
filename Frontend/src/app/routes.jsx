@@ -81,6 +81,20 @@ const RootEntryRoute = () => {
     }
   }, [])
 
+  // Redirect back to the last active module when returning to root "/"
+  if (typeof window !== 'undefined') {
+    const lastModule = sessionStorage.getItem('last_active_module')
+    if (lastModule === 'delivery') {
+      return <Navigate to="/food/delivery" replace />
+    }
+    if (lastModule === 'restaurant') {
+      return <Navigate to="/food/restaurant" replace />
+    }
+    if (lastModule === 'user' || sessionStorage.getItem('entered_food_app') === 'true') {
+      return <Navigate to="/food/user" replace />
+    }
+  }
+
   if (rootLandingEnabled === null) {
     return <PageLoader />
   }

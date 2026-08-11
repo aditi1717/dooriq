@@ -738,7 +738,7 @@ Order again from this restaurant in the ${companyName} app.`
         </div>
         <div className="px-4 py-8 text-center">
           <p className="text-gray-600 dark:text-gray-400">You haven't placed any orders yet</p>
-          <Link to="/user">
+          <Link to="/food/user">
             <button className="mt-4 text-[#EB590E] font-medium">Start Ordering</button>
           </Link>
         </div>

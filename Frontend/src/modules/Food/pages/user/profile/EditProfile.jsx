@@ -483,7 +483,7 @@ export default function EditProfile() {
         toast.success('Profile updated successfully')
 
         // Navigate back
-        navigate("/user/profile")
+        navigate("/food/user/profile")
       }
     } catch (error) {
       debugError('Error updating profile:', error)

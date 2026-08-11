@@ -36,6 +36,14 @@ const HelpContentV2 = lazy(() => import('./pages/HelpContentV2'));
 const NotificationsV2 = lazy(() => import('./pages/NotificationsV2'));
 
 const DeliveryV2Router = () => {
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('last_active_module', 'delivery')
+      }
+    } catch {}
+  }, [])
+
   // Safely enforce light mode for the Delivery app to prevent User dark mode bleeding
   useEffect(() => {
     document.documentElement.classList.remove('dark');

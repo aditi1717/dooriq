@@ -115,6 +115,13 @@ const PostApprovalPayment = lazy(() => import("@food/pages/restaurant/auth/PostA
 
 
 export default function RestaurantRouter() {
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('last_active_module', 'restaurant')
+      }
+    } catch {}
+  }, [])
 
   // Safely enforce light mode for the Restaurant app to prevent User dark mode bleeding
 
