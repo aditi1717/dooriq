@@ -1244,6 +1244,27 @@ export default function Home() {
     }
   };
 
+  // Intercept back button when veg mode modal or switch-off popup is open to close it cleanly without black screen
+  useEffect(() => {
+    if (!showVegModePopup && !showSwitchOffPopup) return;
+
+    window.history.pushState({ vegModalOpen: true }, "");
+
+    const handlePopState = () => {
+      setShowVegModePopup(false);
+      setShowSwitchOffPopup(false);
+      isHandlingSwitchOff.current = false;
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      if (window.history.state?.vegModalOpen) {
+        window.history.back();
+      }
+    };
+  }, [showVegModePopup, showSwitchOffPopup]);
+
   // Update popup position on scroll/resize
   useEffect(() => {
     if (!showVegModePopup) return;

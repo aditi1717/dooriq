@@ -108,6 +108,24 @@ function SearchOverlayProvider({ children }) {
     }
   }, []);
 
+  useEffect(() => {
+    if (!isSearchOpen) return
+
+    window.history.pushState({ searchOverlayOpen: true }, "")
+
+    const handlePopState = () => {
+      closeSearch()
+    }
+
+    window.addEventListener("popstate", handlePopState)
+    return () => {
+      window.removeEventListener("popstate", handlePopState)
+      if (window.history.state?.searchOverlayOpen) {
+        window.history.back()
+      }
+    }
+  }, [isSearchOpen])
+
   return (
     <SearchOverlayContext.Provider value={{ isSearchOpen, searchValue, setSearchValue, isListening, openSearch, closeSearch, startVoiceSearch }}>
       {children}
