@@ -631,6 +631,16 @@ export const adminAPI = {
       body ?? {},
       { contextModule: "admin" },
     ),
+  getRestaurantOutletTimings: (id) =>
+    apiClient.get(`/food/admin/restaurants/${String(id)}/outlet-timings`, {
+      contextModule: "admin",
+    }),
+  updateRestaurantOutletTimings: (id, outletTimings) =>
+    apiClient.put(
+      `/food/admin/restaurants/${String(id)}/outlet-timings`,
+      { outletTimings },
+      { contextModule: "admin" },
+    ),
   /** Restaurant menu (admin) */
   getRestaurantMenuById: (id, config = {}) =>
     apiClient.get(`/food/admin/restaurants/${id}/menu`, {

@@ -19,6 +19,16 @@ const PLACEHOLDER_40 = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
 const PLACEHOLDER_128 = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Crect fill='%23e2e8f0' width='128' height='128'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2394a3b8' font-size='32' font-family='sans-serif'%3E?%3C/text%3E%3C/svg%3E"
 const DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
+const getDefaultOutletTimingsForm = () => ({
+  Monday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Tuesday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Wednesday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Thursday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Friday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Saturday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Sunday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+})
+
 const normalizeApprovalStatus = (restaurant) => {
   const raw = String(restaurant?.status || "").trim().toLowerCase()
   if (raw === "approved" || raw === "pending" || raw === "rejected") return raw
@@ -147,7 +157,9 @@ export default function RestaurantsList() {
     ifscCode: "",
     upiId: "",
     isActive: true,
+    isAcceptingOrders: true,
   })
+  const [outletTimingsForm, setOutletTimingsForm] = useState(getDefaultOutletTimingsForm)
   const [profileImageFile, setProfileImageFile] = useState(null)
   const [profileImagePreview, setProfileImagePreview] = useState("")
   const [panDocumentFile, setPanDocumentFile] = useState(null)
@@ -823,6 +835,9 @@ export default function RestaurantsList() {
       const outletTimings = timingsRes?.data?.data?.outletTimings
       if (outletTimings && typeof outletTimings === "object" && !Array.isArray(outletTimings)) {
         setRestaurantOutletTimings(outletTimings)
+        setOutletTimingsForm({ ...getDefaultOutletTimingsForm(), ...outletTimings })
+      } else {
+        setOutletTimingsForm(getDefaultOutletTimingsForm())
       }
     } catch (err) {
       debugError("Error fetching restaurant details:", err)
@@ -1072,12 +1087,17 @@ export default function RestaurantsList() {
       ifscCode: restaurant.ifscCode || restaurant.onboarding?.step3?.bank?.ifscCode || "",
       upiId: restaurant.upiId || restaurant.onboarding?.step3?.bank?.upiId || "",
       isActive: restaurant.isActive !== false,
+      isAcceptingOrders: restaurant.isAcceptingOrders !== undefined ? Boolean(restaurant.isAcceptingOrders) : true,
     }
   }
 
   const handleStartEditDetails = () => {
     const source = getDetailsEditSource()
     setDetailsForm(buildDetailsFormFromRestaurant(source))
+    const currentTimings = restaurantOutletTimings && typeof restaurantOutletTimings === "object" && !Array.isArray(restaurantOutletTimings)
+      ? restaurantOutletTimings
+      : getDefaultOutletTimingsForm()
+    setOutletTimingsForm({ ...getDefaultOutletTimingsForm(), ...currentTimings })
     setProfileImageFile(null)
     setProfileImagePreview(getPrimaryRestaurantImage(source))
     setPanDocumentFile(null)
@@ -1179,6 +1199,7 @@ export default function RestaurantsList() {
         ifscCode: detailsForm.ifscCode.trim(),
         upiId: detailsForm.upiId.trim(),
         isActive: detailsForm.isActive,
+        isAcceptingOrders: detailsForm.isAcceptingOrders === true,
       }
 
       if (profileImage) {
@@ -1195,6 +1216,13 @@ export default function RestaurantsList() {
       }
 
       const response = await adminAPI.updateRestaurant(restaurantId, payload)
+      try {
+        await adminAPI.updateRestaurantOutletTimings(restaurantId, outletTimingsForm)
+        setRestaurantOutletTimings(outletTimingsForm)
+      } catch (timingErr) {
+        debugError("Failed to update outlet timings:", timingErr)
+      }
+
       const updatedRestaurant = response?.data?.data?.restaurant
 
       if (updatedRestaurant) {
@@ -1783,6 +1811,28 @@ export default function RestaurantsList() {
                       </div>
                     </div>
 
+                    {/* Manual Restaurant Status (ON / OFF) */}
+                    <div className="md:col-span-2 p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div>
+                        <span className="text-sm font-bold text-slate-900 block">Manual Restaurant Status (Accepting Orders)</span>
+                        <span className="text-xs text-slate-500">Manually turn restaurant ON (Online & Accepting Orders) or OFF (Offline & Not Accepting Orders)</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setDetailsForm((prev) => ({ ...prev, isAcceptingOrders: !prev.isAcceptingOrders }))}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${detailsForm.isAcceptingOrders ? "bg-emerald-600" : "bg-slate-300"}`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${detailsForm.isAcceptingOrders ? "translate-x-5" : "translate-x-0"}`}
+                          />
+                        </button>
+                        <span className={`text-xs font-bold px-3 py-1 rounded-full ${detailsForm.isAcceptingOrders ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>
+                          {detailsForm.isAcceptingOrders ? "ON (Online)" : "OFF (Offline)"}
+                        </span>
+                      </div>
+                    </div>
+
                     <div>
                       <label className="block text-xs text-slate-500 mb-1">Restaurant Name</label>
                       <input type="text" value={detailsForm.name} onChange={(e) => setDetailsForm((prev) => ({ ...prev, name: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
@@ -1818,6 +1868,109 @@ export default function RestaurantsList() {
                     <div>
                       <label className="block text-xs text-slate-500 mb-1">Estimated Delivery Time</label>
                       <input type="text" value={detailsForm.estimatedDeliveryTime} onChange={(e) => setDetailsForm((prev) => ({ ...prev, estimatedDeliveryTime: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+                    </div>
+                  </div>
+
+                  {/* Day-Wise Outlet Timings Editor */}
+                  <div className="pt-4 border-t border-slate-100">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 uppercase tracking-widest">Day-wise Outlet Timings</h4>
+                        <p className="text-xs text-slate-500">Configure outlet opening and closing times for each day of the week</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const mondayTiming = outletTimingsForm["Monday"] || { isOpen: true, openingTime: "09:00", closingTime: "22:00" }
+                          const copied = {}
+                          DAY_ORDER.forEach(day => { copied[day] = { ...mondayTiming } })
+                          setOutletTimingsForm(copied)
+                        }}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 transition-colors"
+                      >
+                        Copy Monday to All Days
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {DAY_ORDER.map((day) => {
+                        const dayData = outletTimingsForm[day] || { isOpen: true, openingTime: "09:00", closingTime: "22:00" }
+                        return (
+                          <div key={day} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-white gap-3 shadow-xs">
+                            <div className="flex items-center gap-3 w-36">
+                              <input
+                                type="checkbox"
+                                id={`modal-day-open-${day}`}
+                                checked={dayData.isOpen !== false}
+                                onChange={(e) => {
+                                  const isOpen = e.target.checked
+                                  setOutletTimingsForm(prev => ({
+                                    ...prev,
+                                    [day]: {
+                                      ...prev[day],
+                                      isOpen,
+                                      openingTime: isOpen ? (prev[day]?.openingTime || "09:00") : "",
+                                      closingTime: isOpen ? (prev[day]?.closingTime || "22:00") : "",
+                                    }
+                                  }))
+                                }}
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                              />
+                              <label htmlFor={`modal-day-open-${day}`} className="text-sm font-semibold text-slate-800 cursor-pointer">
+                                {day}
+                              </label>
+                            </div>
+                            {dayData.isOpen !== false ? (
+                              <div className="flex items-center gap-3 flex-1">
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-[10px] text-slate-500 uppercase font-medium">Opening Time</label>
+                                    <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                      {formatTime12Hour(dayData.openingTime || "09:00")}
+                                    </span>
+                                  </div>
+                                  <input
+                                    type="time"
+                                    value={dayData.openingTime || "09:00"}
+                                    onChange={(e) => {
+                                      const time = e.target.value
+                                      setOutletTimingsForm(prev => ({
+                                        ...prev,
+                                        [day]: { ...prev[day], openingTime: time }
+                                      }))
+                                    }}
+                                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-slate-50 focus:bg-white"
+                                  />
+                                </div>
+                                <span className="text-slate-400 font-bold self-end pb-2">to</span>
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-[10px] text-slate-500 uppercase font-medium">Closing Time</label>
+                                    <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                      {formatTime12Hour(dayData.closingTime || "22:00")}
+                                    </span>
+                                  </div>
+                                  <input
+                                    type="time"
+                                    value={dayData.closingTime || "22:00"}
+                                    onChange={(e) => {
+                                      const time = e.target.value
+                                      setOutletTimingsForm(prev => ({
+                                        ...prev,
+                                        [day]: { ...prev[day], closingTime: time }
+                                      }))
+                                    }}
+                                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-slate-50 focus:bg-white"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs font-semibold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-100 flex-1 text-center sm:text-left">
+                                Closed for orders on {day}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
 

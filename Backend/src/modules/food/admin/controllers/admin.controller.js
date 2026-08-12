@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import * as adminService from '../services/admin.service.js';
+import { getOutletTimingsForRestaurant, upsertOutletTimingsForRestaurant } from '../../restaurant/services/outletTimings.service.js';
 import * as featureSettingsService from '../services/featureSettings.service.js';
 import { validateCategoryListQuery, validateCategoryRejectDto, validateCategoryUpsertDto } from '../validators/category.validator.js';
 import { validateCreateOfferDto, validateUpdateOfferDto, validateUpdateOfferCartVisibilityDto } from '../validators/offer.validator.js';
@@ -533,6 +534,33 @@ export async function updateRestaurantLocation(req, res, next) {
             return res.status(404).json({ success: false, message: 'Restaurant not found' });
         }
         res.status(200).json({ success: true, message: 'Restaurant location updated successfully', data: { restaurant: updated } });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function getRestaurantOutletTimings(req, res, next) {
+    try {
+        const { id } = req.params;
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid restaurant id' });
+        }
+        const data = await getOutletTimingsForRestaurant(id);
+        res.status(200).json({ success: true, message: 'Outlet timings fetched successfully', data });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function updateRestaurantOutletTimings(req, res, next) {
+    try {
+        const { id } = req.params;
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid restaurant id' });
+        }
+        const outletTimings = req.body.outletTimings || req.body;
+        const data = await upsertOutletTimingsForRestaurant(id, outletTimings);
+        res.status(200).json({ success: true, message: 'Outlet timings updated successfully', data });
     } catch (error) {
         next(error);
     }

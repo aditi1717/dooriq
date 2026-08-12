@@ -24,6 +24,31 @@ const normalizeZoneId = (zoneId) => {
   return zoneId?._id || zoneId?.id || ""
 }
 
+const DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+const getDefaultOutletTimingsForm = () => ({
+  Monday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Tuesday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Wednesday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Thursday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Friday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Saturday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Sunday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+})
+
+const formatTime12Hour = (time24) => {
+  if (!time24) return ""
+  const parts = String(time24).split(":")
+  if (parts.length < 2) return time24
+  const hours = parseInt(parts[0], 10)
+  const minutes = parseInt(parts[1], 10)
+  if (isNaN(hours) || isNaN(minutes)) return time24
+  const period = hours >= 12 ? "PM" : "AM"
+  const hours12 = hours % 12 || 12
+  const minsPadded = minutes.toString().padStart(2, "0")
+  return `${hours12.toString().padStart(2, "0")}:${minsPadded} ${period}`
+}
+
 const normalizeLocationFormFromRestaurant = (restaurant) => {
   const loc =
     restaurant?.location ||
@@ -85,6 +110,7 @@ const normalizeDetailsFormFromRestaurant = (restaurant) => {
     openingTime: restaurant?.openingTime || restaurant?.deliveryTimings?.openingTime || "",
     closingTime: restaurant?.closingTime || restaurant?.deliveryTimings?.closingTime || "",
     isActive: restaurant?.isActive !== false,
+    isAcceptingOrders: restaurant?.isAcceptingOrders !== undefined ? Boolean(restaurant.isAcceptingOrders) : true,
   }
 }
 
@@ -136,6 +162,7 @@ export default function EditRestaurant() {
   const [zonesLoading, setZonesLoading] = useState(false)
 
   const [detailsForm, setDetailsForm] = useState(() => normalizeDetailsFormFromRestaurant(null))
+  const [outletTimingsForm, setOutletTimingsForm] = useState(getDefaultOutletTimingsForm)
   const [locationForm, setLocationForm] = useState(() => normalizeLocationFormFromRestaurant(null))
   const [locationError, setLocationError] = useState("")
   const [profileImageFile, setProfileImageFile] = useState(null)
@@ -157,7 +184,11 @@ export default function EditRestaurant() {
         setLoading(true)
         setError("")
 
-        const res = await adminAPI.getRestaurantById(restaurantId)
+        const [res, timingsRes] = await Promise.all([
+          adminAPI.getRestaurantById(restaurantId).catch(() => null),
+          adminAPI.getRestaurantOutletTimings(restaurantId).catch(() => null),
+        ])
+
         const data = res?.data?.data || null
         if (!mounted) return
         if (!res?.data?.success || !data) {
@@ -171,6 +202,13 @@ export default function EditRestaurant() {
         const img = data?.profileImage?.url || data?.profileImage || ""
         setProfileImagePreview(img)
         setLocationForm(normalizeLocationFormFromRestaurant(data))
+
+        const timings = timingsRes?.data?.data?.outletTimings
+        if (timings && typeof timings === "object" && !Array.isArray(timings)) {
+          setOutletTimingsForm({ ...getDefaultOutletTimingsForm(), ...timings })
+        } else {
+          setOutletTimingsForm(getDefaultOutletTimingsForm())
+        }
       } catch (e) {
         debugError(e)
         if (!mounted) return
@@ -337,6 +375,7 @@ export default function EditRestaurant() {
         openingTime: detailsForm.openingTime,
         closingTime: detailsForm.closingTime,
         isActive: detailsForm.isActive !== false,
+        isAcceptingOrders: detailsForm.isAcceptingOrders === true,
       }
 
       if (profileImage) {
@@ -344,6 +383,11 @@ export default function EditRestaurant() {
       }
 
       const res = await adminAPI.updateRestaurant(restaurantId, payload)
+      try {
+        await adminAPI.updateRestaurantOutletTimings(restaurantId, outletTimingsForm)
+      } catch (err) {
+        debugError("Failed to save outlet timings:", err)
+      }
       const updated = res?.data?.data?.restaurant || res?.data?.data || null
       if (updated) {
         setRestaurant((prev) => ({ ...(prev || {}), ...updated }))
@@ -484,6 +528,28 @@ export default function EditRestaurant() {
                     />
                   </div>
                 </div>
+                {/* Manual Restaurant Status (ON / OFF) */}
+                <div className="md:col-span-2 p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <Label className="text-base font-semibold text-slate-900 block">Manual Restaurant Status (Accepting Orders)</Label>
+                    <p className="text-xs text-slate-500">Turn restaurant manually ON (Online & Accepting Orders) or OFF (Offline & Not Accepting Orders)</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setDetailsForm((p) => ({ ...p, isAcceptingOrders: !p.isAcceptingOrders }))}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${detailsForm.isAcceptingOrders ? "bg-emerald-600" : "bg-slate-300"}`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${detailsForm.isAcceptingOrders ? "translate-x-5" : "translate-x-0"}`}
+                      />
+                    </button>
+                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${detailsForm.isAcceptingOrders ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>
+                      {detailsForm.isAcceptingOrders ? "ON (Online)" : "OFF (Offline)"}
+                    </span>
+                  </div>
+                </div>
+
                 <div>
                   <Label>Restaurant Name</Label>
                   <Input value={detailsForm.name} onChange={(e) => setDetailsForm((p) => ({ ...p, name: e.target.value }))} />
@@ -551,6 +617,111 @@ export default function EditRestaurant() {
                   <Label>Offer</Label>
                   <Input value={detailsForm.offer} onChange={(e) => setDetailsForm((p) => ({ ...p, offer: e.target.value }))} />
                 </div>
+              </div>
+            </section>
+
+            {/* Day-Wise Outlet Timings Section */}
+            <section className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Day-wise Outlet Timings</h2>
+                  <p className="text-xs text-slate-500 mt-1">Configure opening & closing hours for each day of the week</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const mondayTiming = outletTimingsForm["Monday"] || { isOpen: true, openingTime: "09:00", closingTime: "22:00" }
+                    const copied = {}
+                    DAY_ORDER.forEach((day) => { copied[day] = { ...mondayTiming } })
+                    setOutletTimingsForm(copied)
+                  }}
+                >
+                  Copy Monday to All Days
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {DAY_ORDER.map((day) => {
+                  const dayData = outletTimingsForm[day] || { isOpen: true, openingTime: "09:00", closingTime: "22:00" }
+                  return (
+                    <div key={day} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50 gap-3">
+                      <div className="flex items-center gap-3 w-36">
+                        <input
+                          type="checkbox"
+                          id={`edit-page-day-open-${day}`}
+                          checked={dayData.isOpen !== false}
+                          onChange={(e) => {
+                            const isOpen = e.target.checked
+                            setOutletTimingsForm((prev) => ({
+                              ...prev,
+                              [day]: {
+                                ...prev[day],
+                                isOpen,
+                                openingTime: isOpen ? (prev[day]?.openingTime || "09:00") : "",
+                                closingTime: isOpen ? (prev[day]?.closingTime || "22:00") : "",
+                              },
+                            }))
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <label htmlFor={`edit-page-day-open-${day}`} className="text-sm font-semibold text-slate-800 cursor-pointer">
+                          {day}
+                        </label>
+                      </div>
+
+                      {dayData.isOpen !== false ? (
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <Label className="block text-[10px] text-slate-500 uppercase font-medium">Opening Time</Label>
+                              <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                {formatTime12Hour(dayData.openingTime || "09:00")}
+                              </span>
+                            </div>
+                            <Input
+                              type="time"
+                              value={dayData.openingTime || "09:00"}
+                              onChange={(e) => {
+                                const time = e.target.value
+                                setOutletTimingsForm((prev) => ({
+                                  ...prev,
+                                  [day]: { ...prev[day], openingTime: time },
+                                }))
+                              }}
+                              className="bg-white"
+                            />
+                          </div>
+                          <span className="text-slate-400 font-bold self-end pb-2">to</span>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <Label className="block text-[10px] text-slate-500 uppercase font-medium">Closing Time</Label>
+                              <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                {formatTime12Hour(dayData.closingTime || "22:00")}
+                              </span>
+                            </div>
+                            <Input
+                              type="time"
+                              value={dayData.closingTime || "22:00"}
+                              onChange={(e) => {
+                                const time = e.target.value
+                                setOutletTimingsForm((prev) => ({
+                                  ...prev,
+                                  [day]: { ...prev[day], closingTime: time },
+                                }))
+                              }}
+                              className="bg-white"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs font-semibold text-rose-600 bg-rose-50 px-3 py-2 rounded-lg border border-rose-100 flex-1 text-center sm:text-left">
+                          Closed for orders on {day}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </section>
 
