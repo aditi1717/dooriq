@@ -84,8 +84,8 @@ function BottomNavOrders() {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[60]">
       <div className="w-full">
-        <div className="relative overflow-hidden bg-gray-900/96 backdrop-blur-xl py-1.5 px-2 shadow-[0_-4px_24px_rgba(0,0,0,0.25)] border-t border-white/10">
-          <div className="relative flex items-center justify-around gap-1">
+        <div className="relative overflow-hidden bg-white/95 dark:bg-[#121212]/95 backdrop-blur-xl py-2 px-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] border-t border-gray-200 dark:border-gray-800">
+          <div className="relative flex items-center justify-around gap-1.5">
             {tabs.map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
@@ -96,25 +96,36 @@ function BottomNavOrders() {
                   type="button"
                   onClick={() => handleTabClick(tab)}
                   aria-current={isActive ? "page" : undefined}
-                  className="relative z-10 flex min-w-0 flex-1 flex-col items-center justify-center gap-1 py-2 rounded-full transition-colors duration-200"
+                  className="relative z-10 flex min-w-0 flex-1 flex-col items-center justify-center gap-1 py-1.5 rounded-2xl transition-colors duration-200"
                   whileTap={{ scale: 0.95 }}
                 >
                   {isActive && (
                     <motion.div
                       layoutId="bottomNavActive"
-                      className="absolute inset-x-1 inset-y-1 rounded-full"
-                      style={{ backgroundColor: "rgba(var(--module-theme-rgb, 37,99,235), 0.16)" }}
+                      className="absolute inset-0 rounded-2xl shadow-2xs"
+                      style={{
+                        backgroundColor: "rgba(var(--module-theme-rgb, 250,2,114), 0.12)",
+                        border: "1px solid rgba(var(--module-theme-rgb, 250,2,114), 0.28)"
+                      }}
                       initial={false}
                       transition={{ type: "spring", stiffness: 400, damping: 30 }}
                     />
                   )}
                   <Icon
-                    className={`relative z-10 h-[18px] w-[18px] transition-all duration-300 ${isActive ? "text-white scale-110" : "text-white"
-                      }`}
+                    className={`relative z-10 h-[20px] w-[20px] transition-all duration-300 ${
+                      isActive 
+                        ? "scale-110" 
+                        : "text-gray-500 dark:text-gray-400 group-hover:text-gray-700"
+                    }`}
+                    style={isActive ? { color: "var(--module-theme-color, #FA0272)" } : undefined}
                   />
                   <span
-                    className={`relative z-10 whitespace-nowrap text-[9px] font-bold tracking-tight transition-colors duration-300 ${isActive ? "text-white" : "text-white"
-                      }`}
+                    className={`relative z-10 whitespace-nowrap text-[10px] tracking-tight transition-colors duration-300 ${
+                      isActive 
+                        ? "font-extrabold" 
+                        : "text-gray-500 dark:text-gray-400 font-semibold"
+                    }`}
+                    style={isActive ? { color: "var(--module-theme-color, #FA0272)" } : undefined}
                   >
                     {tab.label}
                   </span>

@@ -81,10 +81,22 @@ function RestaurantMultiSelect({ restaurants, value, onChange, error }) {
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState("")
   const rootRef = useRef(null)
-  const selectedIds = Array.isArray(value) ? value : []
+  const selectedIds = useMemo(() => {
+    const list = Array.isArray(value) ? value : []
+    return list
+      .map((item) => {
+        if (typeof item === "object" && item) return String(item._id || item.id || item.restaurantId || "")
+        const s = String(item).trim()
+        return s === "[object Object]" ? "" : s
+      })
+      .filter(Boolean)
+  }, [value])
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const selectedRestaurants = useMemo(
-    () => restaurants.filter((restaurant) => selectedSet.has(String(restaurant._id))),
+    () => restaurants.filter((restaurant) => {
+      const rid = String(restaurant._id || restaurant.id || restaurant.restaurantId || "")
+      return selectedSet.has(rid)
+    }),
     [restaurants, selectedSet],
   )
   const filteredRestaurants = useMemo(() => {
@@ -257,7 +269,7 @@ export default function Coupons() {
   useEffect(() => {
     const fetchRestaurants = async () => {
       try {
-        const response = await adminAPI.getRestaurants({ page: 1, limit: 200 })
+        const response = await adminAPI.getRestaurants({ page: 1, limit: 1000 })
         if (response?.data?.success) {
           const list = response?.data?.data?.restaurants || []
           // Backend returns `restaurantName`; normalize to `name` for this dropdown without affecting other pages.
@@ -284,34 +296,47 @@ export default function Coupons() {
     return `${d.getFullYear()}-${m}-${day}`
   }
 
-  const getFormDataFromOffer = (offer) => ({
-    couponCode: String(offer?.couponCode || ""),
-    discountType: offer?.discountType || "percentage",
-    discountValue: String(
-      Number(
-        offer?.discountValue ??
-        (offer?.discountType === "flat-price"
-          ? (offer?.originalPrice ?? 0)
-          : (offer?.discountPercentage ?? 0))
-      )
-    ),
-    customerScope: offer?.customerScope || (offer?.customerGroup === "new" ? "first-time" : "all"),
-    restaurantScope: offer?.restaurantScope || "all",
-    restaurantIds: Array.isArray(offer?.restaurantIds)
-      ? offer.restaurantIds.map((id) => String(id)).filter(Boolean)
-      : offer?.restaurantId
-        ? [String(offer.restaurantId)]
-        : [],
-    endDate: offer?.endDate ? new Date(offer.endDate).toISOString().slice(0, 10) : "",
-    startDate: offer?.startDate ? new Date(offer.startDate).toISOString().slice(0, 10) : "",
-    minOrderValue: offer?.minOrderValue !== undefined && offer?.minOrderValue !== null ? String(offer.minOrderValue) : "",
-    maxDiscount: offer?.maxDiscount !== undefined && offer?.maxDiscount !== null ? String(offer.maxDiscount) : "",
-    usageLimit: offer?.usageLimit !== undefined && offer?.usageLimit !== null ? String(offer.usageLimit) : "",
-    perUserLimit: offer?.perUserLimit !== undefined && offer?.perUserLimit !== null ? String(offer.perUserLimit) : "",
-    isFirstOrderOnly: Boolean(offer?.isFirstOrderOnly || offer?.customerScope === "first-time"),
-    adminBearPercentage: String(Number(offer?.adminBearPercentage ?? 100)),
-    restaurantBearPercentage: String(Number(offer?.restaurantBearPercentage ?? 0)),
-  })
+  const getFormDataFromOffer = (offer) => {
+    const extractId = (item) => {
+      if (!item) return ""
+      if (typeof item === "object") return String(item._id || item.id || item.restaurantId || "")
+      const s = String(item).trim()
+      return s === "[object Object]" ? "" : s
+    }
+
+    let parsedRestaurantIds = []
+    if (Array.isArray(offer?.restaurantIds) && offer.restaurantIds.length > 0) {
+      parsedRestaurantIds = offer.restaurantIds.map(extractId).filter(Boolean)
+    } else if (offer?.restaurantId) {
+      const id = extractId(offer.restaurantId)
+      if (id) parsedRestaurantIds = [id]
+    }
+
+    return {
+      couponCode: String(offer?.couponCode || ""),
+      discountType: offer?.discountType || "percentage",
+      discountValue: String(
+        Number(
+          offer?.discountValue ??
+          (offer?.discountType === "flat-price"
+            ? (offer?.originalPrice ?? 0)
+            : (offer?.discountPercentage ?? 0))
+        )
+      ),
+      customerScope: offer?.customerScope || (offer?.customerGroup === "new" ? "first-time" : "all"),
+      restaurantScope: offer?.restaurantScope || (parsedRestaurantIds.length > 0 ? "selected" : "all"),
+      restaurantIds: parsedRestaurantIds,
+      endDate: offer?.endDate ? new Date(offer.endDate).toISOString().slice(0, 10) : "",
+      startDate: offer?.startDate ? new Date(offer.startDate).toISOString().slice(0, 10) : "",
+      minOrderValue: offer?.minOrderValue !== undefined && offer?.minOrderValue !== null ? String(offer.minOrderValue) : "",
+      maxDiscount: offer?.maxDiscount !== undefined && offer?.maxDiscount !== null ? String(offer.maxDiscount) : "",
+      usageLimit: offer?.usageLimit !== undefined && offer?.usageLimit !== null ? String(offer.usageLimit) : "",
+      perUserLimit: offer?.perUserLimit !== undefined && offer?.perUserLimit !== null ? String(offer.perUserLimit) : "",
+      isFirstOrderOnly: Boolean(offer?.isFirstOrderOnly || offer?.customerScope === "first-time"),
+      adminBearPercentage: String(Number(offer?.adminBearPercentage ?? 100)),
+      restaurantBearPercentage: String(Number(offer?.restaurantBearPercentage ?? 0)),
+    }
+  }
   const validateForm = (draft) => {
     const e = {}
     const f = draft || formData

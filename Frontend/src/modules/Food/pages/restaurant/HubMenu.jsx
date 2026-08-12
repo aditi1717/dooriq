@@ -562,7 +562,7 @@ export default function HubMenu() {
       
       const existingImageUrls = addonImages.filter(img => 
         typeof img === 'string' && 
-        (img.startsWith('http://') || img.startsWith('https://')) && 
+        img.trim() !== '' && 
         !img.startsWith('blob:')
       )
       

@@ -11,13 +11,17 @@ function getTransporter() {
         logger.warn('Email not configured: EMAIL_HOST, EMAIL_USER, EMAIL_PASS required');
         return null;
     }
+    const isSecure = Number(emailPort) === 465;
     transporter = nodemailer.createTransport({
         host: emailHost,
-        port: emailPort || 587,
-        secure: emailPort === 465,
+        port: Number(emailPort) || 587,
+        secure: isSecure,
         auth: {
             user: emailUser,
             pass: emailPass
+        },
+        tls: {
+            rejectUnauthorized: false
         }
     });
     return transporter;

@@ -232,16 +232,23 @@ export default function RestaurantNavbar({
     }
   }, [restaurantData, propLocation])
 
-  // Load status from localStorage on mount and listen for changes
+  const [updatingStatus, setUpdatingStatus] = useState(false)
+
+  // Load status from localStorage or backend data on mount and listen for changes
   useEffect(() => {
     const updateStatus = () => {
       try {
+        if (restaurantData && restaurantData.isAcceptingOrders !== undefined) {
+          const isOnline = Boolean(restaurantData.isAcceptingOrders)
+          setStatus(isOnline ? "Online" : "Offline")
+          localStorage.setItem('restaurant_online_status', JSON.stringify(isOnline))
+          return
+        }
         const savedStatus = localStorage.getItem('restaurant_online_status')
         if (savedStatus !== null) {
           const isOnline = JSON.parse(savedStatus)
           setStatus(isOnline ? "Online" : "Offline")
         } else {
-          // If not stored yet, fallback to backend value (when available).
           const isOnline = Boolean(restaurantData?.isAcceptingOrders)
           setStatus(isOnline ? "Online" : "Offline")
         }
@@ -252,14 +259,12 @@ export default function RestaurantNavbar({
       }
     }
 
-    // Load initial status
     updateStatus()
 
-    // Listen for status changes from RestaurantStatus page
-  const handleStatusChange = (event) => {
+    const handleStatusChange = (event) => {
       const isOnline = event.detail?.isOnline || false
       setStatus(isOnline ? "Online" : "Offline")
-  }
+    }
 
     window.addEventListener('restaurantStatusChanged', handleStatusChange)
     
@@ -269,7 +274,7 @@ export default function RestaurantNavbar({
   }, [restaurantData])
 
   const handleStatusClick = () => {
-    navigate("/restaurant/status")
+    navigate("/food/restaurant/status")
   }
 
   const handleSearchClick = () => {
@@ -358,23 +363,24 @@ export default function RestaurantNavbar({
       <div className="flex items-center gap-0.5">
         {showOfflineOnlineTag && (
           <button
+            type="button"
             onClick={handleStatusClick}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-xl hover:opacity-80 transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-xl active:scale-95 transition-all shadow-2xs cursor-pointer ${
               status === "Online" 
-                ? "bg-green-50 border-green-100" 
-                : "bg-gray-50 border-gray-200"
+                ? "bg-emerald-50 border-emerald-200 hover:bg-emerald-100" 
+                : "bg-rose-50 border-rose-200 hover:bg-rose-100"
             }`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${
-              status === "Online" ? "bg-green-500 animate-pulse" : "bg-gray-400"
+            <span className={`w-2 h-2 rounded-full shrink-0 ${
+              status === "Online" ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
             }`}></span>
-            <span className={`text-[12px] font-bold hidden sm:inline ${
-              status === "Online" ? "text-green-700" : "text-gray-600"
+            <span className={`text-[12px] font-bold whitespace-nowrap ${
+              status === "Online" ? "text-emerald-700" : "text-rose-700"
             }`}>
               {status}
             </span>
-            <ChevronRight className={`w-3.5 h-3.5 ${
-              status === "Online" ? "text-green-500" : "text-gray-400"
+            <ChevronRight className={`w-3.5 h-3.5 shrink-0 ${
+              status === "Online" ? "text-emerald-600" : "text-rose-500"
             }`} />
           </button>
         )}

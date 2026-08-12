@@ -616,7 +616,7 @@ export default function ItemDetailsPage() {
       // Separate existing URLs (already uploaded) from new files (blob URLs)
       const existingImageUrls = images.filter(img =>
         typeof img === 'string' &&
-        (img.startsWith('http://') || img.startsWith('https://')) &&
+        img.trim() !== '' &&
         !img.startsWith('blob:')
       )
 

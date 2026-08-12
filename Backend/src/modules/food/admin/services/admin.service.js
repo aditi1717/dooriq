@@ -3635,10 +3635,11 @@ export async function approveRestaurant(id) {
             console.error('Failed to send restaurant approval notification:', e);
         }
         // Send approval email to restaurant owner
-        if (updated.ownerEmail) {
+        const targetEmail = updated.ownerEmail || updated.email || updated.contactEmail || updated.primaryEmail || updated.onboarding?.step1?.email || updated.onboarding?.step1?.ownerEmail;
+        if (targetEmail) {
             try {
                 const { sendRestaurantApprovedEmail } = await import('../../../../utils/email.js');
-                await sendRestaurantApprovedEmail(updated.ownerEmail, updated.restaurantName);
+                await sendRestaurantApprovedEmail(targetEmail, updated.restaurantName);
             } catch (e) {
                 console.error('Failed to send restaurant approval email:', e);
             }
@@ -3682,10 +3683,11 @@ export async function rejectRestaurant(id, reason) {
             console.error('Failed to send restaurant rejection notification:', e);
         }
         // Send rejection email to restaurant owner
-        if (updated.ownerEmail) {
+        const rejectTargetEmail = updated.ownerEmail || updated.email || updated.contactEmail || updated.primaryEmail || updated.onboarding?.step1?.email || updated.onboarding?.step1?.ownerEmail;
+        if (rejectTargetEmail) {
             try {
                 const { sendRestaurantRejectedEmail } = await import('../../../../utils/email.js');
-                await sendRestaurantRejectedEmail(updated.ownerEmail, updated.restaurantName, reason);
+                await sendRestaurantRejectedEmail(rejectTargetEmail, updated.restaurantName, reason);
             } catch (e) {
                 console.error('Failed to send restaurant rejection email:', e);
             }
@@ -3723,8 +3725,8 @@ export async function getAllOffers(_query = {}) {
             offerId: String(o._id),
             dishId: 'all',
             restaurantName,
-            restaurantId: o.restaurantId ? String(o.restaurantId) : null,
-            restaurantIds: Array.isArray(o.restaurantIds) ? o.restaurantIds.map((id) => String(id)) : [],
+            restaurantId: o.restaurantId ? String(o.restaurantId?._id || o.restaurantId) : null,
+            restaurantIds: Array.isArray(o.restaurantIds) ? o.restaurantIds.map((id) => String(id?._id || id)).filter(Boolean) : [],
             dishName: 'All Items',
             couponCode: o.couponCode,
             customerGroup: o.customerScope === 'first-time' ? 'new' : 'all',

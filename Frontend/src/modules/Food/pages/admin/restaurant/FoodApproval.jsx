@@ -303,7 +303,15 @@ export default function FoodApproval() {
                             {request.category || '-'}
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-700 font-semibold">
-                            {request.itemName || '-'}
+                            <div>{request.itemName || '-'}</div>
+                            {(() => {
+                              const vars = (request.variants || request.variations || []).filter(v => v && typeof v === 'object');
+                              return vars.length > 0 ? (
+                                <span className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                  {vars.length} Variants
+                                </span>
+                              ) : null;
+                            })()}
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-700 capitalize text-center">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${request.entityType === 'addon' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
@@ -403,7 +411,7 @@ export default function FoodApproval() {
                         <p className="text-sm text-gray-700">{selectedRequest.category || '-'}</p>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Price</label>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Base Price</label>
                         <p className="text-sm font-bold text-green-600">{selectedRequest.price !== null && selectedRequest.price !== undefined ? `₹${selectedRequest.price}` : '-'}</p>
                     </div>
                     <div>
@@ -433,6 +441,42 @@ export default function FoodApproval() {
                     <p className="text-sm text-gray-700 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">{selectedRequest.description}</p>
                   </div>
                 )}
+
+                {/* Variants Section */}
+                {(() => {
+                  const variantsList = (selectedRequest.variants || selectedRequest.variations || []).filter(v => v && typeof v === 'object');
+                  if (variantsList.length === 0) return null;
+
+                  return (
+                    <div className="col-span-full space-y-2">
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        Variants ({variantsList.length})
+                      </label>
+                      <div className="border border-gray-200 rounded-xl overflow-hidden bg-slate-50/50">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-100/80 text-gray-600 font-semibold border-b border-gray-200">
+                            <tr>
+                              <th className="px-3.5 py-2">Variant Name</th>
+                              <th className="px-3.5 py-2 text-right">Price</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200/60 bg-white">
+                            {variantsList.map((v, i) => (
+                              <tr key={i} className="hover:bg-slate-50/50">
+                                <td className="px-3.5 py-2 font-medium text-gray-800">
+                                  {v.name || v.variantName || v.title || `Variant ${i + 1}`}
+                                </td>
+                                <td className="px-3.5 py-2 font-bold text-emerald-600 text-right">
+                                  ₹{v.price ?? 0}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Images */}
                 {(() => {

@@ -945,10 +945,14 @@ function RestaurantDetailsContent() {
                   menuSections: finalMenuSections,
                 }))
 
-                // Set first 3 sections (Recommended, Starters, Main Course) as expanded by default
-                const defaultExpandedSections = new Set(
-                  Array.from({ length: Math.min(3, finalMenuSections.length) }, (_, idx) => idx)
-                )
+                // Set all sections and subsections as expanded by default
+                const defaultExpandedSections = new Set()
+                finalMenuSections.forEach((sec, idx) => {
+                  defaultExpandedSections.add(idx)
+                  toRenderableArray(sec?.subsections).forEach((_, subIndex) => {
+                    defaultExpandedSections.add(`${idx}-${subIndex}`)
+                  })
+                })
                 setExpandedSections(defaultExpandedSections)
 
                 debugLog('Fetched menu sections with recommended items:', finalMenuSections)
@@ -2421,7 +2425,7 @@ function RestaurantDetailsContent() {
       className={`min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col transition-all duration-300 ${shouldShowGrayscale ? 'grayscale opacity-75' : ''
         }`}
     >
-      {/* Header - Back, Search, Menu (like reference image) */}
+      {/* Header - Back, Search, Menu */}
       <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-3 md:pt-4 lg:pt-5 pb-2 md:pb-3 bg-white dark:bg-[#1a1a1a]">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           {/* Back Button */}
@@ -2491,87 +2495,89 @@ function RestaurantDetailsContent() {
       {/* Main Content Card */}
       <div className="bg-white dark:bg-[#1a1a1a] rounded-t-3xl relative z-10 min-h-[40vh]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 sm:py-5 md:py-6 lg:py-8 space-y-3 md:space-y-4 lg:space-y-5 pb-0">
-          {/* Restaurant Name and Rating */}
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{restaurant?.name || "Unknown Restaurant"}</h1>
+          
+          {/* ONLY THIS SINGLE SECTION HAS COLOR */}
+          <div className="rounded-2xl p-4 sm:p-5 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-rose-500/10 dark:from-amber-950/30 dark:via-orange-950/30 dark:to-rose-950/30 border border-amber-200/60 dark:border-amber-800/40 shadow-xs space-y-3">
+            {/* Restaurant Name and Rating */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{restaurant?.name || "Unknown Restaurant"}</h1>
+              </div>
+              {restaurant.reviews > 0 && restaurant.rating > 0 && (
+                <div className="flex flex-col items-end shrink-0">
+                  <Badge
+                    className="text-white mb-1 flex items-center gap-1 px-2 py-1 border-0"
+                    style={{
+                      backgroundColor: "var(--module-theme-color, #FA0272)",
+                      boxShadow: "0 4px 10px rgba(var(--module-theme-rgb, 250,2,114), 0.28)",
+                    }}
+                  >
+                    <Star className="h-3 w-3 fill-white" />
+                    {restaurant?.rating}
+                  </Badge>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">By {restaurant.reviews.toLocaleString()}+</span>
+                </div>
+              )}
             </div>
-            {restaurant.reviews > 0 && restaurant.rating > 0 && (
-              <div className="flex flex-col items-end">
-                <Badge
-                  className="text-white mb-1 flex items-center gap-1 px-2 py-1 border-0"
-                  style={{
-                    backgroundColor: "var(--module-theme-color, #FA0272)",
-                    boxShadow: "0 4px 10px rgba(var(--module-theme-rgb, 250,2,114), 0.28)",
-                  }}
-                >
-                  <Star className="h-3 w-3 fill-white" />
-                  {restaurant?.rating}
-                </Badge>
-                <span className="text-xs text-gray-500">By {restaurant.reviews.toLocaleString()}+</span>
+
+            {/* Location */}
+            <div className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 font-medium">
+              <MapPin className="h-4 w-4 text-[#EB590E] shrink-0" />
+              <span>{restaurant?.distance || "1.2 km"} • {restaurant?.location || "Location"}</span>
+            </div>
+
+            {/* Delivery Time */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 font-medium">
+                <Clock className="h-4 w-4 text-[#EB590E] shrink-0" />
+                <span>{restaurant?.deliveryTime || "25-30 mins"}</span>
+              </div>
+              <Badge
+                className={`${isRestaurantOffline ? "bg-rose-600" : ""} text-white border-0`}
+                style={!isRestaurantOffline ? {
+                  backgroundColor: "var(--module-theme-color, #FA0272)",
+                  boxShadow: "0 4px 10px rgba(var(--module-theme-rgb, 250,2,114), 0.25)",
+                } : undefined}
+              >
+                {isRestaurantOffline ? "Closed" : "Open now"}
+              </Badge>
+            </div>
+
+            {isRestaurantOffline && (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
+                This restaurant is currently closed. Orders are unavailable right now.
+              </div>
+            )}
+
+            {/* Offers */}
+            {highlightOffers.length > 0 && (
+              <div 
+                className="flex items-center justify-between cursor-pointer hover:opacity-90 pt-1"
+                onClick={() => setShowOffersSheet(true)}
+              >
+                <div className="flex items-center gap-2 text-sm overflow-hidden">
+                  <Tag className="h-4 w-4 text-[#EB590E] shrink-0" />
+                  <div className="relative h-5 overflow-hidden">
+                    <AnimatePresence mode="wait">
+                      <motion.span
+                        key={highlightIndex}
+                        initial={{ y: 16, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: -16, opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="text-[#EB590E] font-semibold inline-block"
+                      >
+                        {highlightOffers[highlightIndex]}
+                      </motion.span>
+                    </AnimatePresence>
+                  </div>
+                </div>
               </div>
             )}
           </div>
 
-
-
-          {/* Location */}
-          <div className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">
-            <MapPin className="h-4 w-4" />
-            <span>{restaurant?.distance || "1.2 km"} • {restaurant?.location || "Location"}</span>
-          </div>
-
-          {/* Delivery Time */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-              <Clock className="h-4 w-4" />
-              <span>{restaurant?.deliveryTime || "25-30 mins"}</span>
-            </div>
-            <Badge
-              className={`${isRestaurantOffline ? "bg-rose-600" : ""} text-white border-0`}
-              style={!isRestaurantOffline ? {
-                backgroundColor: "var(--module-theme-color, #FA0272)",
-                boxShadow: "0 4px 10px rgba(var(--module-theme-rgb, 250,2,114), 0.25)",
-              } : undefined}
-            >
-              {isRestaurantOffline ? "Closed" : "Open now"}
-            </Badge>
-          </div>
-
-          {isRestaurantOffline && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              This restaurant is currently closed. Orders are unavailable right now.
-            </div>
-          )}
-
-          {/* Offers */}
-          {highlightOffers.length > 0 && (
-            <div 
-              className="flex items-center justify-between cursor-pointer hover:opacity-90"
-              onClick={() => setShowOffersSheet(true)}
-            >
-              <div className="flex items-center gap-2 text-sm overflow-hidden">
-                <Tag className="h-4 w-4 text-[#EB590E]" />
-                <div className="relative h-5 overflow-hidden">
-                  <AnimatePresence mode="wait">
-                    <motion.span
-                      key={highlightIndex}
-                      initial={{ y: 16, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: -16, opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="text-[#EB590E] font-medium inline-block"
-                    >
-                      {highlightOffers[highlightIndex]}
-                    </motion.span>
-                  </AnimatePresence>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Filter/Category Buttons */}
-          <div className="border-y border-gray-200 py-3 -mx-4 px-4 overflow-x-auto scrollbar-hide">
+          {/* Filter/Category Buttons Section */}
+          <div className="border-y border-gray-200 dark:border-gray-800 py-3 -mx-4 px-4 overflow-x-auto scrollbar-hide bg-white dark:bg-[#1a1a1a]">
             <div className="flex flex-col gap-2 w-max">
               <div className="flex items-center gap-2 w-max">
                 <Button
