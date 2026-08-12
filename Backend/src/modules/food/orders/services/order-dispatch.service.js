@@ -29,84 +29,90 @@ async function listNearbyOnlineDeliveryPartners(
     .select("location")
     .lean();
 
-  if (!restaurant?.location?.coordinates?.length) {
-    const partners = await FoodDeliveryPartner.find({
-      status: "approved",
-      availabilityStatus: "online",
-    })
-      .select("_id status name")
-      .limit(Math.max(1, limit))
-      .lean();
+  const allowedStatuses = process.env.NODE_ENV === 'production' ? ['approved'] : ['approved', 'pending'];
 
-    return {
-      restaurant: null,
-      partners: partners.map((p) => ({ partnerId: p._id, distanceKm: null })),
-    };
-  }
-
-  const [rLng, rLat] = restaurant.location.coordinates;
+  // Condition 1: Query ONLY active, online, approved delivery partners
   const allOnline = await FoodDeliveryPartner.find({
+    status: { $in: allowedStatuses },
     availabilityStatus: "online",
   })
     .select("_id status lastLat lastLng lastLocationAt name")
     .lean();
 
   const onlineIds = allOnline.map((p) => p._id).filter(Boolean);
+  if (onlineIds.length === 0) {
+    return { restaurant: null, partners: [] };
+  }
+
   const busyPartnerIds = new Set();
   const cashLimitExceededPartnerIds = new Set();
 
-  if (onlineIds.length > 0) {
-    const [activeOrders, cashLimitDoc, wallets] = await Promise.all([
-      FoodOrder.find({
-        'dispatch.deliveryPartnerId': { $in: onlineIds },
-        orderStatus: { $nin: ['delivered', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin'] },
-        'dispatch.status': { $in: ['assigned', 'accepted'] },
-      }).select('dispatch.deliveryPartnerId').lean().catch(() => []),
-      FoodDeliveryCashLimit.findOne({ isActive: true }).sort({ createdAt: -1 }).lean().catch(() => null),
-      FoodDeliveryWallet.find({ deliveryPartnerId: { $in: onlineIds } }).select('deliveryPartnerId cashInHand').lean().catch(() => []),
-    ]);
+  // Parallel checks for Busy Trips & Cash Limit Eligibility
+  const [activeOrders, cashLimitDoc, wallets] = await Promise.all([
+    FoodOrder.find({
+      'dispatch.deliveryPartnerId': { $in: onlineIds },
+      orderStatus: { $nin: ['delivered', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin'] },
+      'dispatch.status': { $in: ['assigned', 'accepted'] },
+    }).select('dispatch.deliveryPartnerId').lean().catch(() => []),
+    FoodDeliveryCashLimit.findOne({ isActive: true }).sort({ createdAt: -1 }).lean().catch(() => null),
+    FoodDeliveryWallet.find({ deliveryPartnerId: { $in: onlineIds } }).select('deliveryPartnerId cashInHand').lean().catch(() => []),
+  ]);
 
-    for (const orderItem of activeOrders || []) {
-      const pid = orderItem?.dispatch?.deliveryPartnerId;
-      if (pid) busyPartnerIds.add(String(pid));
+  for (const orderItem of activeOrders || []) {
+    const pid = orderItem?.dispatch?.deliveryPartnerId;
+    if (pid) busyPartnerIds.add(String(pid));
+  }
+
+  // Condition 2: Cash Limit Threshold Check
+  const globalCashLimit = Number(cashLimitDoc?.deliveryCashLimit) || 0;
+  if (globalCashLimit > 0) {
+    const walletMap = new Map(
+      (wallets || []).map((w) => [String(w.deliveryPartnerId), Number(w.cashInHand) || 0]),
+    );
+    const orderIsCod = isCodOrder(order);
+    const orderAmount = extractOrderPayableAmount(order);
+
+    for (const pid of onlineIds) {
+      const pidStr = String(pid);
+      const cashInHand = walletMap.get(pidStr) || 0;
+
+      if (cashInHand >= globalCashLimit) {
+        cashLimitExceededPartnerIds.add(pidStr);
+      } else if (orderIsCod && cashInHand + orderAmount > globalCashLimit) {
+        cashLimitExceededPartnerIds.add(pidStr);
+      }
     }
 
-    const globalCashLimit = Number(cashLimitDoc?.deliveryCashLimit) || 0;
-    if (globalCashLimit > 0) {
-      const walletMap = new Map(
-        (wallets || []).map((w) => [String(w.deliveryPartnerId), Number(w.cashInHand) || 0]),
+    if (cashLimitExceededPartnerIds.size > 0) {
+      logger.info(
+        `Cash limit enforcement: Filtered out ${cashLimitExceededPartnerIds.size} delivery partners exceeding cash limit threshold (Limit: ₹${globalCashLimit}).`,
       );
-      const orderIsCod = isCodOrder(order);
-      const orderAmount = extractOrderPayableAmount(order);
-
-      for (const pid of onlineIds) {
-        const pidStr = String(pid);
-        const cashInHand = walletMap.get(pidStr) || 0;
-
-        if (cashInHand >= globalCashLimit) {
-          cashLimitExceededPartnerIds.add(pidStr);
-        } else if (orderIsCod && cashInHand + orderAmount > globalCashLimit) {
-          cashLimitExceededPartnerIds.add(pidStr);
-        }
-      }
-
-      if (cashLimitExceededPartnerIds.size > 0) {
-        logger.info(
-          `Cash limit enforcement: Filtered out ${cashLimitExceededPartnerIds.size} delivery partners exceeding cash limit threshold (Limit: ₹${globalCashLimit}).`,
-        );
-      }
     }
   }
 
-  const scored = [];
-  const allowedStatuses = process.env.NODE_ENV === 'production' ? ['approved'] : ['approved', 'pending'];
+  // Filter out busy and cash-limit exceeded partners
+  const eligibleOnline = allOnline.filter(
+    (p) =>
+      !busyPartnerIds.has(String(p._id)) &&
+      !cashLimitExceededPartnerIds.has(String(p._id)),
+  );
+
+  if (eligibleOnline.length === 0) {
+    return { partners: [] };
+  }
+
+  if (!restaurant?.location?.coordinates?.length) {
+    return {
+      restaurant: null,
+      partners: eligibleOnline.slice(0, Math.max(1, limit)).map((p) => ({ partnerId: p._id, distanceKm: null })),
+    };
+  }
+
+  const [rLng, rLat] = restaurant.location.coordinates;
   const STALE_GPS_MS = 10 * 60 * 1000;
+  const scored = [];
 
-  for (const p of allOnline) {
-    if (!allowedStatuses.includes(p.status)) continue;
-    if (busyPartnerIds.has(String(p._id))) continue;
-    if (cashLimitExceededPartnerIds.has(String(p._id))) continue;
-
+  for (const p of eligibleOnline) {
     const isStale = !p.lastLocationAt || (Date.now() - new Date(p.lastLocationAt).getTime()) > STALE_GPS_MS;
     if (p.lastLat == null || p.lastLng == null || isStale) {
       scored.push({ partnerId: p._id, distanceKm: 999, status: p.status });
@@ -123,26 +129,12 @@ async function listNearbyOnlineDeliveryPartners(
   const picked = scored.slice(0, Math.max(1, limit));
 
   if (picked.length === 0) {
-    const anyOnline = await FoodDeliveryPartner.find({
-      status: { $in: allowedStatuses },
-      availabilityStatus: "online",
-    })
-      .select("_id status name")
-      .limit(Math.max(1, limit))
-      .lean();
-
     return {
-      partners: anyOnline
-        .filter(
-          (p) =>
-            !busyPartnerIds.has(String(p._id)) &&
-            !cashLimitExceededPartnerIds.has(String(p._id)),
-        )
-        .map((p) => ({
-          partnerId: p._id,
-          distanceKm: null,
-          status: p.status,
-        })),
+      partners: eligibleOnline.slice(0, Math.max(1, limit)).map((p) => ({
+        partnerId: p._id,
+        distanceKm: null,
+        status: p.status,
+      })),
     };
   }
 
