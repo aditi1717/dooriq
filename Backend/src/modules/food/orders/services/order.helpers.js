@@ -483,5 +483,25 @@ export async function checkRestaurantOpenStatus(restaurantId, checkDate = new Da
   return { isOpen: true };
 }
 
+export function isCodOrder(order) {
+  if (!order) return false;
+  const pm = String(
+    order.paymentMethod ||
+      order.paymentMode ||
+      order.payment?.method ||
+      order.payment?.paymentMode ||
+      '',
+  ).toLowerCase();
+  return pm === 'cod' || pm === 'cash' || pm === 'cash_on_delivery';
+}
 
-
+export function extractOrderPayableAmount(order) {
+  if (!order) return 0;
+  return Number(
+    order.pricing?.payableAmount ??
+      order.amounts?.payableAmount ??
+      order.payableAmount ??
+      order.totalAmount ??
+      0,
+  );
+}

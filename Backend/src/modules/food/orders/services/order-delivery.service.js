@@ -3,11 +3,14 @@ import { FoodOrder } from '../models/order.model.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { FoodTransaction } from '../models/foodTransaction.model.js';
 import { FoodDeliveryPartner } from '../../delivery/models/deliveryPartner.model.js';
+import { FoodDeliveryCashLimit } from '../../admin/models/deliveryCashLimit.model.js';
+import { FoodDeliveryWallet } from '../../delivery/models/deliveryWallet.model.js';
 import {
   ValidationError,
   ForbiddenError,
   NotFoundError,
 } from '../../../../core/auth/errors.js';
+
 import { buildPaginatedResult, buildPaginationOptions } from '../../../../utils/helpers.js';
 import { logger } from '../../../../utils/logger.js';
 import { getIO, rooms } from '../../../../config/socket.js';
@@ -30,6 +33,8 @@ import {
   sanitizeOrderForExternal,
   haversineKm,
   isStatusAdvance,
+  isCodOrder,
+  extractOrderPayableAmount,
 } from './order.helpers.js';
 
 const TERMINAL_ORDER_STATUSES = [
@@ -333,6 +338,37 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
     });
 
     enriched = kept.map(({ order }) => order);
+
+    // Cash Limit Check: Filter out COD orders if adding them exceeds rider's available cash limit
+    try {
+      const [cashLimitDoc, wallet] = await Promise.all([
+        FoodDeliveryCashLimit.findOne({ isActive: true }).sort({ createdAt: -1 }).lean().catch(() => null),
+        FoodDeliveryWallet.findOne({ deliveryPartnerId: partnerId }).lean().catch(() => null),
+      ]);
+
+      const globalCashLimit = Number(cashLimitDoc?.deliveryCashLimit) || 0;
+      if (globalCashLimit > 0) {
+        const cashInHand = Number(wallet?.cashInHand) || 0;
+
+        if (cashInHand >= globalCashLimit) {
+          // Driver has reached/exceeded cash limit; filter out unassigned orders
+          enriched = enriched.filter(
+            (order) =>
+              order?.dispatch?.deliveryPartnerId &&
+              String(order.dispatch.deliveryPartnerId) === String(partnerId),
+          );
+        } else {
+          // Driver has some remaining limit; filter out COD orders exceeding remaining limit
+          enriched = enriched.filter((order) => {
+            if (!isCodOrder(order)) return true;
+            const orderAmount = extractOrderPayableAmount(order);
+            return cashInHand + orderAmount <= globalCashLimit;
+          });
+        }
+      }
+    } catch (cashLimitErr) {
+      logger.warn(`Cash limit check error in listOrdersAvailableDelivery: ${cashLimitErr.message}`);
+    }
   }
 
   const total = enriched.length;
@@ -348,6 +384,41 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
   if (!identity) throw new ValidationError('Order id required');
 
   const partnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
+
+  // Parallel Cash Limit & Order Pre-check
+  try {
+    const [cashLimitDoc, wallet, orderToAccept] = await Promise.all([
+      FoodDeliveryCashLimit.findOne({ isActive: true }).sort({ createdAt: -1 }).lean().catch(() => null),
+      FoodDeliveryWallet.findOne({ deliveryPartnerId: partnerId }).lean().catch(() => null),
+      FoodOrder.findOne(identity).lean().catch(() => null),
+    ]);
+
+    const globalCashLimit = Number(cashLimitDoc?.deliveryCashLimit) || 0;
+    if (globalCashLimit > 0) {
+      const cashInHand = Number(wallet?.cashInHand) || 0;
+
+      if (cashInHand >= globalCashLimit) {
+        throw new ValidationError(
+          `Your cash-in-hand (₹${cashInHand}) has reached or exceeded the cash limit of ₹${globalCashLimit}. Please deposit cash to accept new orders.`,
+        );
+      }
+
+      if (orderToAccept) {
+        const isCod = isCodOrder(orderToAccept);
+        const orderAmount = extractOrderPayableAmount(orderToAccept);
+
+        if (isCod && cashInHand + orderAmount > globalCashLimit) {
+          throw new ValidationError(
+            `Accepting this COD order (₹${orderAmount}) would exceed your cash-in-hand limit of ₹${globalCashLimit}. Your current cash-in-hand is ₹${cashInHand}. Please deposit cash first.`,
+          );
+        }
+      }
+    }
+  } catch (cashLimitErr) {
+    if (cashLimitErr instanceof ValidationError) throw cashLimitErr;
+    logger.warn(`Cash limit check warning in acceptOrderDelivery: ${cashLimitErr.message}`);
+  }
+
   const now = new Date();
   const acceptedStatuses = ['created', 'confirmed', 'preparing', 'ready_for_pickup', 'picked_up'];
   const cancellableStatuses = [
