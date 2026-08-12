@@ -143,6 +143,10 @@ function getModuleFromUrl(url = "") {
     normalized.includes("/auth/restaurant") || 
     normalized.includes("/restaurant/")
   ) {
+    // Exception: /food/restaurant/offers is a public offers route for users
+    if (normalized.includes("/food/restaurant/offers")) {
+       return "user";
+    }
     // Exception: /food/restaurants (plural) is usually a public user app route
     if (normalized.includes("/food/restaurants") && !normalized.includes("/food/restaurant/")) {
        return "user";

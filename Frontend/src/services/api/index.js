@@ -1244,10 +1244,10 @@ export const restaurantAPI = {
   deleteMyOffer: (id) => apiClient.delete(`/food/restaurant/my-offers/${id}`, { contextModule: "restaurant" }),
   updateMyOfferStatus: (id, status) => apiClient.patch(`/food/restaurant/my-offers/${id}/status`, { status }, { contextModule: "restaurant" }),
   /** Public Offers for users (global/selected restaurant) */
-  getPublicOffers: (params = {}) => apiClient.get("/food/restaurant/offers", { params }),
+  getPublicOffers: (params = {}) => apiClient.get("/food/restaurant/offers", { params, contextModule: "user" }),
   /** Backward-compat helper used by Cart: returns coupons array for an item by adapting public offers */
   getCouponsByItemIdPublic: (restaurantId, _itemId, subtotal) =>
-    apiClient.get("/food/restaurant/offers", { params: { restaurantId, subtotal } }).then((res) => {
+    apiClient.get("/food/restaurant/offers", { params: { restaurantId, subtotal }, contextModule: "user" }).then((res) => {
       const list = res?.data?.data?.allOffers || res?.data?.allOffers || [];
       const now = Date.now();
       const coupons = list

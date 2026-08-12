@@ -28,6 +28,7 @@ import { Switch } from "@food/components/ui/switch"
 import { useNavigate } from "react-router-dom"
 import { restaurantAPI, uploadAPI } from "@food/api"
 import { isFlutterBridgeAvailable, openGallery } from "@food/utils/imageUploadUtils"
+import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 import { toast } from "sonner"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -1205,16 +1206,10 @@ export default function Inventory() {
     e.target.value = ""
   }
 
-  const handleAddonGalleryPick = async () => {
-    if (isFlutterBridgeAvailable()) {
-      await openGallery({
-        onSelectFile: handleAddonImageFileSelect,
-        fileNamePrefix: "restaurant-addon-image",
-      })
-      return
-    }
+  const [isAddonPhotoPickerOpen, setIsAddonPhotoPickerOpen] = useState(false)
 
-    addonImageInputRef.current?.click()
+  const handleAddonGalleryPick = () => {
+    setIsAddonPhotoPickerOpen(true)
   }
 
   const handleSaveAddon = async () => {
@@ -3356,6 +3351,20 @@ export default function Inventory() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Add-on Photo Picker */}
+      <ImageSourcePicker
+        isOpen={isAddonPhotoPickerOpen}
+        onClose={() => setIsAddonPhotoPickerOpen(false)}
+        onFileSelect={(file) => {
+          handleAddonImageFileSelect(file)
+          setIsAddonPhotoPickerOpen(false)
+        }}
+        title="Add-on Image"
+        description="Choose how to upload your add-on image"
+        fileNamePrefix="restaurant-addon-image"
+        galleryInputRef={addonImageInputRef}
+      />
 
       {/* Bottom Navigation */}
       <BottomNavOrders />
