@@ -8,6 +8,10 @@ const schema = z.object({
     referredRewardDelivery: z.number().min(0).optional(),
     referralLimitUser: z.number().min(0).optional(),
     referralLimitDelivery: z.number().min(0).optional(),
+    userAppStoreUrl: z.string().optional(),
+    userPlayStoreUrl: z.string().optional(),
+    deliveryAppStoreUrl: z.string().optional(),
+    deliveryPlayStoreUrl: z.string().optional(),
     isActive: z.boolean().optional()
 });
 
@@ -19,6 +23,10 @@ export const validateReferralSettingsUpsertDto = (body) => {
         referredRewardDelivery: body?.referredRewardDelivery !== undefined ? Number(body.referredRewardDelivery) : undefined,
         referralLimitUser: body?.referralLimitUser !== undefined ? Number(body.referralLimitUser) : undefined,
         referralLimitDelivery: body?.referralLimitDelivery !== undefined ? Number(body.referralLimitDelivery) : undefined,
+        userAppStoreUrl: body?.userAppStoreUrl !== undefined ? String(body.userAppStoreUrl).trim() : undefined,
+        userPlayStoreUrl: body?.userPlayStoreUrl !== undefined ? String(body.userPlayStoreUrl).trim() : undefined,
+        deliveryAppStoreUrl: body?.deliveryAppStoreUrl !== undefined ? String(body.deliveryAppStoreUrl).trim() : undefined,
+        deliveryPlayStoreUrl: body?.deliveryPlayStoreUrl !== undefined ? String(body.deliveryPlayStoreUrl).trim() : undefined,
         isActive: body?.isActive !== undefined ? Boolean(body.isActive) : undefined
     };
 

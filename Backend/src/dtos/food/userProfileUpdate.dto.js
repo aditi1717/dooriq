@@ -14,7 +14,9 @@ const schema = z.object({
     profileImage: z.string().max(2000).optional(),
     dateOfBirth: isoDate.optional(),
     anniversary: isoDate.optional(),
-    gender: genderEnum.optional()
+    gender: genderEnum.optional(),
+    referralCode: z.string().max(100).optional(),
+    ref: z.string().max(100).optional()
 });
 
 export const validateUserProfileUpdateDto = (body) => {

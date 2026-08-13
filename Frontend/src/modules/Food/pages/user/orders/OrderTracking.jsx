@@ -1487,7 +1487,7 @@ export default function OrderTracking() {
       {/* Green Header */}
       <motion.div
         className="text-white sticky top-0 z-40"
-        style={{ backgroundColor: isCancelledOrder ? "#dc2626" : themeColor }}
+        style={{ backgroundColor: themeColor }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
       >
@@ -1751,6 +1751,67 @@ export default function OrderTracking() {
                 </span>
               </div>
             )})}
+          </div>
+          
+          {/* Bill Summary Breakdown & Total Amount */}
+          <div className="mt-4 pt-4 border-t border-dashed border-gray-200 dark:border-zinc-800 space-y-2">
+            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+              Bill Details
+            </p>
+
+            {/* Item Subtotal */}
+            <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+              <span>Item Total</span>
+              <span>{"\u20B9"}{(order?.subtotal || order?.items?.reduce((s, item) => s + (item?.price || 0) * (item?.quantity || 1), 0) || 0).toFixed(2)}</span>
+            </div>
+
+            {/* Delivery Fee */}
+            {Number(order?.deliveryFee || 0) > 0 && (
+              <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+                <span>Delivery Fee</span>
+                <span>{"\u20B9"}{Number(order.deliveryFee).toFixed(2)}</span>
+              </div>
+            )}
+
+            {/* Platform Fee */}
+            {Number(order?.platformFee || 0) > 0 && (
+              <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+                <span>Platform Fee</span>
+                <span>{"\u20B9"}{Number(order.platformFee).toFixed(2)}</span>
+              </div>
+            )}
+
+            {/* Packaging Fee */}
+            {Number(order?.packagingFee || 0) > 0 && (
+              <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+                <span>Packaging Charges</span>
+                <span>{"\u20B9"}{Number(order.packagingFee).toFixed(2)}</span>
+              </div>
+            )}
+
+            {/* Taxes / GST */}
+            {Number(order?.gst || 0) > 0 && (
+              <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+                <span>Taxes (GST)</span>
+                <span>{"\u20B9"}{Number(order.gst).toFixed(2)}</span>
+              </div>
+            )}
+
+            {/* Discount */}
+            {Number(order?.discount || 0) > 0 && (
+              <div className="flex items-center justify-between text-xs text-green-600 dark:text-green-400 font-medium">
+                <span>Discount</span>
+                <span>-{"\u20B9"}{Number(order.discount).toFixed(2)}</span>
+              </div>
+            )}
+
+            {/* Total Bill / Total to Pay */}
+            <div className="flex items-center justify-between text-sm font-black text-gray-900 dark:text-white pt-2.5 mt-1 border-t border-gray-100 dark:border-zinc-800">
+              <span>To Pay (Total Amount)</span>
+              <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
+                {"\u20B9"}{(order?.totalAmount || order?.total || order?.items?.reduce((s, item) => s + (item?.price || 0) * (item?.quantity || 1), 0) || 0).toFixed(2)}
+              </span>
+            </div>
           </div>
           
           {!isDeliveredOrder && (

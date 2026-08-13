@@ -8,6 +8,10 @@ const referralSettingsSchema = new mongoose.Schema(
         referredRewardDelivery: { type: Number, min: 0, default: 0 },
         referralLimitUser: { type: Number, min: 0, default: 0 },
         referralLimitDelivery: { type: Number, min: 0, default: 0 },
+        userAppStoreUrl: { type: String, default: '' },
+        userPlayStoreUrl: { type: String, default: '' },
+        deliveryAppStoreUrl: { type: String, default: '' },
+        deliveryPlayStoreUrl: { type: String, default: '' },
         isActive: { type: Boolean, default: true, index: true }
     },
     { collection: 'food_referral_settings', timestamps: true }

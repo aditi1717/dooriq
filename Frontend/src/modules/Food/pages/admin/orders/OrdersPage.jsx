@@ -31,7 +31,7 @@ const statusConfig = {
   "processing": { title: "Processing Orders", color: "orange", icon: Package },
   "food-on-the-way": { title: "Food On The Way Orders", color: "amber", icon: Package },
   "delivered": { title: "Delivered Orders", color: "emerald", icon: Package },
-  "canceled": { title: "Canceled Orders", color: "rose", icon: Package },
+  "canceled": { title: "Cancelled Orders", color: "rose", icon: Package },
   "restaurant-cancelled": { title: "Restaurant Cancelled Orders", color: "red", icon: Package },
   "payment-failed": { title: "Payment Failed Orders", color: "red", icon: Package },
   "refunded": { title: "Refunded Orders", color: "sky", icon: Package },
@@ -485,7 +485,7 @@ export default function OrdersPage({ statusKey = "all" }) {
       } else if (backendStatus === "cancelled_by_user") {
         displayStatus = "Cancelled by User"
       } else if (backendStatus === "cancelled_by_admin") {
-        displayStatus = "Canceled"
+        displayStatus = "Cancelled"
       }
 
       const dp = order.dispatch?.deliveryPartnerId

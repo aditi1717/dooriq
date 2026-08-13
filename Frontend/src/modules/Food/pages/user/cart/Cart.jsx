@@ -2175,20 +2175,12 @@ export default function Cart() {
                 </p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 md:h-8 md:w-8 flex-shrink-0"
-              onClick={handleShare}
-            >
-              <Share2 className="h-4 w-4 md:h-5 md:w-5" />
-            </Button>
           </div>
         </div>
       </div>
 
       {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-[250px] md:pb-[300px]">
+      <div className={`flex-1 overflow-y-auto overflow-x-hidden ${isKeyboardOpen ? "pb-4" : "pb-[250px] md:pb-[300px]"}`}>
         {/* Savings Banner */}
         {savings > 0 && (
           <div className="bg-blue-100 dark:bg-blue-900/20 px-4 md:px-6 py-2 md:py-3 flex-shrink-0">
@@ -2273,7 +2265,7 @@ export default function Cart() {
                   className="flex-1 flex items-center gap-2 px-3 md:px-4 py-2 md:py-3 border border-gray-200 dark:border-gray-700 rounded-lg md:rounded-xl text-sm md:text-base text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
                   <FileText className="h-4 w-4 md:h-5 md:w-5" />
-                  <span className="truncate">{note || "Add a note for the restaurant"}</span>
+                  <span className="truncate">{note || "Add delivery instructions"}</span>
                 </button>
                 <button
                   onClick={() => setSendCutlery(!sendCutlery)}
@@ -2290,18 +2282,18 @@ export default function Cart() {
               {showNoteInput && (
                 <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl border border-slate-100 dark:border-gray-800">
                   <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-                    Restaurant instructions
+                    Delivery instructions
                   </p>
                   <textarea
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder="Eg. Make it less spicy, extra sauce, no onions"
+                    placeholder="Eg. Leave at door, don't ring doorbell, call upon arrival"
                     className="w-full border border-gray-200 dark:border-gray-700 rounded-lg md:rounded-xl p-3 md:p-4 text-sm md:text-base resize-none h-20 md:h-24 focus:outline-none focus:border-[#EB590E] dark:focus:border-[#EB590E] bg-white dark:bg-[#0a0a0a] text-gray-900 dark:text-gray-100"
                     maxLength={240}
                   />
                   <div className="mt-2 flex items-center justify-between gap-3">
                     <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                      This note will be saved with your order and shared with the restaurant.
+                      This note will be saved with your order and shared with the delivery partner.
                     </p>
                     <span className="text-[11px] text-gray-400 dark:text-gray-500 whitespace-nowrap">
                       {note.length}/240
@@ -2766,120 +2758,120 @@ export default function Cart() {
       </div>
 
       {/* Bottom Sticky - Place Order */}
-      {!isKeyboardOpen && (
-        <div
-          className="bg-white dark:bg-[#1a1a1a] border-t dark:border-gray-800 shadow-lg z-30 flex-shrink-0 fixed bottom-0 left-0 right-0"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 64px)" }}
-        >
-          <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4">
-            <div className="w-full max-w-lg mx-auto space-y-3">
-              {coinSettings && coinSettings.isActive && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="relative overflow-hidden flex items-center justify-between p-2.5 px-3.5 bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-amber-600/10 border border-amber-500/20 dark:border-amber-500/10 rounded-xl"
-                >
-                  <div className="flex items-center gap-2">
-                    <Coins className="w-4.5 h-4.5 text-amber-500 animate-pulse shrink-0" />
-                    <span className="text-[11px] font-semibold text-amber-950 dark:text-amber-200">
-                      Earn {coinSettings.minCoinsPerOrder || 1}–{coinSettings.maxCoinsPerOrder || 3} Coins on this order!
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-sm">
-                    1 Coin = ₹{coinSettings.coinToWalletValue || 10}
-                  </span>
-                </motion.div>
-              )}
-
-              {/* Pay Using - Slim Pro UI */}
-              <div
-                className="flex items-center justify-between p-2 bg-gray-50 dark:bg-[#222222] rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-[#282828] active:scale-[0.98] transition-all duration-200 shadow-sm"
-                onClick={() => setShowPaymentSheet(true)}
+      <div
+        className={`bg-white dark:bg-[#1a1a1a] border-t dark:border-gray-800 shadow-lg z-30 flex-shrink-0 ${
+          isKeyboardOpen ? "relative" : "fixed bottom-0 left-0 right-0"
+        }`}
+        style={{ paddingBottom: isKeyboardOpen ? "16px" : "calc(env(safe-area-inset-bottom, 0px) + 64px)" }}
+      >
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4">
+          <div className="w-full max-w-lg mx-auto space-y-3">
+            {coinSettings && coinSettings.isActive && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="relative overflow-hidden flex items-center justify-between p-2.5 px-3.5 bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-amber-600/10 border border-amber-500/20 dark:border-amber-500/10 rounded-xl"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-orange-100/80 dark:bg-orange-900/40 flex items-center justify-center flex-shrink-0">
-                    {selectedPaymentMethod === "wallet" ? (
-                      <Wallet className="h-5 w-5 text-[#EB590E]" />
-                    ) : selectedPaymentMethod === "razorpay" ? (
-                      <Zap className="h-5 w-5 text-[#EB590E]" />
-                    ) : (
-                      <Banknote className="h-5 w-5 text-[#EB590E]" />
+                <div className="flex items-center gap-2">
+                  <Coins className="w-4.5 h-4.5 text-amber-500 animate-pulse shrink-0" />
+                  <span className="text-[11px] font-semibold text-amber-950 dark:text-amber-200">
+                    Earn {coinSettings.minCoinsPerOrder || 1}–{coinSettings.maxCoinsPerOrder || 3} Coins on this order!
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-sm">
+                  1 Coin = ₹{coinSettings.coinToWalletValue || 10}
+                </span>
+              </motion.div>
+            )}
+
+            {/* Pay Using - Slim Pro UI */}
+            <div
+              className="flex items-center justify-between p-2 bg-gray-50 dark:bg-[#222222] rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-[#282828] active:scale-[0.98] transition-all duration-200 shadow-sm"
+              onClick={() => setShowPaymentSheet(true)}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-orange-100/80 dark:bg-orange-900/40 flex items-center justify-center flex-shrink-0">
+                  {selectedPaymentMethod === "wallet" ? (
+                    <Wallet className="h-5 w-5 text-[#EB590E]" />
+                  ) : selectedPaymentMethod === "razorpay" ? (
+                    <Zap className="h-5 w-5 text-[#EB590E]" />
+                  ) : (
+                    <Banknote className="h-5 w-5 text-[#EB590E]" />
+                  )}
+                </div>
+                <div className="leading-tight">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-bold opacity-80">
+                    PAYING WITH
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                      {selectedPaymentLabel}
+                    </p>
+                    {selectedPaymentMethod === "wallet" && (
+                      <p className="text-[10px] text-green-600 dark:text-green-400 font-bold bg-green-50 dark:bg-green-900/20 px-1 rounded">
+                        {RUPEE_SYMBOL}{walletBalance.toFixed(0)}
+                      </p>
                     )}
                   </div>
-                  <div className="leading-tight">
-                    <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-bold opacity-80">
-                      PAYING WITH
-                    </p>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
-                        {selectedPaymentLabel}
-                      </p>
-                      {selectedPaymentMethod === "wallet" && (
-                        <p className="text-[10px] text-green-600 dark:text-green-400 font-bold bg-green-50 dark:bg-green-900/20 px-1 rounded">
-                          {RUPEE_SYMBOL}{walletBalance.toFixed(0)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-0.5 text-[#EB590E] font-bold text-[11px] uppercase tracking-widest bg-orange-50 dark:bg-orange-900/20 px-2.5 py-1 rounded-lg">
-                  CHANGE <ChevronRight className="h-3.5 w-3.5" />
                 </div>
               </div>
 
-              {/* Closed warning banner */}
-              {isRestaurantClosed && (
-                <div className="mb-3 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-2xl flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shrink-0 mt-0.5">
-                    <span className="text-white text-xs font-bold">!</span>
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-xs font-bold text-red-900 dark:text-red-200">Restaurant is Closed</h4>
-                    <p className="text-[11px] text-red-700 dark:text-red-300 mt-0.5">
-                      This restaurant is currently closed or not accepting orders. You cannot place this order right now.
-                    </p>
-                  </div>
+              <div className="flex items-center gap-0.5 text-[#EB590E] font-bold text-[11px] uppercase tracking-widest bg-orange-50 dark:bg-orange-900/20 px-2.5 py-1 rounded-lg">
+                CHANGE <ChevronRight className="h-3.5 w-3.5" />
+              </div>
+            </div>
+
+            {/* Closed warning banner */}
+            {isRestaurantClosed && (
+              <div className="mb-3 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-2xl flex items-start gap-2.5">
+                <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-white text-xs font-bold">!</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-xs font-bold text-red-900 dark:text-red-200">Restaurant is Closed</h4>
+                  <p className="text-[11px] text-red-700 dark:text-red-300 mt-0.5">
+                    This restaurant is currently closed or not accepting orders. You cannot place this order right now.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Place Order Button */}
+            <button
+              onClick={handlePlaceOrder}
+              disabled={isPlacingOrder || isRestaurantClosed || (selectedPaymentMethod === "wallet" && walletBalance < total)}
+              className="w-full text-white px-6 h-12 md:h-14 rounded-2xl font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between transition-transform active:scale-[0.98]"
+              style={{
+                background: isRestaurantClosed
+                  ? "linear-gradient(135deg, #9ca3af, #6b7280)"
+                  : "linear-gradient(135deg, rgba(var(--module-theme-rgb,250,2,114),0.92), var(--module-theme-color,#FA0272))",
+                boxShadow: isRestaurantClosed
+                  ? "none"
+                  : "0 12px 24px rgba(var(--module-theme-rgb,250,2,114),0.28)",
+              }}
+            >
+              {(selectedPaymentMethod === "razorpay" || selectedPaymentMethod === "wallet" || selectedPaymentMethod === "cash") && (
+                <div className="text-left flex flex-col justify-center border-r-[1.5px] border-white/20 pr-4">
+                  <span className="text-xs md:text-sm font-semibold text-white/90">{RUPEE_SYMBOL}{total.toFixed(2)}</span>
+                  <span className="text-[9px] md:text-[10px] uppercase font-bold tracking-wider text-white/80 mt-[-2px]">Total</span>
                 </div>
               )}
-
-              {/* Place Order Button */}
-              <button
-                onClick={handlePlaceOrder}
-                disabled={isPlacingOrder || isRestaurantClosed || (selectedPaymentMethod === "wallet" && walletBalance < total)}
-                className="w-full text-white px-6 h-12 md:h-14 rounded-2xl font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between transition-transform active:scale-[0.98]"
-                style={{
-                  background: isRestaurantClosed
-                    ? "linear-gradient(135deg, #9ca3af, #6b7280)"
-                    : "linear-gradient(135deg, rgba(var(--module-theme-rgb,250,2,114),0.92), var(--module-theme-color,#FA0272))",
-                  boxShadow: isRestaurantClosed
-                    ? "none"
-                    : "0 12px 24px rgba(var(--module-theme-rgb,250,2,114),0.28)",
-                }}
-              >
-                {(selectedPaymentMethod === "razorpay" || selectedPaymentMethod === "wallet" || selectedPaymentMethod === "cash") && (
-                  <div className="text-left flex flex-col justify-center border-r-[1.5px] border-white/20 pr-4">
-                    <span className="text-xs md:text-sm font-semibold text-white/90">{RUPEE_SYMBOL}{total.toFixed(2)}</span>
-                    <span className="text-[9px] md:text-[10px] uppercase font-bold tracking-wider text-white/80 mt-[-2px]">Total</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-1 mx-auto text-sm md:text-lg tracking-wide">
-                  {isPlacingOrder
-                    ? "Processing..."
-                    : isRestaurantClosed
-                      ? "Restaurant Closed"
-                      : !hasSavedAddress
-                        ? "Select Address"
-                        : "Place Order"}
-                  <div className="flex align-center h-full">
-                    <ChevronRight className="h-4 w-4 md:h-5 md:w-5" />
-                  </div>
+              <div className="flex items-center gap-1 mx-auto text-sm md:text-lg tracking-wide">
+                {isPlacingOrder
+                  ? "Processing..."
+                  : isRestaurantClosed
+                    ? "Restaurant Closed"
+                    : !hasSavedAddress
+                      ? "Select Address"
+                      : "Place Order"}
+                <div className="flex align-center h-full">
+                  <ChevronRight className="h-4 w-4 md:h-5 md:w-5" />
                 </div>
-              </button>
-            </div>
+              </div>
+            </button>
           </div>
         </div>
-      )}
+      </div>
 
           {/* Placing Order Modal */}
           {showPlacingOrder && (

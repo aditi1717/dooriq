@@ -22,6 +22,8 @@ export default function OTP() {
   const [showNameInput, setShowNameInput] = useState(false)
   const [name, setName] = useState("")
   const [nameError, setNameError] = useState("")
+  const [referralCodeInput, setReferralCodeInput] = useState("")
+  const [referralError, setReferralError] = useState("")
   const [verifiedData, setVerifiedData] = useState(null)
   const [contactInfo, setContactInfo] = useState("")
   const [contactType, setContactType] = useState("phone")
@@ -46,6 +48,8 @@ export default function OTP() {
     }
     const data = JSON.parse(stored)
     setAuthData(data)
+    const initRef = data.referralCode || sessionStorage.getItem("userReferralCode") || ""
+    setReferralCodeInput(initRef)
 
     if (data.method === "email" && data.email) {
       setContactType("email")
@@ -227,24 +231,43 @@ export default function OTP() {
       return
     }
 
+    const cleanRefCode = String(referralCodeInput || "").trim()
+
     setIsLoading(true)
     setError("")
     setNameError("")
+    setReferralError("")
 
     try {
       const { accessToken, refreshToken, user } = verifiedData
 
-      // Update name via profile API
-      try {
-        await apiClient.patch("/food/user/profile", 
-          { name: normalizedName },
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        )
-      } catch (e) {
-        console.error("Failed to update name on backend, but proceeding with login", e)
+      // Update name and referral code via profile API
+      if (cleanRefCode) {
+        try {
+          await apiClient.patch("/food/user/profile", 
+            { name: normalizedName, referralCode: cleanRefCode },
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          )
+        } catch (e) {
+          const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || ""
+          setReferralError("Invalid Referral Code! This referral code does not exist.")
+          setReferralCodeInput("") // Make sure field is empty on error
+          setIsLoading(false)
+          return
+        }
+      } else {
+        try {
+          await apiClient.patch("/food/user/profile", 
+            { name: normalizedName },
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          )
+        } catch (e) {
+          console.error("Failed to update profile on backend", e)
+        }
       }
 
       sessionStorage.removeItem("userAuthData")
+      sessionStorage.removeItem("userReferralCode")
       setUserAuthData("user", accessToken, { ...user, name: normalizedName }, refreshToken)
       window.dispatchEvent(new Event("userAuthChanged"))
       setSuccess(true)
@@ -420,6 +443,39 @@ export default function OTP() {
                       className="text-xs font-bold text-[#FA0272] pl-2"
                     >
                       {nameError}
+                    </motion.p>
+                  )}
+
+                  <div className="space-y-2 pt-2">
+                    <div className="flex items-center justify-between ml-1">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em]">
+                        Referral Code
+                      </label>
+                      <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Optional
+                      </span>
+                    </div>
+                    <div className="bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus-within:border-[#FA0272]/50 focus-within:ring-4 focus-within:ring-[#FA0272]/5 transition-all overflow-hidden">
+                      <Input
+                        type="text"
+                        value={referralCodeInput}
+                        onChange={(e) => {
+                          setReferralCodeInput(e.target.value.trim())
+                          if (referralError) setReferralError("")
+                        }}
+                        disabled={isLoading}
+                        placeholder="Enter Referral Code"
+                        className="h-14 bg-transparent border-0 ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-base font-bold placeholder:text-zinc-300 dark:placeholder:text-zinc-700 px-6 uppercase tracking-wider"
+                      />
+                    </div>
+                  </div>
+                  {referralError && (
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-xs font-bold text-red-500 pl-2"
+                    >
+                      {referralError}
                     </motion.p>
                   )}
                 </div>

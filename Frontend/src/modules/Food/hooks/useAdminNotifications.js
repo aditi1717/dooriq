@@ -201,6 +201,63 @@ const mapExpiredFssai = (response) => {
   }));
 };
 
+const mapRestaurantWithdrawals = (response) => {
+  const payload = response?.data?.data;
+  const rows = payload?.withdrawals || payload?.items || payload?.data || response?.data?.withdrawals || [];
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((item) => String(item?.status || "").toLowerCase() === "pending")
+    .map((item) => ({
+      id: `withdrawal-restaurant-${String(item?._id || item?.id || "")}`,
+      title: "Restaurant Payout / Withdrawal Request",
+      message: `${item?.restaurantId?.restaurantName || item?.restaurantName || "Restaurant"} requested a payout of ₹${Number(item?.amount || 0).toLocaleString("en-IN")}. Status: ${item?.status || "pending"}.`,
+      type: "payout",
+      category: "restaurant_payout",
+      path: "/admin/food/payouts",
+      createdAt: item?.createdAt || item?.updatedAt,
+      timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
+      metaLabel: joinMeta(item?.restaurantId?.restaurantName || item?.restaurantName, `₹${item?.amount || 0}`, item?.status),
+    }));
+};
+
+const mapDeliveryWithdrawals = (response) => {
+  const payload = response?.data?.data;
+  const rows = payload?.withdrawals || payload?.items || payload?.data || response?.data?.withdrawals || [];
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((item) => String(item?.status || "").toLowerCase() === "pending")
+    .map((item) => ({
+      id: `withdrawal-delivery-${String(item?._id || item?.id || "")}`,
+      title: "Delivery Partner Payout Request",
+      message: `${item?.deliveryPartnerId?.name || item?.deliveryPartnerName || "Delivery Partner"} requested a payout of ₹${Number(item?.amount || 0).toLocaleString("en-IN")}. Status: ${item?.status || "pending"}.`,
+      type: "payout",
+      category: "delivery_payout",
+      path: "/admin/food/deliveryman/payouts",
+      createdAt: item?.createdAt || item?.updatedAt,
+      timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
+      metaLabel: joinMeta(item?.deliveryPartnerId?.name || item?.deliveryPartnerName, `₹${item?.amount || 0}`, item?.status),
+    }));
+};
+
+const mapRestaurantComplaints = (response) => {
+  const payload = response?.data?.data;
+  const rows = payload?.complaints || payload?.items || payload?.data || response?.data?.complaints || [];
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((item) => !["resolved", "closed"].includes(String(item?.status || "").toLowerCase()))
+    .map((item) => ({
+      id: `complaint-restaurant-${String(item?._id || item?.id || "")}`,
+      title: "Restaurant Complaint",
+      message: `Complaint received from ${item?.restaurantId?.restaurantName || item?.restaurantName || "Restaurant"}. Subject: ${item?.title || item?.subject || "N/A"}. Status: ${item?.status || "open"}.`,
+      type: "complaint",
+      category: "restaurant_complaint",
+      path: "/admin/food/complaints/restaurant",
+      createdAt: item?.createdAt || item?.updatedAt,
+      timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
+      metaLabel: joinMeta(item?.restaurantId?.restaurantName || item?.restaurantName, item?.title || item?.subject, item?.status),
+    }));
+};
+
 export default function useAdminNotifications(options = {}) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(Boolean(options?.autoload !== false));
@@ -210,15 +267,27 @@ export default function useAdminNotifications(options = {}) {
     try {
       const dismissed = new Set(getDismissedIds());
 
-      const [restaurantsRes, deliveryJoinRes, foodApprovalRes, supportRes, deliverySupportRes, fssaiExpiredRes] =
-        await Promise.allSettled([
-          adminAPI.getPendingRestaurants(),
-          adminAPI.getDeliveryPartnerJoinRequests({ page: 1, limit: 50 }),
-          adminAPI.getPendingFoodApprovals({ page: 1, limit: 50 }),
-          adminAPI.getSupportTicketsAdmin({ page: 1, limit: 50, source: "all" }),
-          adminAPI.getDeliverySupportTickets({ page: 1, limit: 50 }),
-          adminAPI.getExpiredFssaiNotifications(),
-        ]);
+      const [
+        restaurantsRes,
+        deliveryJoinRes,
+        foodApprovalRes,
+        supportRes,
+        deliverySupportRes,
+        fssaiExpiredRes,
+        restaurantWithdrawalsRes,
+        deliveryWithdrawalsRes,
+        restaurantComplaintsRes,
+      ] = await Promise.allSettled([
+        adminAPI.getPendingRestaurants(),
+        adminAPI.getDeliveryPartnerJoinRequests({ page: 1, limit: 50 }),
+        adminAPI.getPendingFoodApprovals({ page: 1, limit: 50 }),
+        adminAPI.getSupportTicketsAdmin({ page: 1, limit: 50, source: "all" }),
+        adminAPI.getDeliverySupportTickets({ page: 1, limit: 50 }),
+        adminAPI.getExpiredFssaiNotifications(),
+        adminAPI.getWithdrawals({ page: 1, limit: 50, status: "pending" }),
+        adminAPI.getDeliveryWithdrawals({ page: 1, limit: 50, status: "pending" }),
+        adminAPI.getRestaurantComplaints({ page: 1, limit: 50 }),
+      ]);
 
       const unwrap = (result, label) => {
         if (result?.status === "fulfilled") return result.value;
@@ -242,6 +311,9 @@ export default function useAdminNotifications(options = {}) {
         ...mapUserRestaurantSupport(unwrap(supportRes, "support tickets")),
         ...mapDeliverySupport(unwrap(deliverySupportRes, "delivery support tickets")),
         ...mapExpiredFssai(unwrap(fssaiExpiredRes, "expired fssai notifications")),
+        ...mapRestaurantWithdrawals(unwrap(restaurantWithdrawalsRes, "restaurant withdrawals")),
+        ...mapDeliveryWithdrawals(unwrap(deliveryWithdrawalsRes, "delivery withdrawals")),
+        ...mapRestaurantComplaints(unwrap(restaurantComplaintsRes, "restaurant complaints")),
       ])
         .filter((item) => !dismissed.has(item.id))
         .sort((a, b) => toDateValue(b.createdAt) - toDateValue(a.createdAt));

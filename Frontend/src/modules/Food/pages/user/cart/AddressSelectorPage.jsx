@@ -8,7 +8,7 @@ import { Textarea } from "@food/components/ui/textarea"
 import { useLocation as useGeoLocation } from "@food/hooks/useLocation"
 import { useProfile } from "@food/context/ProfileContext"
 import { toast } from "sonner"
-import { locationAPI, userAPI } from "@food/api"
+import { locationAPI, userAPI, zoneAPI } from "@food/api"
 import { Loader } from '@googlemaps/js-api-loader'
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
@@ -95,8 +95,91 @@ export default function AddressSelectorPage() {
   const [formScrollTop, setFormScrollTop] = useState(0)
   const [keyboardInset, setKeyboardInset] = useState(0)
   const [baseMapHeight, setBaseMapHeight] = useState(320)
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false)
+
+  useEffect(() => {
+    const handleFocusIn = (e) => {
+      const tag = e.target?.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.hasAttribute("contenteditable")) {
+        setIsKeyboardOpen(true)
+      }
+    }
+
+    const handleFocusOut = () => {
+      setTimeout(() => {
+        const activeEl = document.activeElement
+        const isInputFocused = activeEl && (
+          activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.hasAttribute("contenteditable")
+        )
+        if (!isInputFocused) {
+          setIsKeyboardOpen(false)
+        }
+      }, 100)
+    }
+
+    const handleResize = () => {
+      if (typeof window !== "undefined" && window.visualViewport) {
+        const isKeyboardShowing = window.visualViewport.height < window.innerHeight * 0.8
+        if (isKeyboardShowing) {
+          setIsKeyboardOpen(true)
+        }
+      }
+    }
+
+    window.addEventListener("focusin", handleFocusIn)
+    window.addEventListener("focusout", handleFocusOut)
+    if (typeof window !== "undefined" && window.visualViewport) {
+      window.visualViewport.addEventListener("resize", handleResize)
+    }
+
+    return () => {
+      window.removeEventListener("focusin", handleFocusIn)
+      window.removeEventListener("focusout", handleFocusOut)
+      if (typeof window !== "undefined" && window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", handleResize)
+      }
+    }
+  }, [])
+  const [activeZones, setActiveZones] = useState([])
+
+  useEffect(() => {
+    zoneAPI.getPublicZones().then(res => {
+      const list = res?.data?.data?.zones || res?.data?.zones || res?.data || []
+      if (Array.isArray(list)) {
+        setActiveZones(list)
+      }
+    }).catch(() => {})
+  }, [])
+
+  const isZoneMatch = useCallback((text) => {
+    if (!text || !activeZones.length) return false
+    const lowerText = String(text).toLowerCase()
+    return activeZones.some(z => {
+      const zName = String(z.name || z.displayName || z.serviceLocation || "").toLowerCase().trim()
+      if (!zName || zName.length < 2) return false
+      return lowerText.includes(zName) || zName.includes(lowerText)
+    })
+  }, [activeZones])
+
   const formBodyRef = useRef(null)
   const manualFieldRefs = useRef({})
+  const searchContainerRef = useRef(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target)) {
+        setGooglePlacesSuggestions([])
+        setKeywordAddressSuggestions([])
+      }
+    }
+
+    document.addEventListener("pointerdown", handleClickOutside)
+    return () => {
+      document.removeEventListener("pointerdown", handleClickOutside)
+    }
+  }, [])
   const placesAutocompleteServiceRef = useRef(null)
   const placesDetailsServiceRef = useRef(null)
   const placesSessionTokenRef = useRef(null)
@@ -270,20 +353,30 @@ export default function AddressSelectorPage() {
 
           if (cancelled) return
           if (predictions.length > 0) {
-            setGooglePlacesSuggestions(
-              predictions.slice(0, 6).map((prediction) => ({
+            const mappedGoogle = predictions.slice(0, 8).map((prediction) => {
+              const mainText =
+                prediction.structured_formatting?.main_text ||
+                prediction.description ||
+                ""
+              const secondaryText =
+                prediction.structured_formatting?.secondary_text || ""
+              const fullText = `${mainText} ${secondaryText} ${prediction.description || ""}`
+              const isZoneLocation = isZoneMatch(fullText)
+              return {
                 id: prediction.place_id,
                 placeId: prediction.place_id,
                 display: prediction.description || "",
-                mainText:
-                  prediction.structured_formatting?.main_text ||
-                  prediction.description ||
-                  "",
-                secondaryText:
-                  prediction.structured_formatting?.secondary_text || "",
+                mainText,
+                secondaryText,
                 source: "google",
-              })),
-            )
+                isZoneLocation,
+              }
+            })
+
+            // Put Zone locations ON TOP
+            mappedGoogle.sort((a, b) => (b.isZoneLocation ? 1 : 0) - (a.isZoneLocation ? 1 : 0))
+
+            setGooglePlacesSuggestions(mappedGoogle.slice(0, 6))
             setKeywordAddressSuggestions([])
             return
           }
@@ -298,21 +391,26 @@ export default function AddressSelectorPage() {
         const refLat = location?.latitude ?? 22.7196
         const refLng = location?.longitude ?? 75.8577
         const url =
-          `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6` +
+          `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=8` +
           `&countrycodes=in&q=${encodeURIComponent(q)}`
         const response = await fetch(url, { headers: { Accept: "application/json" } })
         const json = await response.json()
         if (cancelled) return
 
         const suggestions = (Array.isArray(json) ? json : [])
-          .map((result) => ({
-            id: `n-${result.place_id || result.osm_id}`,
-            display: result.display_name || "",
-            lat: Number(result.lat),
-            lng: Number(result.lon),
-            address: result.address || {},
-            source: "nominatim",
-          }))
+          .map((result) => {
+            const display = result.display_name || ""
+            const isZoneLocation = isZoneMatch(display) || isZoneMatch(result.address?.city) || isZoneMatch(result.address?.suburb)
+            return {
+              id: `n-${result.place_id || result.osm_id}`,
+              display,
+              lat: Number(result.lat),
+              lng: Number(result.lon),
+              address: result.address || {},
+              source: "nominatim",
+              isZoneLocation,
+            }
+          })
           .filter(
             (result) => Number.isFinite(result.lat) && Number.isFinite(result.lng),
           )
@@ -325,10 +423,12 @@ export default function AddressSelectorPage() {
               result.lng,
             ),
           }))
-          .sort(
-            (a, b) =>
-              (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity),
-          )
+          .sort((a, b) => {
+            if (a.isZoneLocation !== b.isZoneLocation) {
+              return b.isZoneLocation ? 1 : -1
+            }
+            return (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity)
+          })
           .slice(0, 6)
 
         setKeywordAddressSuggestions(suggestions)
@@ -401,12 +501,6 @@ export default function AddressSelectorPage() {
           const lat = center.lat()
           const lng = center.lng()
           setMapPosition([lat, lng])
-          
-          if (suppressReverseGeocodeRef.current) {
-            suppressReverseGeocodeRef.current = false
-            return
-          }
-          
           handleMapMoveEnd(lat, lng)
         })
 
@@ -669,7 +763,48 @@ export default function AddressSelectorPage() {
   const handleMapMoveEnd = async (lat, lng) => {
     if (!ENABLE_LOCATION_REVERSE_GEOCODE) return
     try {
-      // Use Nominatim for free reverse geocoding on the client side
+      // 1. Try Google Maps Geocoder first for maximum accuracy in India
+      if (window.google && window.google.maps && window.google.maps.Geocoder) {
+        const geocoder = new window.google.maps.Geocoder()
+        const results = await new Promise((resolve) => {
+          geocoder.geocode({ location: { lat, lng } }, (res, status) => {
+            if (status === "OK" && res?.[0]) resolve(res[0])
+            else resolve(null)
+          })
+        })
+
+        if (results) {
+          const formattedAddress = results.formatted_address || ""
+          const components = Array.isArray(results.address_components) ? results.address_components : []
+          const getComponent = (types) =>
+            components.find((c) => types.some((t) => c.types?.includes(t)))?.long_name || ""
+
+          const streetParts = [
+            getComponent(["street_number"]),
+            getComponent(["premise"]),
+            getComponent(["route"]),
+            getComponent(["sublocality_level_1", "sublocality", "neighborhood"]),
+          ].filter(Boolean)
+
+          const city = getComponent(["locality"]) || getComponent(["administrative_area_level_2"])
+          const state = getComponent(["administrative_area_level_1"])
+          const zipCode = getComponent(["postal_code"])
+
+          suppressSuggestionFetchRef.current = true
+          setAddressAutocompleteValue(formattedAddress)
+          setCurrentAddress(formattedAddress)
+          setAddressFormData((prev) => ({
+            ...prev,
+            street: streetParts.join(", ") || formattedAddress.split(",")[0] || prev.street,
+            city: city || prev.city,
+            state: state || prev.state,
+            zipCode: zipCode || prev.zipCode,
+          }))
+          return
+        }
+      }
+
+      // 2. Fallback to Nominatim for free reverse geocoding if Google Geocoder is not loaded
       const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`
       const response = await fetch(url, { 
         headers: { 
@@ -695,6 +830,8 @@ export default function AddressSelectorPage() {
         const state = addr.state || ""
         const postcode = addr.postcode || ""
 
+        suppressSuggestionFetchRef.current = true
+        setAddressAutocompleteValue(formatted)
         setCurrentAddress(formatted)
         setAddressFormData(prev => ({
           ...prev,
@@ -767,7 +904,6 @@ export default function AddressSelectorPage() {
 
       setMapPosition([lat, lng])
       if (googleMapRef.current) {
-        suppressReverseGeocodingTemporarily()
         googleMapRef.current.panTo({ lat, lng })
         googleMapRef.current.setZoom(17)
       }
@@ -819,7 +955,6 @@ export default function AddressSelectorPage() {
 
     setMapPosition([lat, lng])
     if (googleMapRef.current) {
-      suppressReverseGeocodingTemporarily()
       googleMapRef.current.panTo({ lat, lng })
       googleMapRef.current.setZoom(17)
     }
@@ -937,16 +1072,16 @@ export default function AddressSelectorPage() {
         >
           {/* Map Section - Parallax enabled */}
           <div
-            className="flex-shrink-0 relative z-0"
+            className="flex-shrink-0 relative z-30"
             style={{ 
               height: `${mapHeight}px`,
               transform: `translateY(${formScrollTop * 0.4}px)`,
               opacity: clamp(1 - (formScrollTop / 500), 0.4, 1)
             }}
           >
-            <div className="absolute top-4 left-4 right-4 z-20">
-              <div className="relative group shadow-2xl">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <div className="absolute top-4 left-4 right-4 z-50">
+              <div ref={searchContainerRef} className="relative group shadow-2xl z-50">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
                   <Search className="h-5 w-5 text-gray-400" />
                 </div>
                 <Input
@@ -956,14 +1091,14 @@ export default function AddressSelectorPage() {
                   className="pl-10 h-12 bg-white/95 dark:bg-[#1a1a1a]/95 backdrop-blur-md border-none rounded-xl shadow-lg focus:ring-2 focus:ring-[#EB590E] transition-all"
                 />
                 {isKeywordSearching && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 z-10">
                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#EB590E] border-t-transparent" />
                   </div>
                 )}
 
                 {googlePlacesSuggestions.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden z-30 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <p className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50 dark:bg-gray-800/50">Google Suggestions</p>
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden z-[100] max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                    <p className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50 dark:bg-gray-800/50 sticky top-0 z-10">Google Suggestions</p>
                     {googlePlacesSuggestions.map((s) => (
                       <button
                         key={s.id}
@@ -971,9 +1106,16 @@ export default function AddressSelectorPage() {
                         onClick={() => void selectGooglePlace(s)}
                         className="w-full px-4 py-3 flex items-start gap-3 hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-colors text-left border-b border-gray-50 dark:border-gray-800 last:border-none"
                       >
-                        <MapPin className="h-4 w-4 text-gray-400 mt-1 flex-shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.mainText}</p>
+                        <MapPin className={`h-4 w-4 ${s.isZoneLocation ? "text-emerald-600 font-bold" : "text-gray-400"} mt-1 flex-shrink-0`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.mainText}</p>
+                            {s.isZoneLocation && (
+                              <span className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 uppercase tracking-wider">
+                                Service Zone
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{s.secondaryText}</p>
                         </div>
                       </button>
@@ -982,8 +1124,8 @@ export default function AddressSelectorPage() {
                 )}
 
                 {keywordAddressSuggestions.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden z-30 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <p className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50 dark:bg-gray-800/50">Suggestions</p>
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden z-[100] max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                    <p className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50 dark:bg-gray-800/50 sticky top-0 z-10">Suggestions</p>
                     {keywordAddressSuggestions.map((s) => (
                       <button
                         key={s.id}
@@ -991,9 +1133,16 @@ export default function AddressSelectorPage() {
                         onClick={() => selectFallbackPlace(s)}
                         className="w-full px-4 py-3 flex items-start gap-3 hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-colors text-left border-b border-gray-50 dark:border-gray-800 last:border-none"
                       >
-                        <MapPin className="h-4 w-4 text-gray-400 mt-1 flex-shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.display}</p>
+                        <MapPin className={`h-4 w-4 ${s.isZoneLocation ? "text-emerald-600 font-bold" : "text-gray-400"} mt-1 flex-shrink-0`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.display}</p>
+                            {s.isZoneLocation && (
+                              <span className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 uppercase tracking-wider">
+                                Service Zone
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{s.address?.city || s.address?.state}</p>
                         </div>
                       </button>
@@ -1037,7 +1186,7 @@ export default function AddressSelectorPage() {
             <div className="bg-orange-50/50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/20 rounded-xl p-4 flex gap-3">
                <MapPin className="h-5 w-5 text-[#EB590E] mt-0.5" />
                <div className="min-w-0">
-                  <p className="text-xs font-bold text-orange-800 dark:text-orange-200 uppercase mb-1">Pinnned Location</p>
+                  <p className="text-xs font-bold text-orange-800 dark:text-orange-200 uppercase mb-1">Pinned Location</p>
                   <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2">{currentAddress || "Select a location on map"}</p>
                </div>
             </div>
@@ -1116,9 +1265,11 @@ export default function AddressSelectorPage() {
         </div>
 
         <div
-          className="sticky bottom-0 left-0 right-0 z-[80] flex-shrink-0 px-4 pt-3 bg-white dark:bg-[#1a1a1a] border-t dark:border-gray-800 shadow-[0_-12px_30px_rgba(0,0,0,0.12)]"
+          className={`${
+            isKeyboardOpen ? "relative z-10 my-4 shadow-none border-t-0" : "sticky bottom-0 left-0 right-0 z-[80] border-t shadow-[0_-12px_30px_rgba(0,0,0,0.12)]"
+          } flex-shrink-0 px-4 pt-3 bg-white dark:bg-[#1a1a1a] dark:border-gray-800 transition-all duration-150`}
           style={{
-            paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))",
+            paddingBottom: isKeyboardOpen ? "0.75rem" : "calc(1rem + env(safe-area-inset-bottom, 0px))",
           }}
         >
           <Button 

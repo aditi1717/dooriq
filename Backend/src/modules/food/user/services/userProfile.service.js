@@ -1,6 +1,7 @@
 import { FoodUser } from '../../../../core/users/user.model.js';
 import { AuthError, ValidationError } from '../../../../core/auth/errors.js';
 import { uploadImageBuffer } from '../../../../services/cloudinary.service.js';
+import { processReferralForUser } from '../../../../core/auth/auth.service.js';
 
 const parseIsoDateOrNull = (value) => {
     if (value === undefined) return undefined;
@@ -27,6 +28,11 @@ export const updateCurrentUserProfile = async (userId, body) => {
         if (nextPhone && nextPhone !== currentPhone) {
             throw new ValidationError('Phone number cannot be changed');
         }
+    }
+
+    const refCode = String(body.referralCode || body.ref || '').trim();
+    if (refCode) {
+        await processReferralForUser(user, refCode);
     }
 
     if (body.name !== undefined) user.name = String(body.name || '').trim();

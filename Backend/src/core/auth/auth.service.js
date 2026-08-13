@@ -142,85 +142,8 @@ export const verifyUserOtpAndLogin = async (
   const refRaw = typeof ref === "string" ? String(ref).trim() : "";
   if (isNewUser && refRaw) {
     try {
-      if (mongoose.Types.ObjectId.isValid(refRaw)) {
-        const referrerId = new mongoose.Types.ObjectId(refRaw);
-        if (String(referrerId) !== String(userDoc._id)) {
-          const [referrer, settingsDoc] = await Promise.all([
-            FoodUser.findById(referrerId).select("_id referralCount").lean(),
-            FoodReferralSettings.findOne({ isActive: true })
-              .sort({ createdAt: -1 })
-              .lean(),
-          ]);
-
-          if (referrer && settingsDoc) {
-            const reward = Math.max(
-              0,
-              Number(settingsDoc.referralRewardUser) || 0,
-            );
-            const limit = Math.max(
-              0,
-              Number(settingsDoc.referralLimitUser) || 0,
-            );
-
-            if (
-              reward > 0 &&
-              (limit === 0 || Number(referrer.referralCount || 0) < limit)
-            ) {
-              userDoc.referredBy = referrerId;
-              await userDoc.save();
-
-              const log = await FoodReferralLog.create({
-                referrerId,
-                refereeId: userDoc._id,
-                role: "USER",
-                rewardAmount: reward,
-                status: "credited",
-              });
-
-              const referredReward = Math.max(0, Number(settingsDoc.referredRewardUser) || 0);
-              const creditPromises = [
-                FoodUser.updateOne(
-                  { _id: referrerId },
-                  { $inc: { referralCount: 1 } },
-                ),
-                creditReferralReward(referrerId, reward, {
-                  role: "USER",
-                  refereeId: String(userDoc._id),
-                  referralLogId: String(log._id),
-                }),
-              ];
-
-              if (referredReward > 0) {
-                creditPromises.push(
-                  creditReferralReward(userDoc._id, referredReward, {
-                    role: "USER",
-                    refereeId: String(userDoc._id),
-                    referralLogId: String(log._id),
-                  })
-                );
-              }
-
-              await Promise.all(creditPromises);
-            } else {
-              await FoodReferralLog.create({
-                referrerId,
-                refereeId: userDoc._id,
-                role: "USER",
-                rewardAmount: reward,
-                status: "rejected",
-                reason:
-                  reward <= 0
-                    ? "reward_disabled"
-                    : limit <= 0
-                      ? "limit_disabled"
-                      : "limit_reached",
-              });
-            }
-          }
-        }
-      }
+      await processReferralForUser(userDoc, refRaw);
     } catch (e) {
-      // Never fail login due to referral errors.
       logger?.warn?.({ err: e }, "Referral crediting failed (user)");
     }
   }
@@ -1011,3 +934,87 @@ export const refreshAccessToken = async (token) => {
 
   return { accessToken: newAccessToken, refreshToken: token };
 };
+
+export async function processReferralForUser(userDoc, refCode) {
+  const refRaw = typeof refCode === "string" ? String(refCode).trim() : "";
+  if (!refRaw) {
+    return { success: false, reason: "empty" };
+  }
+  if (userDoc.referredBy) {
+    return { success: false, reason: "already_referred" };
+  }
+
+  const isValidOid = mongoose.Types.ObjectId.isValid(refRaw);
+  const query = isValidOid
+    ? { $or: [{ _id: new mongoose.Types.ObjectId(refRaw) }, { referralCode: refRaw }] }
+    : { referralCode: refRaw };
+
+  const referrer = await FoodUser.findOne(query).select("_id referralCount").lean();
+  if (!referrer) {
+    throw new ValidationError("Invalid referral code");
+  }
+  if (String(referrer._id) === String(userDoc._id)) {
+    throw new ValidationError("You cannot use your own referral code");
+  }
+
+  const referrerId = referrer._id;
+  const settingsDoc = await FoodReferralSettings.findOne({ isActive: true })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  if (!settingsDoc) {
+    return { success: false, reason: "settings_inactive" };
+  }
+
+  const reward = Math.max(0, Number(settingsDoc.referralRewardUser) || 0);
+  const limit = Math.max(0, Number(settingsDoc.referralLimitUser) || 0);
+
+  if (reward > 0 && (limit === 0 || Number(referrer.referralCount || 0) < limit)) {
+    userDoc.referredBy = referrerId;
+    await userDoc.save();
+
+    const log = await FoodReferralLog.create({
+      referrerId,
+      refereeId: userDoc._id,
+      role: "USER",
+      rewardAmount: reward,
+      status: "credited",
+    });
+
+    const referredReward = Math.max(0, Number(settingsDoc.referredRewardUser) || 0);
+    const creditPromises = [
+      FoodUser.updateOne(
+        { _id: referrerId },
+        { $inc: { referralCount: 1 } }
+      ),
+      creditReferralReward(referrerId, reward, {
+        role: "USER",
+        refereeId: String(userDoc._id),
+        referralLogId: String(log._id),
+      }),
+    ];
+
+    if (referredReward > 0) {
+      creditPromises.push(
+        creditReferralReward(userDoc._id, referredReward, {
+          role: "USER",
+          refereeId: String(userDoc._id),
+          referralLogId: String(log._id),
+        })
+      );
+    }
+
+    await Promise.all(creditPromises);
+    return { success: true, reward };
+  } else {
+    await FoodReferralLog.create({
+      referrerId,
+      refereeId: userDoc._id,
+      role: "USER",
+      rewardAmount: reward,
+      status: "rejected",
+      reason: reward <= 0 ? "reward_disabled" : "limit_reached",
+    });
+    return { success: false, reason: "reward_disabled_or_limit_reached" };
+  }
+}

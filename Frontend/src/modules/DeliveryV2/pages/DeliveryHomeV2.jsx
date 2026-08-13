@@ -7,6 +7,7 @@ import { useDeliveryNotifications } from '@food/hooks/useDeliveryNotifications';
 import { writeDeliveryLocation, writeOrderTracking } from '@food/realtimeTracking';
 import { deliveryAPI } from '@food/api';
 import { toast } from 'sonner';
+import useNotificationInbox from "@food/hooks/useNotificationInbox";
 
 // Components
 import LiveMap from '@/modules/DeliveryV2/components/map/LiveMap';
@@ -14,6 +15,7 @@ import { NewOrderModal } from '@/modules/DeliveryV2/components/modals/NewOrderMo
 import { PickupActionModal } from '@/modules/DeliveryV2/components/modals/PickupActionModal';
 import { DeliveryVerificationModal } from '@/modules/DeliveryV2/components/modals/DeliveryVerificationModal';
 import { OrderSummaryModal } from '@/modules/DeliveryV2/components/modals/OrderSummaryModal';
+import { EnableGpsModal } from '@/modules/DeliveryV2/components/modals/EnableGpsModal';
 import ActionSlider from '@/modules/DeliveryV2/components/ui/ActionSlider';
 
 // Sub Pages
@@ -23,7 +25,7 @@ import ProfileV2 from '@/modules/DeliveryV2/pages/ProfileV2';
 
 // Icons
 import {
-  Bell, HelpCircle, AlertTriangle,
+  Bell, HelpCircle, AlertTriangle, MapPinOff,
   Wallet, History, User as UserIcon, LayoutGrid,
   Plus, Minus, Navigation2, Target, Play, CheckCircle2, Clock, ChevronDown, Phone,
   Contact, Package, Ambulance, Shield, ShieldCheck, Navigation
@@ -32,7 +34,6 @@ import {
 import { getHaversineDistance, calculateETA, calculateHeading } from '@/modules/DeliveryV2/utils/geo';
 import { useCompanyName } from "@food/hooks/useCompanyName";
 import { useNavigate } from 'react-router-dom';
-import useNotificationInbox from "@food/hooks/useNotificationInbox";
 
 const getStoredDeliveryPartnerId = () => {
   if (typeof localStorage === 'undefined') return '';
@@ -153,6 +154,62 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   });
 
   const [isModalMinimized, setIsModalMinimized] = useState(false);
+  const [isGpsModalOpen, setIsGpsModalOpen] = useState(false);
+  const [isGpsOff, setIsGpsOff] = useState(false);
+  const [gpsErrorMessage, setGpsErrorMessage] = useState('');
+  const [isCheckingGps, setIsCheckingGps] = useState(false);
+
+  const handleGpsError = useCallback((error) => {
+    setIsGpsOff(true);
+    let msg = 'GPS is disabled or location permission is denied.';
+    if (error?.code === error?.PERMISSION_DENIED) {
+      msg = 'GPS Permission Denied! Please allow location access in your phone settings.';
+    } else if (error?.code === error?.POSITION_UNAVAILABLE) {
+      msg = 'GPS Position Unavailable! Please turn on device location services.';
+    } else if (error?.code === error?.TIMEOUT) {
+      msg = 'GPS location request timed out. Retrying...';
+    }
+    setGpsErrorMessage(msg);
+    if (error?.code === error?.PERMISSION_DENIED || error?.code === error?.POSITION_UNAVAILABLE) {
+      setIsGpsModalOpen(true);
+    }
+  }, []);
+
+  const requestGpsPosition = useCallback(() => {
+    if (!navigator.geolocation) {
+      toast.error('GPS is not supported on this device.');
+      return;
+    }
+    setIsCheckingGps(true);
+
+    try {
+      if (window.flutter_inappwebview?.callHandler) {
+        window.flutter_inappwebview.callHandler('requestLocationPermission').catch(() => {});
+      }
+    } catch (_) {}
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setIsCheckingGps(false);
+        setIsGpsOff(false);
+        setGpsErrorMessage('');
+        setIsGpsModalOpen(false);
+        toast.success('GPS Location Enabled!');
+        if (pos?.coords) {
+          setRiderLocation({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            heading: pos.coords.heading || 0
+          });
+        }
+      },
+      (err) => {
+        setIsCheckingGps(false);
+        handleGpsError(err);
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
+    );
+  }, [handleGpsError, setRiderLocation]);
   const [eta, setEta] = useState(null);
   const lastLocationSentAt = useRef(0);
   const lastCoordRef = useRef(null);
@@ -559,8 +616,11 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     };
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => handlePosition(pos, { force: true }),
-      () => {},
+      (pos) => {
+        setIsGpsOff(false);
+        handlePosition(pos, { force: true });
+      },
+      (err) => handleGpsError(err),
       {
         enableHighAccuracy: true,
         maximumAge: 0,
@@ -568,23 +628,18 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       }
     );
 
-    const watchId = navigator.geolocation.watchPosition((pos) => {
-      handlePosition(pos);
-    }, (error) => {
-      if (error.code === error.PERMISSION_DENIED) {
-        toast.error('GPS Permission Denied! Please enable location access in settings.');
-      } else if (error.code === error.POSITION_UNAVAILABLE) {
-        toast.error('GPS Position Unavailable!');
-      } else if (error.code === error.TIMEOUT) {
-        console.warn('GPS location request timed out. Retrying...');
-      } else {
-        toast.error('GPS Needed!');
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setIsGpsOff(false);
+        handlePosition(pos);
+      },
+      (error) => handleGpsError(error),
+      {
+        enableHighAccuracy: true,
+        maximumAge: 3000,
+        timeout: 10000
       }
-    }, {
-      enableHighAccuracy: true,
-      maximumAge: 3000,
-      timeout: 10000
-    });
+    );
 
     return () => {
       navigator.geolocation.clearWatch(watchId);
@@ -1342,6 +1397,13 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
           })}
         </div>
       </div>
+
+      {/* ─── ENABLE GPS MODAL ─── */}
+      <EnableGpsModal
+        isOpen={isGpsModalOpen}
+        onClose={() => setIsGpsModalOpen(false)}
+        errorMessage={gpsErrorMessage}
+      />
     </div>
   );
 }

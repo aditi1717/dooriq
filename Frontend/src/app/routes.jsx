@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { AppShellSkeleton } from '@food/components/ui/loading-skeletons'
+import Loader from '@food/components/Loader'
 import LaunchLandingPage from './LaunchLandingPage'
 import { adminAPI } from '@/services/api'
 import { registerWebPushForCurrentModule } from '@food/utils/firebaseMessaging'
@@ -12,7 +12,7 @@ const FoodApp = lazy(() => import('../modules/Food/routes'))
 const AuthApp = lazy(() => import('../modules/auth/routes'))
 import ProtectedRoute from '@food/components/ProtectedRoute'
 
-const PageLoader = () => <AppShellSkeleton />
+const PageLoader = () => <Loader />
 
 /**
  * FoodAppWrapper — Quick-spicy App. को /food prefix के साथ render करता है.
@@ -115,7 +115,7 @@ const AppRoutes = () => {
   const location = useLocation()
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window !== 'undefined') return
 
     const protocol = String(window.location?.protocol || '').toLowerCase()
     const userAgent = String(window.navigator?.userAgent || '').toLowerCase()
@@ -150,10 +150,6 @@ const AppRoutes = () => {
       <Route path="/food/*" element={<FoodAppWrapper />} />
 
       {/* Global Admin Portal - AdminRouter handles its own protection for sub-routes */}
-      <Route path="/admin/*" element={<AdminRouter />} />
-
-      {/* NEW Delivery V2 (Parallel testing) */}
-      {/* Global Admin Portal - wrap lazy router in Suspense to avoid blank/crash on direct admin URLs */}
       <Route
         path="/admin/*"
         element={
@@ -179,7 +175,3 @@ const AppRoutes = () => {
 }
 
 export default AppRoutes
-
-
-
-

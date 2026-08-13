@@ -11,6 +11,7 @@ import * as notificationBroadcastController from '../controllers/notificationBro
 import * as diningAdminController from '../../dining/controllers/diningAdmin.controller.js';
 import * as orderController from '../../orders/controllers/order.controller.js';
 import { getAdminPageController, upsertAdminPageController } from '../controllers/pageContent.controller.js';
+import { getPublicReferralSettingsController } from '../../landing/controllers/publicReferralSettings.controller.js';
 import { upload } from '../../../../middleware/upload.js';
 import { FoodAdmin } from '../../../../core/admin/admin.model.js';
 import { requireAdminPermission, requireAnyAdminPermission } from '../../../../core/roles/adminPermission.middleware.js';
@@ -270,6 +271,7 @@ router.get('/fee-settings', adminController.getFeeSettings);
 router.put('/fee-settings', adminController.createOrUpdateFeeSettings);
 
 // ----- Referral Settings -----
+router.get('/referral-settings/public', getPublicReferralSettingsController);
 router.get('/referral-settings', adminController.getReferralSettings);
 router.put('/referral-settings', adminController.createOrUpdateReferralSettings);
 

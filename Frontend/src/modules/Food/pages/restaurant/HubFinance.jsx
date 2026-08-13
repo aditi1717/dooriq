@@ -188,11 +188,16 @@ export default function HubFinance() {
   const invoiceOrders = useMemo(() => {
     const allOrdersMap = new Map()
     
+    const isDelivered = (order) => {
+      const status = String(order?.orderStatus || order?.status || '').trim().toLowerCase()
+      return status === 'delivered' || status === 'completed'
+    }
+
     // Add current cycle orders first
     const current = financeData?.currentCycle?.orders || []
     current.forEach(order => {
       const id = order.orderId || order._id || order.id
-      if (id) {
+      if (id && isDelivered(order)) {
         allOrdersMap.set(id, order)
       }
     })
@@ -201,7 +206,7 @@ export default function HubFinance() {
     const past = pastCyclesData?.orders || []
     past.forEach(order => {
       const id = order.orderId || order._id || order.id
-      if (id && !allOrdersMap.has(id)) {
+      if (id && !allOrdersMap.has(id) && isDelivered(order)) {
         allOrdersMap.set(id, order)
       }
     })
@@ -209,10 +214,21 @@ export default function HubFinance() {
     return Array.from(allOrdersMap.values())
   }, [financeData, pastCyclesData])
 
+  const getItemAmount = (order) => {
+    return Number(
+      order?.pricing?.subtotal ??
+      order?.subtotal ??
+      order?.itemsSubtotal ??
+      order?.itemTotal ??
+      order?.totalAmount ??
+      0
+    )
+  }
+
   const invoiceSummary = useMemo(() => {
-    const earnings = invoiceOrders.reduce((sum, order) => sum + (order.payout || order.restaurantEarning || 0), 0)
-    const commission = invoiceOrders.reduce((sum, order) => sum + (order.commission || 0), 0)
-    const gross = invoiceOrders.reduce((sum, order) => sum + (order.totalAmount || order.orderTotal || 0), 0)
+    const earnings = invoiceOrders.reduce((sum, order) => sum + Number(order.payout || order.restaurantEarning || order.earning || 0), 0)
+    const commission = invoiceOrders.reduce((sum, order) => sum + Number(order.commission || order.adminCommission || 0), 0)
+    const gross = invoiceOrders.reduce((sum, order) => sum + getItemAmount(order), 0)
     return { earnings, commission, gross, count: invoiceOrders.length }
   }, [invoiceOrders])
 
@@ -1309,24 +1325,20 @@ export default function HubFinance() {
 
         {activeTab === "invoices" && (
           <div className="space-y-4">
-            <div className="bg-white rounded-lg p-4 border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Invoices & Taxes Summary</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-md bg-gray-50 p-3">
-                  <p className="text-xs text-gray-600">Orders</p>
-                  <p className="text-base font-semibold text-gray-900">{invoiceSummary.count}</p>
+            <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+              <h3 className="text-sm font-bold text-gray-900 mb-4">Invoices & Taxes Summary (Delivered Orders)</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="rounded-xl bg-emerald-50/70 border border-emerald-100 p-4">
+                  <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Earning</p>
+                  <p className="text-xl font-black text-emerald-950 mt-1">₹{invoiceSummary.earnings.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
-                <div className="rounded-md bg-gray-50 p-3">
-                  <p className="text-xs text-gray-600">Earnings</p>
-                  <p className="text-base font-semibold text-gray-900">₹{invoiceSummary.earnings.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <div className="rounded-xl bg-blue-50/70 border border-blue-100 p-4">
+                  <p className="text-xs font-bold text-blue-800 uppercase tracking-wider">Gross Amount</p>
+                  <p className="text-xl font-black text-blue-950 mt-1">₹{invoiceSummary.gross.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
-                <div className="rounded-md bg-gray-50 p-3">
-                  <p className="text-xs text-gray-600">Commission</p>
-                  <p className="text-base font-semibold text-gray-900">₹{invoiceSummary.commission.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                </div>
-                <div className="rounded-md bg-gray-50 p-3">
-                  <p className="text-xs text-gray-600">Gross amount</p>
-                  <p className="text-base font-semibold text-gray-900">₹{invoiceSummary.gross.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <div className="rounded-xl bg-amber-50/70 border border-amber-100 p-4">
+                  <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Commission</p>
+                  <p className="text-xl font-black text-amber-950 mt-1">₹{invoiceSummary.commission.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
               </div>
             </div>
@@ -1350,9 +1362,9 @@ export default function HubFinance() {
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-semibold text-gray-900">
-                            ₹{(order.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ₹{getItemAmount(order).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
-                          <p className="text-xs text-gray-500">Total</p>
+                          <p className="text-xs text-gray-500">Item Amount</p>
                         </div>
                       </div>
                     </div>

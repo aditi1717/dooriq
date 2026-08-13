@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { ArrowLeft, Check, Copy, Download, Smartphone } from "lucide-react"
 import { useCompanyName } from "@food/hooks/useCompanyName"
+import { adminAPI } from "@food/api"
 
-const APP_STORE_URL = "#"
-const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.dooriq.delivery"
+const DEFAULT_APP_STORE_URL = ""
+const DEFAULT_PLAY_STORE_URL = ""
 const INVITE_STORAGE_KEY = "food_delivery_invite_ref"
 
 export default function DeliveryReferralInvitePage() {
@@ -12,6 +13,21 @@ export default function DeliveryReferralInvitePage() {
   const [searchParams] = useSearchParams()
   const ref = String(searchParams.get("ref") || "").trim()
   const [copied, setCopied] = useState(false)
+  const [appStoreUrl, setAppStoreUrl] = useState(DEFAULT_APP_STORE_URL)
+  const [playStoreUrl, setPlayStoreUrl] = useState(DEFAULT_PLAY_STORE_URL)
+
+  useEffect(() => {
+    adminAPI.getPublicReferralSettings?.()
+      .then((res) => {
+        const s = res?.data?.data?.referralSettings
+        if (s?.deliveryAppStoreUrl) setAppStoreUrl(s.deliveryAppStoreUrl)
+        if (s?.deliveryPlayStoreUrl) setPlayStoreUrl(s.deliveryPlayStoreUrl)
+      })
+      .catch(() => {})
+  }, [])
+
+  const hasAppStore = Boolean(appStoreUrl && appStoreUrl.trim() !== "" && appStoreUrl.trim() !== "#")
+  const hasPlayStore = Boolean(playStoreUrl && playStoreUrl.trim() !== "" && playStoreUrl.trim() !== "#")
 
   useEffect(() => {
     if (!ref || typeof window === "undefined") return
@@ -92,24 +108,30 @@ export default function DeliveryReferralInvitePage() {
                 Open App & Join as Captain
               </Link>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <a
-                  href={APP_STORE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-4 text-sm font-bold text-white transition hover:bg-slate-800"
-                >
-                  App Store
-                </a>
-                <a
-                  href={PLAY_STORE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-800 transition hover:bg-slate-50"
-                >
-                  Google Play
-                </a>
-              </div>
+              {(hasAppStore || hasPlayStore) && (
+                <div className={`grid gap-3 ${hasAppStore && hasPlayStore ? "sm:grid-cols-2" : "grid-cols-1"}`}>
+                  {hasAppStore && (
+                    <a
+                      href={appStoreUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-4 text-sm font-bold text-white transition hover:bg-slate-800"
+                    >
+                      App Store
+                    </a>
+                  )}
+                  {hasPlayStore && (
+                    <a
+                      href={playStoreUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-800 transition hover:bg-slate-50"
+                    >
+                      Google Play
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
 
             <p className="mt-6 text-xs leading-5 text-slate-500">

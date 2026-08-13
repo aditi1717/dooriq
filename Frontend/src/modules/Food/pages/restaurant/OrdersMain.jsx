@@ -147,6 +147,12 @@ const getSharedOrdersResponse = async (maxAgeMs = 1500) => {
   return sharedOrdersPromise;
 };
 
+const clearSharedOrdersCache = () => {
+  sharedOrdersResponse = null;
+  sharedOrdersFetchedAt = 0;
+  sharedOrdersPromise = null;
+};
+
 // Completed Orders List Component
 function CompletedOrders({ onSelectOrder, refreshToken = 0 }) {
   const [orders, setOrders] = useState([]);
@@ -1427,7 +1433,10 @@ export default function OrdersMain() {
   }, []);
 
   const [ordersRefreshToken, setOrdersRefreshToken] = useState(0);
-  const requestOrdersRefresh = () => setOrdersRefreshToken((t) => t + 1);
+  const requestOrdersRefresh = () => {
+    clearSharedOrdersCache();
+    setOrdersRefreshToken((t) => t + 1);
+  };
 
   // Check for confirmed orders that haven't been shown in popup yet, or scheduled orders whose time has come
   useEffect(() => {

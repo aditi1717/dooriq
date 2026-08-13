@@ -327,24 +327,19 @@ export default function SignIn() {
 
 
 
-      const ref = String(searchParams.get("ref") || "").trim()
+      const urlRef = String(searchParams.get("ref") || searchParams.get("code") || searchParams.get("referral") || "").trim()
+      const storedRef = String(sessionStorage.getItem("userReferralCode") || "").trim()
+      const ref = urlRef || storedRef
 
+      if (urlRef) {
+        sessionStorage.setItem("userReferralCode", urlRef)
+      }
 
       const authData = {
-
-
         method: "phone",
-
-
         phone: fullPhone,
-
-
         email: null,
-
-
         name: null,
-
-
         referralCode: ref || null,
 
 

@@ -16,6 +16,10 @@ export default function ReferralSettings() {
     referredRewardDelivery: "",
     referralLimitUser: "",
     referralLimitDelivery: "",
+    userAppStoreUrl: "",
+    userPlayStoreUrl: "",
+    deliveryAppStoreUrl: "",
+    deliveryPlayStoreUrl: "",
   })
 
   const fetchSettings = async () => {
@@ -31,6 +35,10 @@ export default function ReferralSettings() {
           referredRewardDelivery: s.referredRewardDelivery ?? "",
           referralLimitUser: s.referralLimitUser ?? "",
           referralLimitDelivery: s.referralLimitDelivery ?? "",
+          userAppStoreUrl: s.userAppStoreUrl ?? "",
+          userPlayStoreUrl: s.userPlayStoreUrl ?? "",
+          deliveryAppStoreUrl: s.deliveryAppStoreUrl ?? "",
+          deliveryPlayStoreUrl: s.deliveryPlayStoreUrl ?? "",
         })
       } else {
         setSettings({
@@ -40,6 +48,10 @@ export default function ReferralSettings() {
           referredRewardDelivery: "",
           referralLimitUser: "",
           referralLimitDelivery: "",
+          userAppStoreUrl: "",
+          userPlayStoreUrl: "",
+          deliveryAppStoreUrl: "",
+          deliveryPlayStoreUrl: "",
         })
       }
     } catch (e) {
@@ -64,6 +76,10 @@ export default function ReferralSettings() {
         referredRewardDelivery: settings.referredRewardDelivery === "" ? 0 : Number(settings.referredRewardDelivery),
         referralLimitUser: settings.referralLimitUser === "" ? 0 : Number(settings.referralLimitUser),
         referralLimitDelivery: settings.referralLimitDelivery === "" ? 0 : Number(settings.referralLimitDelivery),
+        userAppStoreUrl: settings.userAppStoreUrl.trim(),
+        userPlayStoreUrl: settings.userPlayStoreUrl.trim(),
+        deliveryAppStoreUrl: settings.deliveryAppStoreUrl.trim(),
+        deliveryPlayStoreUrl: settings.deliveryPlayStoreUrl.trim(),
         isActive: true,
       }
       const res = await adminAPI.createOrUpdateReferralSettings(body)
@@ -78,6 +94,10 @@ export default function ReferralSettings() {
             referredRewardDelivery: saved.referredRewardDelivery ?? "",
             referralLimitUser: saved.referralLimitUser ?? "",
             referralLimitDelivery: saved.referralLimitDelivery ?? "",
+            userAppStoreUrl: saved.userAppStoreUrl ?? "",
+            userPlayStoreUrl: saved.userPlayStoreUrl ?? "",
+            deliveryAppStoreUrl: saved.deliveryAppStoreUrl ?? "",
+            deliveryPlayStoreUrl: saved.deliveryPlayStoreUrl ?? "",
           })
         }
       } else {
@@ -91,10 +111,15 @@ export default function ReferralSettings() {
     }
   }
 
-  const onChange = (key) => (e) => {
+  const onChangeNumeric = (key) => (e) => {
     const v = String(e.target.value ?? "")
       .replace(/[^\d.]/g, "")
       .replace(/^0+(\d)/, "$1")
+    setSettings((prev) => ({ ...prev, [key]: v }))
+  }
+
+  const onChangeText = (key) => (e) => {
+    const v = String(e.target.value ?? "")
     setSettings((prev) => ({ ...prev, [key]: v }))
   }
 
@@ -160,7 +185,7 @@ export default function ReferralSettings() {
                     <p className="text-[11px] text-slate-500 mb-1">Credited to existing user who shares their invite code</p>
                     <input
                       value={settings.referralRewardUser}
-                      onChange={onChange("referralRewardUser")}
+                      onChange={onChangeNumeric("referralRewardUser")}
                       inputMode="numeric"
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
                       placeholder="e.g. 50"
@@ -174,10 +199,38 @@ export default function ReferralSettings() {
                     <p className="text-[11px] text-slate-500 mb-1">Credited to new user who registers using an invite code</p>
                     <input
                       value={settings.referredRewardUser}
-                      onChange={onChange("referredRewardUser")}
+                      onChange={onChangeNumeric("referredRewardUser")}
                       inputMode="numeric"
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
                       placeholder="e.g. 25"
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      User App - Google Play Store URL
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-1">Used on referral share & invite page for Android users</p>
+                    <input
+                      value={settings.userPlayStoreUrl}
+                      onChange={onChangeText("userPlayStoreUrl")}
+                      type="url"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-medium"
+                      placeholder="https://play.google.com/store/apps/details?id=com.dooriq.user"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      User App - Apple App Store URL
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-1">Used on referral share & invite page for iOS users</p>
+                    <input
+                      value={settings.userAppStoreUrl}
+                      onChange={onChangeText("userAppStoreUrl")}
+                      type="url"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-medium"
+                      placeholder="https://apps.apple.com/app/id..."
                     />
                   </div>
                 </div>
@@ -197,7 +250,7 @@ export default function ReferralSettings() {
                     <p className="text-[11px] text-slate-500 mb-1">Credited to existing captain who shares their invite code</p>
                     <input
                       value={settings.referralRewardDelivery}
-                      onChange={onChange("referralRewardDelivery")}
+                      onChange={onChangeNumeric("referralRewardDelivery")}
                       inputMode="numeric"
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
                       placeholder="e.g. 500"
@@ -211,10 +264,38 @@ export default function ReferralSettings() {
                     <p className="text-[11px] text-slate-500 mb-1">Credited to new captain who registers using an invite code</p>
                     <input
                       value={settings.referredRewardDelivery}
-                      onChange={onChange("referredRewardDelivery")}
+                      onChange={onChangeNumeric("referredRewardDelivery")}
                       inputMode="numeric"
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
                       placeholder="e.g. 200"
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Delivery Captain App - Google Play Store URL
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-1">Used on referral share & invite page for Android captains</p>
+                    <input
+                      value={settings.deliveryPlayStoreUrl}
+                      onChange={onChangeText("deliveryPlayStoreUrl")}
+                      type="url"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-medium"
+                      placeholder="https://play.google.com/store/apps/details?id=com.dooriq.delivery"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Delivery Captain App - Apple App Store URL
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-1">Used on referral share & invite page for iOS captains</p>
+                    <input
+                      value={settings.deliveryAppStoreUrl}
+                      onChange={onChangeText("deliveryAppStoreUrl")}
+                      type="url"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-medium"
+                      placeholder="https://apps.apple.com/app/id..."
                     />
                   </div>
                 </div>

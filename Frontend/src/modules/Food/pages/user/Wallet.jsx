@@ -459,7 +459,7 @@ export default function Wallet() {
                       : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                   }`}
                 >
-                  <span>💼</span> {companyName} Money
+                  <span>💼</span> Dooriq Money
                 </button>
                 <button
                   onClick={() => setActiveTab("coins")}
@@ -478,35 +478,19 @@ export default function Wallet() {
               <div className="space-y-6 md:space-y-8">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 md:gap-8 lg:gap-10">
                   <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-6 lg:gap-8 flex-1">
-                    <div className="relative flex-shrink-0">
-                      <div className="w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28 xl:w-32 xl:h-32 bg-gradient-to-br from-red-500 via-red-600 to-red-700 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg transform rotate-[-5deg]">
-                        <div className="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 xl:w-28 xl:h-28 bg-white/10 rounded-lg md:rounded-xl flex items-center justify-center backdrop-blur-sm border border-white/20">
-                          <IndianRupee className="h-10 w-10 md:h-12 md:w-12 lg:h-14 lg:w-14 xl:h-16 xl:w-16 text-white" strokeWidth={2.5} />
-                        </div>
-                      </div>
-                      <div className="absolute inset-0 bg-red-800 rounded-xl md:rounded-2xl transform rotate-[-5deg] translate-y-1 -z-10 opacity-25" />
-                    </div>
-
-                    <div className="flex flex-col md:items-start items-center text-center md:text-left">
-                      <h2 className="text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-gray-900 dark:text-white mb-2 md:mb-3">
-                        {companyName} Money
+                    <div className="flex flex-col md:items-start items-center text-center md:text-left pt-2 pb-3 space-y-4">
+                      <h2 className="text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-gray-900 dark:text-white mb-3">
+                        Dooriq Money
                       </h2>
 
-                      <div className="mb-2 md:mb-3">
-                        <p className="text-gray-500 dark:text-gray-400 text-xs md:text-sm lg:text-base mb-1">Current Balance</p>
-                        <p className="text-2xl md:text-3xl lg:text-4xl xl:text-5xl 2xl:text-6xl font-bold text-gray-900 dark:text-white">
+                      <div className="my-3">
+                        <p className="text-gray-500 dark:text-gray-400 text-xs md:text-sm lg:text-base mb-1.5 font-medium">Current Balance</p>
+                        <p className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-extrabold text-gray-900 dark:text-white tracking-tight">
                           {formatAmount(currentBalance)}
                         </p>
                       </div>
 
-                      <div className="mb-2 md:mb-3">
-                        <p className="text-gray-500 dark:text-gray-400 text-xs md:text-sm lg:text-base mb-1">Referral Earnings</p>
-                        <p className="text-lg md:text-xl lg:text-2xl font-semibold text-green-600 dark:text-green-400">
-                          {formatAmount(referralEarnings)}
-                        </p>
-                      </div>
-
-                      <p className="text-gray-500 dark:text-gray-400 text-xs md:text-sm lg:text-base text-center md:text-left max-w-md">
+                      <p className="text-gray-500 dark:text-gray-400 text-xs md:text-sm lg:text-base text-center md:text-left max-w-md pt-1">
                         Add money to enjoy one-tap, seamless payments
                       </p>
                     </div>

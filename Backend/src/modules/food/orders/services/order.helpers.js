@@ -53,7 +53,9 @@ export function sanitizeOrderForExternal(orderDoc) {
     ? String(o.dispatch.deliveryPartnerId?._id || o.dispatch.deliveryPartnerId)
     : null;
   // Ensure orderId field for UI always contains the pretty ID
-  o.orderId = o.order_id || o.orderMongoId; 
+  o.orderId = o.order_id || o.orderMongoId;
+  o.riderEarning = Number(o.riderEarning ?? 0) || 0;
+  o.earnings = o.riderEarning;
   return o;
 }
 
@@ -96,7 +98,7 @@ export function buildOrderIdentityFilter(orderIdOrMongoId) {
     return { _id: new mongoose.Types.ObjectId(raw) };
   
   // Search BOTH underscore and camelCase variants for robust lookup
-  return { 
+  return {
     $or: [
         { order_id: raw },
         { orderId: raw }
@@ -247,8 +249,13 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
       "",
     restaurantPhone: restaurant?.phone || "",
     restaurantLocation: {
+      coordinates: Array.isArray(restaurantLocation?.coordinates)
+        ? restaurantLocation.coordinates
+        : undefined,
       latitude: restaurantLocation?.latitude,
+      lat: restaurantLocation?.latitude ?? restaurantLocation?.lat,
       longitude: restaurantLocation?.longitude,
+      lng: restaurantLocation?.longitude ?? restaurantLocation?.lng,
       address:
         restaurantLocation?.address ||
         restaurantLocation?.formattedAddress ||
@@ -265,8 +272,8 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
     userName: order?.customerName || order?.deliveryAddress?.fullName || order?.deliveryAddress?.name || order?.userId?.name || "",
     userPhone: order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "",
     note: order?.note || "",
-    riderEarning: order?.riderEarning || 0,
-    earnings: order?.riderEarning || order?.pricing?.deliveryFee || 0,
+    riderEarning: order?.riderEarning ?? 0,
+    earnings: order?.riderEarning ?? 0,
     deliveryFee: order?.pricing?.deliveryFee || 0,
     deliveryFleet: order?.deliveryFleet,
     dispatch: order?.dispatch,

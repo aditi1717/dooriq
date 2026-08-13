@@ -1008,6 +1008,8 @@ export const adminAPI = {
   /** Referral Settings (admin) */
   getReferralSettings: () =>
     apiClient.get("/food/admin/referral-settings", { contextModule: "admin" }),
+  getPublicReferralSettings: () =>
+    apiClient.get("/food/admin/referral-settings/public"),
   createOrUpdateReferralSettings: (body) =>
     apiClient.put("/food/admin/referral-settings", body ?? {}, {
       contextModule: "admin",

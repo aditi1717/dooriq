@@ -318,7 +318,7 @@ export default function DisbursementPage({
                 <option value="processing">Processing</option>
                 <option value="completed">Completed</option>
                 <option value="partially completed">Partially Completed</option>
-                <option value="canceled">Canceled</option>
+                <option value="canceled">Cancelled</option>
               </select>
             </div>
             <div>

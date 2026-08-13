@@ -12,7 +12,11 @@ export async function getPublicReferralSettingsController(req, res, next) {
                 referralRewardDelivery: Number(settings.referralRewardDelivery) || 0,
                 referredRewardDelivery: Number(settings.referredRewardDelivery) || 0,
                 referralLimitUser: Number(settings.referralLimitUser) || 0,
-                referralLimitDelivery: Number(settings.referralLimitDelivery) || 0
+                referralLimitDelivery: Number(settings.referralLimitDelivery) || 0,
+                userAppStoreUrl: settings.userAppStoreUrl || '',
+                userPlayStoreUrl: settings.userPlayStoreUrl || '',
+                deliveryAppStoreUrl: settings.deliveryAppStoreUrl || '',
+                deliveryPlayStoreUrl: settings.deliveryPlayStoreUrl || ''
             }
             : null;
         return res.status(200).json({ success: true, message: 'Referral settings fetched successfully', data: { referralSettings: payload } });
