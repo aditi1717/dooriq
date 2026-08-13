@@ -83,9 +83,10 @@ export const PocketBalanceV2 = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [earningsRes, walletRes] = await Promise.allSettled([
+        const [earningsRes, walletRes, statsRes] = await Promise.allSettled([
           deliveryAPI.getEarnings({ period: 'week' }),
-          deliveryAPI.getWallet()
+          deliveryAPI.getWallet(),
+          deliveryAPI.getReferralStats()
         ]);
 
         const summary =
@@ -95,6 +96,10 @@ export const PocketBalanceV2 = () => {
           (walletRes.status === "fulfilled" && walletRes.value?.data?.data?.wallet) ||
           (walletRes.status === "fulfilled" && walletRes.value?.data?.wallet) ||
           {};
+        const stats =
+          (statsRes.status === "fulfilled" && statsRes.value?.data?.data?.stats) ||
+          {};
+        const referralEarnings = toNum(stats.totalReferralEarnings);
         
         const totalEarned = toNum(wallet.totalEarned ?? wallet.total_earned);
         const totalBonus = toNum(wallet.totalBonus ?? wallet.total_bonus);
@@ -118,6 +123,7 @@ export const PocketBalanceV2 = () => {
         setWalletState({
            pocketBalance: pocketBalance,
            weeklyEarnings: earningsToShow,
+           referralEarnings: referralEarnings,
            totalBonus: totalBonus,
            totalWithdrawn: totalWithdrawn,
            cashCollected: Number(wallet.cashInHand ?? wallet.cash_in_hand ?? wallet.cashCollected) || 0,
@@ -271,6 +277,16 @@ export const PocketBalanceV2 = () => {
                 <div className="bg-white rounded-[32px] p-2 border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
                    <div className="px-4">
                       <DetailRow label="Earnings" value={formatCurrency(walletState.weeklyEarnings)} />
+                      <div 
+                         onClick={() => navigate("/food/delivery/profile/referrals")}
+                         className="cursor-pointer hover:bg-gray-50/60 rounded-xl transition-colors"
+                       >
+                         <DetailRow 
+                           label="Referral earnings" 
+                           value={formatCurrency(walletState.referralEarnings || 0)} 
+                           subLabel="Rewards earned by referring new delivery partners"
+                         />
+                       </div>
                       <DetailRow label="Amount withdrawn" value={formatCurrency(walletState.totalWithdrawn)} />
                       <DetailRow label="Cash collected" value={formatCurrency(walletState.cashCollected)} />
                       <DetailRow label="Pocket balance" value={formatCurrency(walletState.pocketBalance)} />

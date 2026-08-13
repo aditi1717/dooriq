@@ -55,7 +55,19 @@ export const ProfileV2 = () => {
     }).catch(() => {})
   }, [])
 
-  const refId = profile?._id || profile?.id || profile?.referralCode || ""
+  const cleanCode = (raw) => {
+    if (!raw) return ""
+    let str = String(raw).trim()
+    if (str.includes("http://") || str.includes("https://")) {
+      const urlMatch = str.match(/ref=([a-zA-Z0-9_-]+)/)
+      if (urlMatch) return urlMatch[1]
+      str = str.split(/https?:\/\//)[0].trim()
+    }
+    return str.replace(/[^a-zA-Z0-9_-]/g, "")
+  }
+
+  const rawRefId = profile?.referralCode || profile?._id || profile?.id || ""
+  const refId = cleanCode(rawRefId)
   const referralLink = refId ? `${window.location.origin}/invite/delivery?ref=${encodeURIComponent(String(refId))}` : ""
 
   const handleShareReferral = async () => {

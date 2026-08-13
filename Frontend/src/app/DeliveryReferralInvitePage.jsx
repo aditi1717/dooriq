@@ -8,10 +8,22 @@ const DEFAULT_APP_STORE_URL = ""
 const DEFAULT_PLAY_STORE_URL = ""
 const INVITE_STORAGE_KEY = "food_delivery_invite_ref"
 
+const cleanReferralCode = (raw) => {
+  if (!raw) return ""
+  let str = String(raw).trim()
+  if (str.includes("http://") || str.includes("https://")) {
+    const urlMatch = str.match(/ref=([a-zA-Z0-9_-]+)/)
+    if (urlMatch) return urlMatch[1]
+    str = str.split(/https?:\/\//)[0].trim()
+  }
+  return str.replace(/[^a-zA-Z0-9_-]/g, "")
+}
+
 export default function DeliveryReferralInvitePage() {
   const companyName = useCompanyName()
   const [searchParams] = useSearchParams()
-  const ref = String(searchParams.get("ref") || "").trim()
+  const rawRef = String(searchParams.get("ref") || "").trim()
+  const ref = cleanReferralCode(rawRef)
   const [copied, setCopied] = useState(false)
   const [appStoreUrl, setAppStoreUrl] = useState(DEFAULT_APP_STORE_URL)
   const [playStoreUrl, setPlayStoreUrl] = useState(DEFAULT_PLAY_STORE_URL)
@@ -59,7 +71,7 @@ export default function DeliveryReferralInvitePage() {
     <div className="min-h-screen bg-gradient-to-br from-[#f0fff7] via-white to-[#eef6ff] text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-5 sm:px-6 lg:px-8">
         <div className="mb-6 flex items-center justify-between gap-4">
-          <Link to="/food/user" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900">
+          <Link to="/food/delivery" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900">
             <ArrowLeft className="h-4 w-4" />
             Back
           </Link>

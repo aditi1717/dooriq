@@ -5045,9 +5045,17 @@ export async function approveDeliveryPartner(id) {
                 const settingsDoc = await FoodReferralSettings.findOne({ isActive: true }).sort({ createdAt: -1 }).lean();
                 const reward = Math.max(0, Number(settingsDoc?.referralRewardDelivery) || 0);
                 const limit = Math.max(0, Number(settingsDoc?.referralLimitDelivery) || 0);
-                const referrer = await FoodDeliveryPartner.findById(referrerId).select('_id referralCount status').lean();
+                let referrer = await FoodDeliveryPartner.findById(referrerId).select('_id referralCount status').lean();
+                let isUserReferrer = false;
+                if (!referrer) {
+                    const { FoodUser } = await import('../../../../core/users/user.model.js');
+                    referrer = await FoodUser.findById(referrerId).select('_id referralCount').lean();
+                    isUserReferrer = true;
+                }
 
-                if (referrer && referrer.status === 'approved' && reward > 0 && (limit === 0 || Number(referrer.referralCount || 0) < limit)) {
+                const isApprovedOrUser = isUserReferrer || (referrer && referrer.status === 'approved');
+
+                if (referrer && isApprovedOrUser && reward > 0 && (limit === 0 || Number(referrer.referralCount || 0) < limit)) {
                     const log = await FoodReferralLog.create({
                         referrerId: referrer._id,
                         refereeId: partner._id,
@@ -5057,13 +5065,28 @@ export async function approveDeliveryPartner(id) {
                     });
 
                     const referredReward = Math.max(0, Number(settingsDoc?.referredRewardDelivery) || 0);
-                    const bonusPromises = [
-                        FoodDeliveryPartner.updateOne({ _id: referrer._id }, { $inc: { referralCount: 1 } }),
-                        addDeliveryPartnerBonus(
-                            { deliveryPartnerId: String(referrer._id), amount: reward, reference: 'Referral bonus' },
-                            null
-                        )
-                    ];
+                    const bonusPromises = [];
+
+                    if (isUserReferrer) {
+                        const { FoodUser } = await import('../../../../core/users/user.model.js');
+                        const { creditReferralReward } = await import('../../../user/services/userWallet.service.js');
+                        bonusPromises.push(
+                            FoodUser.updateOne({ _id: referrer._id }, { $inc: { referralCount: 1 } }),
+                            creditReferralReward(referrer._id, reward, {
+                                role: 'USER',
+                                refereeId: String(partner._id),
+                                referralLogId: String(log._id)
+                            })
+                        );
+                    } else {
+                        bonusPromises.push(
+                            FoodDeliveryPartner.updateOne({ _id: referrer._id }, { $inc: { referralCount: 1 } }),
+                            addDeliveryPartnerBonus(
+                                { deliveryPartnerId: String(referrer._id), amount: reward, reference: 'Referral bonus' },
+                                null
+                            )
+                        );
+                    }
 
                     if (referredReward > 0) {
                         bonusPromises.push(

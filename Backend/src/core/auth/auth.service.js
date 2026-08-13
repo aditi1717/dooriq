@@ -944,10 +944,22 @@ export async function processReferralForUser(userDoc, refCode) {
     return { success: false, reason: "already_referred" };
   }
 
+  const refLower = refRaw.toLowerCase();
   const isValidOid = mongoose.Types.ObjectId.isValid(refRaw);
   const query = isValidOid
-    ? { $or: [{ _id: new mongoose.Types.ObjectId(refRaw) }, { referralCode: refRaw }] }
-    : { referralCode: refRaw };
+    ? {
+        $or: [
+          { _id: new mongoose.Types.ObjectId(refRaw) },
+          { referralCode: refRaw },
+          { referralCode: refLower },
+        ],
+      }
+    : {
+        $or: [
+          { referralCode: refRaw },
+          { referralCode: refLower },
+        ],
+      };
 
   const referrer = await FoodUser.findOne(query).select("_id referralCount").lean();
   if (!referrer) {
@@ -1017,4 +1029,42 @@ export async function processReferralForUser(userDoc, refCode) {
     });
     return { success: false, reason: "reward_disabled_or_limit_reached" };
   }
+}
+
+export async function validateReferralCode(codeRaw) {
+  const code = typeof codeRaw === "string" ? codeRaw.trim() : "";
+  if (!code) {
+    throw new ValidationError("Referral code is required");
+  }
+
+  const codeLower = code.toLowerCase();
+  const isValidOid = mongoose.Types.ObjectId.isValid(code);
+  const regex = new RegExp(`^${code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+
+  const queryConditions = [
+    { referralCode: code },
+    { referralCode: codeLower },
+    { referralCode: regex },
+  ];
+
+  if (isValidOid) {
+    queryConditions.push({ _id: new mongoose.Types.ObjectId(code) });
+  }
+
+  const query = { $or: queryConditions };
+
+  let referrer = await FoodDeliveryPartner.findOne(query).select("_id name referralCode").lean();
+  if (!referrer) {
+    referrer = await FoodUser.findOne(query).select("_id name referralCode").lean();
+  }
+
+  if (!referrer) {
+    throw new ValidationError("Invalid referral code");
+  }
+
+  return {
+    valid: true,
+    referrerId: String(referrer._id),
+    referralCode: referrer.referralCode || String(referrer._id),
+  };
 }

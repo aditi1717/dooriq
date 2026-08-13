@@ -130,10 +130,35 @@ export const registerDeliveryPartner = async (payload, files) => {
         partner.referralCode = String(partner._id);
     }
 
-    // Store referredBy (no credit here; credit happens on admin approval).
-    if (refRaw && mongoose.Types.ObjectId.isValid(refRaw) && String(refRaw) !== String(partner._id)) {
-        const referrer = await FoodDeliveryPartner.findById(refRaw).select('_id').lean();
-        if (referrer) {
+    // Store referredBy (validation & link; credit happens on admin approval).
+    if (refRaw) {
+        const refLower = refRaw.toLowerCase();
+        const isValidOid = mongoose.Types.ObjectId.isValid(refRaw);
+        const query = isValidOid
+            ? {
+                $or: [
+                    { _id: new mongoose.Types.ObjectId(refRaw) },
+                    { referralCode: refRaw },
+                    { referralCode: refLower }
+                ]
+            }
+            : {
+                $or: [
+                    { referralCode: refRaw },
+                    { referralCode: refLower }
+                ]
+            };
+
+        let referrer = await FoodDeliveryPartner.findOne(query).select('_id').lean();
+        if (!referrer) {
+            const { FoodUser } = await import('../../../../core/users/user.model.js');
+            referrer = await FoodUser.findOne(query).select('_id').lean();
+        }
+
+        if (!referrer) {
+            throw new ValidationError('Invalid referral code');
+        }
+        if (String(referrer._id) !== String(partner._id)) {
             partner.referredBy = referrer._id;
         }
     }

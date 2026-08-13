@@ -228,6 +228,22 @@ export default function SignupStep1() {
     setIsSubmitting(true)
 
     try {
+      // Validate optional referral code if entered
+      const cleanRef = String(formData.ref || "").trim()
+      if (cleanRef) {
+        try {
+          await deliveryAPI.validateReferralCode(cleanRef)
+        } catch (refErr) {
+          debugError("Referral error:", refErr)
+          const message = refErr?.response?.data?.message || "Invalid Referral Code! This referral code does not exist."
+          setErrors(prev => ({ ...prev, ref: message }))
+          setFormData(prev => ({ ...prev, ref: "" })) // Clear invalid field
+          toast.error(message)
+          setIsSubmitting(false)
+          return
+        }
+      }
+
       // Check vehicle availability before proceeding
       const vCheck = await deliveryAPI.checkVehicleAvailability(formData.vehicleNumber.trim())
       if (vCheck?.data?.success && !vCheck.data.isAvailable) {
@@ -322,6 +338,32 @@ export default function SignupStep1() {
               placeholder="Enter your email"
             />
             {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+          </div>
+
+          {/* Referral Code (Optional) */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">
+                Referral Code
+              </label>
+              <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                Optional
+              </span>
+            </div>
+            <input
+              type="text"
+              name="ref"
+              value={formData.ref || ""}
+              onChange={(e) => {
+                handleChange(e)
+                if (errors.ref) setErrors((prev) => ({ ...prev, ref: "" }))
+              }}
+              placeholder="Enter Referral Code"
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 uppercase tracking-wider font-semibold ${
+                errors.ref ? "border-red-500" : "border-gray-300"
+              }`}
+            />
+            {errors.ref && <p className="text-red-500 text-sm mt-1 font-semibold">{errors.ref}</p>}
           </div>
 
           {/* Address */}

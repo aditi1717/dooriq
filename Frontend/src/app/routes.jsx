@@ -146,6 +146,7 @@ const AppRoutes = () => {
       <Route path="/" element={<RootEntryRoute />} />
       <Route path="/launch-aug-15" element={<LaunchLandingPage />} />
       <Route path="/invite" element={<ReferralInvitePage />} />
+      <Route path="/invite/delivery" element={<DeliveryReferralInvitePage />} />
       {/* Food Module */}
       <Route path="/food/*" element={<FoodAppWrapper />} />
 

@@ -506,8 +506,11 @@ export function extractOrderPayableAmount(order) {
   if (!order) return 0;
   return Number(
     order.pricing?.payableAmount ??
+      order.payment?.amountDue ??
+      order.pricing?.total ??
       order.amounts?.payableAmount ??
       order.payableAmount ??
+      order.total ??
       order.totalAmount ??
       0,
   );

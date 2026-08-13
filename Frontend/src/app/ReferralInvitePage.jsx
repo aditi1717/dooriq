@@ -8,10 +8,22 @@ const DEFAULT_APP_STORE_URL = ""
 const DEFAULT_PLAY_STORE_URL = ""
 const INVITE_STORAGE_KEY = "food_user_invite_ref"
 
+const cleanReferralCode = (raw) => {
+  if (!raw) return ""
+  let str = String(raw).trim()
+  if (str.includes("http://") || str.includes("https://")) {
+    const urlMatch = str.match(/ref=([a-zA-Z0-9_-]+)/)
+    if (urlMatch) return urlMatch[1]
+    str = str.split(/https?:\/\//)[0].trim()
+  }
+  return str.replace(/[^a-zA-Z0-9_-]/g, "")
+}
+
 export default function ReferralInvitePage() {
   const companyName = useCompanyName()
   const [searchParams] = useSearchParams()
-  const ref = String(searchParams.get("ref") || "").trim()
+  const rawRef = String(searchParams.get("ref") || "").trim()
+  const ref = cleanReferralCode(rawRef)
   const [copied, setCopied] = useState(false)
   const [appStoreUrl, setAppStoreUrl] = useState(DEFAULT_APP_STORE_URL)
   const [playStoreUrl, setPlayStoreUrl] = useState(DEFAULT_PLAY_STORE_URL)

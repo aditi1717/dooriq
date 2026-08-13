@@ -28,7 +28,7 @@ export const ReferralEarningHistoryV2 = () => {
         const [profileRes, statsRes, walletRes] = await Promise.allSettled([
           deliveryAPI.getProfile(),
           deliveryAPI.getReferralStats(),
-          deliveryAPI.getWallet()
+          deliveryAPI.getWallet({ type: 'bonus' })
         ]);
 
         if (profileRes.status === "fulfilled" && profileRes.value?.data?.data?.profile) {
@@ -40,15 +40,9 @@ export const ReferralEarningHistoryV2 = () => {
         }
 
         if (walletRes.status === "fulfilled") {
-          const wallet = walletRes.value.value?.data?.data?.wallet || walletRes.value.value?.data?.wallet || {};
+          const wallet = walletRes.value?.data?.data?.wallet || walletRes.value?.data?.wallet || {};
           const txs = wallet.transactions || [];
-          // Filter transactions for referral rewards
-          const referralTxs = txs.filter(tx => 
-            /referral/i.test(tx?.description || '') || 
-            /referral/i.test(tx?.reference || '') || 
-            /referral/i.test(tx?.type || '')
-          );
-          setHistory(referralTxs);
+          setHistory(txs);
         }
       } catch (err) {
         toast.error('Failed to load referral details');
@@ -59,7 +53,19 @@ export const ReferralEarningHistoryV2 = () => {
     fetchData();
   }, []);
 
-  const refId = profile?._id || profile?.id || profile?.referralCode || "";
+  const cleanCode = (raw) => {
+    if (!raw) return "";
+    let str = String(raw).trim();
+    if (str.includes("http://") || str.includes("https://")) {
+      const urlMatch = str.match(/ref=([a-zA-Z0-9_-]+)/);
+      if (urlMatch) return urlMatch[1];
+      str = str.split(/https?:\/\//)[0].trim();
+    }
+    return str.replace(/[^a-zA-Z0-9_-]/g, "");
+  };
+
+  const rawRefId = profile?.referralCode || profile?._id || profile?.id || "";
+  const refId = cleanCode(rawRefId);
   const referralLink = refId ? `${window.location.origin}/invite/delivery?ref=${encodeURIComponent(String(refId))}` : "";
 
   const handleCopyCode = () => {
