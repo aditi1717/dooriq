@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { Search, ChevronRight, MapPin, X, Bell } from "lucide-react"
 import { restaurantAPI } from "@food/api"
 import { getCachedSettings, getModuleLogoUrl, loadBusinessSettings } from "@food/utils/businessSettings"
+import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
 import useNotificationInbox from "@food/hooks/useNotificationInbox"
 
 const debugLog = (...args) => {}
@@ -30,6 +31,7 @@ export default function RestaurantNavbar({
   const [searchValue, setSearchValue] = useState("")
   const [status, setStatus] = useState("Offline")
   const [restaurantData, setRestaurantData] = useState(null)
+  const [outletTimings, setOutletTimings] = useState(null)
   const [loading, setLoading] = useState(true)
   const [companyName, setCompanyName] = useState("")
   const [logoUrl, setLogoUrl] = useState(null)
@@ -66,22 +68,27 @@ export default function RestaurantNavbar({
     return () => window.removeEventListener('businessSettingsUpdated', handleSettingsUpdate)
   }, [])
 
-  // Fetch restaurant data on mount
+  // Fetch restaurant data and outlet timings on mount
   useEffect(() => {
     const fetchRestaurantData = async () => {
       try {
         setLoading(true)
-        const response = await restaurantAPI.getCurrentRestaurant()
-        const data = extractRestaurantPayload(response)
-        if (data) {
-          setRestaurantData(data)
+        const [profileRes, timingsRes] = await Promise.allSettled([
+          restaurantAPI.getCurrentRestaurant(),
+          restaurantAPI.getOutletTimings()
+        ])
+        if (profileRes.status === "fulfilled") {
+          const data = extractRestaurantPayload(profileRes.value)
+          if (data) setRestaurantData(data)
+        }
+        if (timingsRes.status === "fulfilled") {
+          const data = timingsRes.value?.data?.data?.outletTimings || timingsRes.value?.data?.outletTimings
+          if (data) setOutletTimings(data)
         }
       } catch (error) {
-        // Only log error if it's not a network/timeout error (backend might be down/slow)
         if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
           debugError("Error fetching restaurant data:", error)
         }
-        // Continue with default values if fetch fails
       } finally {
         setLoading(false)
       }
@@ -234,12 +241,16 @@ export default function RestaurantNavbar({
 
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
-  // Load status from localStorage or backend data on mount and listen for changes
+  // Load status considering both manual toggle and outlet timings (operating hours)
   useEffect(() => {
     const updateStatus = () => {
       try {
-        if (restaurantData && restaurantData.isAcceptingOrders !== undefined) {
-          const isOnline = Boolean(restaurantData.isAcceptingOrders)
+        if (restaurantData) {
+          const availability = getRestaurantAvailabilityStatus({
+            ...restaurantData,
+            outletTimings: outletTimings || restaurantData.outletTimings
+          })
+          const isOnline = Boolean(availability.isOpen)
           setStatus(isOnline ? "Online" : "Offline")
           localStorage.setItem('restaurant_online_status', JSON.stringify(isOnline))
           return
@@ -248,30 +259,41 @@ export default function RestaurantNavbar({
         if (savedStatus !== null) {
           const isOnline = JSON.parse(savedStatus)
           setStatus(isOnline ? "Online" : "Offline")
-        } else {
-          const isOnline = Boolean(restaurantData?.isAcceptingOrders)
-          setStatus(isOnline ? "Online" : "Offline")
         }
       } catch (error) {
         debugError("Error loading restaurant status:", error)
-        const isOnline = Boolean(restaurantData?.isAcceptingOrders)
-        setStatus(isOnline ? "Online" : "Offline")
+        setStatus("Offline")
       }
     }
 
     updateStatus()
 
-    const handleStatusChange = (event) => {
-      const isOnline = event.detail?.isOnline || false
-      setStatus(isOnline ? "Online" : "Offline")
+    // Recheck status every minute to automatically switch to Offline when closing time passes
+    const interval = setInterval(updateStatus, 60000)
+
+    const handleStatusChange = () => {
+      restaurantAPI.getCurrentRestaurant().then((res) => {
+        const data = extractRestaurantPayload(res)
+        if (data) setRestaurantData(data)
+      }).catch(() => {})
+    }
+
+    const handleTimingsUpdate = () => {
+      restaurantAPI.getOutletTimings().then((res) => {
+        const data = res?.data?.data?.outletTimings || res?.data?.outletTimings
+        if (data) setOutletTimings(data)
+      }).catch(() => {})
     }
 
     window.addEventListener('restaurantStatusChanged', handleStatusChange)
+    window.addEventListener('outletTimingsUpdated', handleTimingsUpdate)
     
     return () => {
+      clearInterval(interval)
       window.removeEventListener('restaurantStatusChanged', handleStatusChange)
+      window.removeEventListener('outletTimingsUpdated', handleTimingsUpdate)
     }
-  }, [restaurantData])
+  }, [restaurantData, outletTimings])
 
   const handleStatusClick = () => {
     navigate("/food/restaurant/status")

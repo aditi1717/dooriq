@@ -261,7 +261,13 @@ export default function OrderDetailPage() {
                 </div>
                 <div className="flex-1 min-w-0 pt-0.5">
                   <div className="flex justify-between items-start gap-2">
-                    <p className="text-sm font-black text-gray-900 leading-tight pr-2">{item.name}</p>
+                    <p className="text-sm font-black text-gray-900 leading-tight pr-2">
+                      {item.name}
+                      {(() => {
+                        const v = item.variantName || item.variantTitle || item.selectedVariantName || item.selectedVariant?.name || (typeof item.variant === "string" ? item.variant : item.variant?.name) || item.size || "";
+                        return v ? ` (${v})` : "";
+                      })()}
+                    </p>
                     <p className="text-sm font-black text-gray-900 whitespace-nowrap">{formatMoney(item.price * item.quantity)}</p>
                   </div>
                   <p className="text-[11px] font-bold text-gray-400 mt-1 uppercase tracking-tighter">

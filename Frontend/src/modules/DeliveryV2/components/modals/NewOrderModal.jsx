@@ -326,6 +326,26 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
                 </div>
               </div>
             </div>
+
+            {/* Items Summary Section with Variants */}
+            {Array.isArray(order.items || order.orderItems || order.cartItems) && (order.items || order.orderItems || order.cartItems).length > 0 && (
+              <div className="bg-gray-50/80 rounded-3xl p-4 border border-gray-100 mt-3">
+                <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-500 mb-2">Order Items</h4>
+                <div className="space-y-1.5">
+                  {(order.items || order.orderItems || order.cartItems).map((item, idx) => {
+                    const name = item.name || item.foodName || item.title || "Item";
+                    const variant = item.variantName || item.variantTitle || item.selectedVariantName || item.selectedVariant?.name || (typeof item.variant === "string" ? item.variant : item.variant?.name) || item.size || "";
+                    const displayName = variant ? `${name} (${variant})` : name;
+                    return (
+                      <div key={idx} className="flex justify-between items-center text-xs font-bold text-gray-800">
+                        <span>{item.quantity || item.qty || 1} x {displayName}</span>
+                        {item.price != null && <span className="text-gray-500">₹{Number(item.price * (item.quantity || 1)).toFixed(0)}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -6,7 +6,7 @@ const debugError = (...args) => {}
 
 
 const ProfileContext = createContext(null)
-const USER_SESSION_PREFERENCE_KEYS = ["userVegMode", "food-under-250-filters"]
+const USER_SESSION_PREFERENCE_KEYS = ["food-under-250-filters"]
 
 export function ProfileProvider({ children }) {
   const getAddressId = (address) => address?.id || address?._id || null
@@ -120,10 +120,8 @@ export function ProfileProvider({ children }) {
   }, [dishFavorites, isAuthenticated])
 
   useEffect(() => {
-    if (isAuthenticated) {
-      localStorage.setItem("userVegMode", vegMode.toString())
-    }
-  }, [vegMode, isAuthenticated])
+    localStorage.setItem("userVegMode", vegMode.toString())
+  }, [vegMode])
 
   // Fetch user profile and addresses from API on mount and when authentication changes
   useEffect(() => {
@@ -138,7 +136,6 @@ export function ProfileProvider({ children }) {
         setPaymentMethods([])
         setFavorites([])
         setDishFavorites([])
-        setVegMode(false)
         USER_SESSION_PREFERENCE_KEYS.forEach((key) => {
           localStorage.removeItem(key)
         })

@@ -216,16 +216,8 @@ export default function AdminLogin() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-sm">
+              <div className="text-sm">
                 <span className="text-gray-600">Use your admin credentials to continue.</span>
-                <button
-                  type="button"
-                  onClick={() => navigate("/admin/forgot-password")}
-                  className="text-black font-medium hover:underline focus:outline-none focus:underline"
-                  disabled={isLoading}
-                >
-                  Forgot Password?
-                </button>
               </div>
 
               <Button

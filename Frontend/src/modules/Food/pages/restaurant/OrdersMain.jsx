@@ -102,8 +102,10 @@ const transformOrderForList = (order) => ({
   ),
   eta: null,
   itemsSummary:
-    order.items?.map((item) => `${item.quantity}x ${item.name}`).join(", ") ||
-    "No items",
+    order.items?.map((item) => {
+      const v = item.variantName || item.variantTitle || item.selectedVariantName || item.selectedVariant?.name || (typeof item.variant === "string" ? item.variant : item.variant?.name) || item.size || "";
+      return `${item.quantity || 1}x ${item.name}${v ? ` (${v})` : ""}`;
+    }).join(", ") || "No items",
   photoUrl: order.items?.[0]?.image || null,
   photoAlt: order.items?.[0]?.name || "Order",
   paymentMethod: order.paymentMethod || order.payment?.method || null,
@@ -188,7 +190,10 @@ function CompletedOrders({ onSelectOrder, refreshToken = 0 }) {
               order.deliveredAt || order.updatedAt || order.createdAt,
             itemsSummary:
               order.items
-                ?.map((item) => `${item.quantity}x ${item.name}`)
+                ?.map((item) => {
+                  const v = item.variantName || item.variantTitle || item.selectedVariantName || item.selectedVariant?.name || (typeof item.variant === "string" ? item.variant : item.variant?.name) || item.size || "";
+                  return `${item.quantity || 1}x ${item.name}${v ? ` (${v})` : ""}`;
+                })
                 .join(", ") || "No items",
             photoUrl: order.items?.[0]?.image || null,
             photoAlt: order.items?.[0]?.name || "Order",
@@ -397,7 +402,10 @@ function CancelledOrders({ onSelectOrder, refreshToken = 0 }) {
               order.cancellationReason || "No reason provided",
             itemsSummary:
               order.items
-                ?.map((item) => `${item.quantity}x ${item.name}`)
+                ?.map((item) => {
+                  const v = item.variantName || item.variantTitle || item.selectedVariantName || item.selectedVariant?.name || (typeof item.variant === "string" ? item.variant : item.variant?.name) || item.size || "";
+                  return `${item.quantity || 1}x ${item.name}${v ? ` (${v})` : ""}`;
+                })
                 .join(", ") || "No items",
             photoUrl: order.items?.[0]?.image || null,
             photoAlt: order.items?.[0]?.name || "Order",
@@ -1087,9 +1095,9 @@ export default function OrdersMain() {
 
   const getAcceptTimerFillColor = (orderLike) => {
     const fillPercent = getAcceptTimerFillPercent(orderLike);
-    if (fillPercent > 60) return "rgba(16, 185, 129, 0.16)";
-    if (fillPercent > 30) return "rgba(245, 158, 11, 0.18)";
-    return "rgba(244, 63, 94, 0.16)";
+    if (fillPercent > 60) return "rgba(37, 99, 235, 0.5)";
+    if (fillPercent > 30) return "rgba(245, 158, 11, 0.4)";
+    return "rgba(244, 63, 94, 0.4)";
   };
 
   const getOrderIdentityKeys = (orderLike) =>
@@ -1986,12 +1994,16 @@ export default function OrdersMain() {
         yPos += 8;
 
         // Prepare table data
-        const tableData = orderToPrint.items.map((item) => [
-          item.name || "Item",
-          item.quantity || 1,
-          `Rs. ${(item.price || 0).toFixed(2)}`,
-          `Rs. ${((item.price || 0) * (item.quantity || 1)).toFixed(2)}`,
-        ]);
+        const tableData = orderToPrint.items.map((item) => {
+          const v = item.variantName || item.variantTitle || item.selectedVariantName || item.selectedVariant?.name || (typeof item.variant === "string" ? item.variant : item.variant?.name) || item.size || "";
+          const itemName = `${item.name || "Item"}${v ? ` (${v})` : ""}`;
+          return [
+            itemName,
+            item.quantity || 1,
+            `Rs. ${(item.price || 0).toFixed(2)}`,
+            `Rs. ${((item.price || 0) * (item.quantity || 1)).toFixed(2)}`,
+          ];
+        });
 
         autoTable(doc, {
           startY: yPos,
@@ -2569,15 +2581,18 @@ export default function OrdersMain() {
                   <div>
                     <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mb-3">Order Details</p>
                     <div className="space-y-2 max-h-[140px] overflow-y-auto no-scrollbar">
-                      {(popupOrder || newOrder)?.items?.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-start gap-4">
-                          <div className="flex gap-2.5">
-                            <span className="text-sm font-black text-emerald-600 bg-emerald-50 w-6 h-6 rounded-md flex items-center justify-center shrink-0">{item.quantity}</span>
-                            <span className="text-sm font-bold text-gray-800 leading-tight">{item.name}</span>
+                      {(popupOrder || newOrder)?.items?.map((item, idx) => {
+                        const v = item.variantName || item.variantTitle || item.selectedVariantName || item.selectedVariant?.name || (typeof item.variant === "string" ? item.variant : item.variant?.name) || item.size || "";
+                        return (
+                          <div key={idx} className="flex justify-between items-start gap-4">
+                            <div className="flex gap-2.5">
+                              <span className="text-sm font-black text-emerald-600 bg-emerald-50 w-6 h-6 rounded-md flex items-center justify-center shrink-0">{item.quantity}</span>
+                              <span className="text-sm font-bold text-gray-800 leading-tight">{item.name}{v ? ` (${v})` : ""}</span>
+                            </div>
+                            <span className="text-sm font-medium text-gray-400 shrink-0">₹{item.price * item.quantity}</span>
                           </div>
-                          <span className="text-sm font-medium text-gray-400 shrink-0">₹{item.price * item.quantity}</span>
-                        </div>
-                      )) || <p className="text-sm text-gray-400 italic">No items found</p>}
+                        );
+                      }) || <p className="text-sm text-gray-400 italic">No items found</p>}
                     </div>
                     
                     {(popupOrder || newOrder)?.sendCutlery === false && (
@@ -2650,7 +2665,7 @@ export default function OrdersMain() {
                   {/* Mobile View Slider (Hidden on Web) */}
                   <div
                     ref={acceptSliderRef}
-                    className="md:hidden relative h-14 rounded-2xl bg-gray-100 overflow-hidden select-none touch-pan-y shadow-inner border border-gray-200"
+                    className="md:hidden relative h-14 rounded-2xl bg-slate-900 overflow-hidden select-none touch-pan-y shadow-2xl border border-slate-800"
                   >
                     {/* Progress Fill (Timer) */}
                     <motion.div
@@ -2667,7 +2682,7 @@ export default function OrdersMain() {
                     />
                     
                     <div className="absolute inset-0 flex items-center justify-center px-12">
-                      <span className="relative z-10 text-sm font-black text-gray-500 text-center tracking-tight">
+                      <span className="relative z-10 text-sm font-black text-white text-center tracking-tight drop-shadow-sm">
                         {isAcceptingOrder
                           ? "Accepting..."
                           : `Slide to accept (${formatTime(countdown)})`}
@@ -2676,7 +2691,7 @@ export default function OrdersMain() {
 
                     <motion.button
                       type="button"
-                      className="absolute left-1.5 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-[12px] bg-emerald-600 text-white shadow-lg active:scale-95 transition-transform"
+                      className="absolute left-1.5 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-[12px] bg-blue-600 text-white shadow-xl shadow-blue-950/50 active:scale-95 transition-transform"
                       style={{
                         x: (() => {
                           const sliderWidth = acceptSliderRef.current?.offsetWidth || 320;

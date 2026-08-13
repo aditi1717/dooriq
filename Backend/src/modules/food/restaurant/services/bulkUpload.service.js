@@ -20,56 +20,39 @@ const PREP_TIME_OPTIONS = [
     '25-30 mins', '30-40 mins', '40-50 mins', '50+ mins'
 ];
 
-const TEMPLATE_SAMPLE_ROW_SIGNATURE = Object.freeze({
-    category: 'starters',
-    name: 'paneer tikka',
-    description: 'spicy marinated paneer grilled to perfection',
-    price: 250,
-    foodType: 'veg',
-    prepTime: '20-25 mins',
-    imageUrl: 'https://example.com/paneer.jpg',
-    variants: [
-        { name: 'half', price: 150 },
-        { name: 'full', price: 280 }
-    ]
-});
-
 const isLegacyTemplateSampleRow = (data = {}) => {
-    const normalizedVariants = Array.isArray(data.variants)
-        ? data.variants.map((v) => ({
-            name: String(v?.name || '').trim().toLowerCase(),
-            price: Number(v?.price || 0)
-        }))
-        : [];
+    const name = String(data.name || '').trim().toLowerCase();
+    const description = String(data.description || '').trim().toLowerCase();
+    
+    if (name === 'paneer tikka') {
+        if (
+            description.includes('grilled cottage cheese') ||
+            description.includes('spicy marinated paneer')
+        ) {
+            return true;
+        }
+    }
+    
+    if (name === 'butter chicken' && description.includes('creamy tomato')) return true;
+    if (name === 'veg biryani' && description.includes('basmati rice')) return true;
+    if (name === 'masala dosa' && description.includes('potato masala')) return true;
+    if (name === 'gulab jamun' && description.includes('milk-solid')) return true;
 
-    if (normalizedVariants.length !== TEMPLATE_SAMPLE_ROW_SIGNATURE.variants.length) return false;
-
-    const variantsMatch = TEMPLATE_SAMPLE_ROW_SIGNATURE.variants.every((sampleVariant, idx) => {
-        const rowVariant = normalizedVariants[idx];
-        return (
-            rowVariant &&
-            rowVariant.name === sampleVariant.name &&
-            rowVariant.price === sampleVariant.price
-        );
-    });
-
-    if (!variantsMatch) return false;
-
-    return (
-        String(data.category || '').trim().toLowerCase() === TEMPLATE_SAMPLE_ROW_SIGNATURE.category &&
-        String(data.name || '').trim().toLowerCase() === TEMPLATE_SAMPLE_ROW_SIGNATURE.name &&
-        String(data.description || '').trim().toLowerCase() === TEMPLATE_SAMPLE_ROW_SIGNATURE.description &&
-        Number(data.price || 0) === TEMPLATE_SAMPLE_ROW_SIGNATURE.price &&
-        String(data.foodType || '').trim().toLowerCase() === TEMPLATE_SAMPLE_ROW_SIGNATURE.foodType &&
-        String(data.prepTime || '').trim().toLowerCase() === TEMPLATE_SAMPLE_ROW_SIGNATURE.prepTime &&
-        String(data.imageUrl || '').trim().toLowerCase() === TEMPLATE_SAMPLE_ROW_SIGNATURE.imageUrl
-    );
+    return false;
 };
 
 /**
  * Generates an Excel template for bulk menu upload.
  */
-export async function generateBulkMenuTemplate() {
+export async function generateBulkMenuTemplate(restaurantId = null) {
+    let isPureVeg = false;
+    if (restaurantId) {
+        const restaurant = await FoodRestaurant.findById(restaurantId).lean();
+        if (restaurant) {
+            isPureVeg = Boolean(restaurant.pureVegRestaurant === true || restaurant.pureVeg === true);
+        }
+    }
+
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Menu Template');
 
@@ -79,7 +62,7 @@ export async function generateBulkMenuTemplate() {
         { header: 'Item Name*', key: 'name', width: 30 },
         { header: 'Description', key: 'description', width: 40 },
         { header: 'Base Price*', key: 'price', width: 15 },
-        { header: 'Food Type (Veg/Non-Veg)*', key: 'foodType', width: 25 },
+        { header: `Food Type (${isPureVeg ? 'Veg Only' : 'Veg/Non-Veg'})*`, key: 'foodType', width: 25 },
         { header: 'Recommended (Yes/No)', key: 'isRecommended', width: 25 },
         { header: 'Preparation Time*', key: 'prepTime', width: 25 },
         { header: 'Image URL', key: 'imageUrl', width: 40 },
@@ -105,7 +88,7 @@ export async function generateBulkMenuTemplate() {
         sheet.getCell(`E${i}`).dataValidation = {
             type: 'list',
             allowBlank: false,
-            formulae: ['"Veg,Non-Veg"']
+            formulae: [isPureVeg ? '"Veg"' : '"Veg,Non-Veg"']
         };
 
         // Recommended Dropdown
@@ -297,22 +280,30 @@ export async function processBulkMenuUpload(restaurantId, fileBuffer) {
 
     // --- OPTIMIZATION: Resolve All Categories First ---
     const categoryCache = new Map();
+    const isPureVegRestaurant = Boolean(restaurant.pureVegRestaurant === true || restaurant.pureVeg === true);
+
     const uniqueCategoryNames = [...new Set(items.map(it => it.data.category))];
     
     for (const catName of uniqueCategoryNames) {
         const normalized = catName.trim();
+        const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        // Find existing approved category (Global or owned by this restaurant)
         let cat = await FoodCategory.findOne({
-            name: { $regex: new RegExp(`^${escapeRegExp(normalized)}$`, 'i') },
+            name: { $regex: new RegExp(`^${escaped}$`, 'i') },
+            isActive: { $ne: false },
             $or: [{ restaurantId: null }, { restaurantId: restaurant._id }]
-        });
+        }).sort({ restaurantId: -1, createdAt: -1 });
 
         if (!cat) {
+            // Auto-create category owned by restaurant
             cat = await FoodCategory.create({
                 name: normalized,
                 restaurantId: restaurant._id,
                 createdByRestaurantId: restaurant._id,
                 approvalStatus: 'approved',
                 zoneId: restaurant.zoneId,
+                foodTypeScope: isPureVegRestaurant ? 'Veg' : 'Both',
                 isActive: true
             });
         }
@@ -337,6 +328,11 @@ export async function processBulkMenuUpload(restaurantId, fileBuffer) {
                 const category = categoryCache.get(data.category.toLowerCase());
                 if (!category) throw new Error(`Category ${data.category} could not be resolved`);
 
+                // Check Category Approval Status (Must be approved)
+                if (category.approvalStatus && category.approvalStatus !== 'approved') {
+                    throw new Error(`Category "${category.name}" is pending admin approval`);
+                }
+
                 // 2. Handle Image Parallel Upload
                 let finalImageUrl = '';
                 if (data.imageUrl) {
@@ -357,12 +353,26 @@ export async function processBulkMenuUpload(restaurantId, fileBuffer) {
                     }
                 }
 
-                // 3. Prepare Bulk Operation
-                const normalizedFoodType = normalizeFoodTypeForCategory(data.foodType);
+                // 3. Prepare Bulk Operation & Pure Veg check
+                const normalizedFoodType = isPureVegRestaurant ? 'Veg' : normalizeFoodTypeForCategory(data.foodType);
+                if (isPureVegRestaurant) {
+                    const rawFoodType = String(data.foodType || '').trim().toLowerCase();
+                    if (rawFoodType.includes('non') || rawFoodType.includes('egg')) {
+                        throw new Error(
+                            `Pure Veg restaurant cannot upload Non-Veg / Egg item "${data.name}"`
+                        );
+                    }
+                    if (String(category.foodTypeScope || 'Veg') !== 'Veg') {
+                        throw new Error(
+                            `Pure Veg restaurants can only assign food items to Veg categories (Category "${category.name}" is ${category.foodTypeScope})`
+                        );
+                    }
+                }
+
                 const categoryScope = String(category?.foodTypeScope || 'Both').trim();
                 if (!categoryAllowsFoodType(categoryScope, normalizedFoodType)) {
                     throw new Error(
-                        `Category "${category.name}" allows only ${categoryScope} items, but row has ${normalizedFoodType}`
+                        `Category "${category.name}" allows only ${categoryScope} items, but item "${data.name}" is ${normalizedFoodType}`
                     );
                 }
 

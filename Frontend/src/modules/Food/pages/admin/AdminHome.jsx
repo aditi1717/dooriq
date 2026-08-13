@@ -430,7 +430,7 @@ export default function AdminHome() {
                         nameKey="name"
                         innerRadius={60}
                         outerRadius={90}
-                        paddingAngle={4}
+                        paddingAngle={0}
                       >
                         {pieData.map((entry, index) => (
                           <Cell key={index} fill={entry.fill} stroke="none" />

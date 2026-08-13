@@ -629,6 +629,36 @@ export default function Coupons() {
 
   // Calculate paginated subset
   const totalPages = Math.ceil(filteredOffers.length / itemsPerPage) || 1
+
+  const getPageNumbers = () => {
+    const delta = 1
+    const left = currentPage - delta
+    const right = currentPage + delta + 1
+    const range = []
+    const rangeWithDots = []
+    let l
+
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= left && i < right)) {
+        range.push(i)
+      }
+    }
+
+    for (let i of range) {
+      if (l) {
+        if (i - l === 2) {
+          rangeWithDots.push(l + 1)
+        } else if (i - l !== 1) {
+          rangeWithDots.push("...")
+        }
+      }
+      rangeWithDots.push(i)
+      l = i
+    }
+
+    return rangeWithDots
+  }
+
   const paginatedOffers = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage
     return filteredOffers.slice(start, start + itemsPerPage)
@@ -1111,20 +1141,26 @@ export default function Coupons() {
                   </button>
                   
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                      <button
-                        key={page}
-                        type="button"
-                        onClick={() => setCurrentPage(page)}
-                        className={`min-w-9 h-9 flex items-center justify-center rounded-lg text-sm font-semibold transition-colors ${
-                          currentPage === page
-                            ? "bg-blue-600 text-white shadow-sm"
-                            : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        {page}
-                      </button>
-                    ))}
+                    {getPageNumbers().map((page, idx) =>
+                      page === "..." ? (
+                        <span key={`dots-${idx}`} className="px-2 py-1 text-sm font-bold text-slate-400">
+                          ...
+                        </span>
+                      ) : (
+                        <button
+                          key={page}
+                          type="button"
+                          onClick={() => setCurrentPage(page)}
+                          className={`min-w-9 h-9 flex items-center justify-center rounded-lg text-sm font-semibold transition-colors ${
+                            currentPage === page
+                              ? "bg-blue-600 text-white shadow-sm"
+                              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      )
+                    )}
                   </div>
 
                   <button

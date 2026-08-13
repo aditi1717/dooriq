@@ -4,7 +4,8 @@ import fs from 'fs';
 
 export const downloadBulkMenuTemplateController = async (req, res, next) => {
     try {
-        const workbook = await generateBulkMenuTemplate();
+        const restaurantId = req.restaurantId || req.user?.restaurantId || req.user?.id;
+        const workbook = await generateBulkMenuTemplate(restaurantId);
         
         res.setHeader(
             'Content-Type',

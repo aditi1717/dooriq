@@ -263,10 +263,13 @@ export default function OrderInvoice() {
                                 className="w-8 h-8 sm:w-12 sm:h-12 object-cover rounded flex-shrink-0"
                               />
                               <div className="min-w-0 flex-1">
-                                <span className="font-medium block">{item.name}</span>
-                                {item.variantName ? (
-                                  <span className="text-xs text-gray-500">{item.variantName}</span>
-                                ) : null}
+                                <span className="font-medium block">
+                                  {item.name}
+                                  {(() => {
+                                    const v = item.variantName || item.variantTitle || item.selectedVariantName || item.selectedVariant?.name || (typeof item.variant === "string" ? item.variant : item.variant?.name) || item.size || "";
+                                    return v ? ` (${v})` : "";
+                                  })()}
+                                </span>
                                 <span className="text-muted-foreground sm:hidden text-xs">
                                   Qty: {item.quantity} � ${item.price.toFixed(2)}
                                 </span>

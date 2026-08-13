@@ -41,3 +41,29 @@ export const getFoodPriceLabel = (item = {}) => {
 
 export const buildCartLineId = (itemId, variantId = "") =>
   `${String(itemId || "")}::${String(variantId || "base")}`
+
+export const getItemVariantLabel = (item = {}) => {
+  if (!item) return ""
+  const variant =
+    item.variantName ||
+    item.variantTitle ||
+    item.selectedVariantName ||
+    item.selectedVariant?.name ||
+    item.selectedVariant?.title ||
+    (typeof item.variant === "string" ? item.variant : item.variant?.name || item.variant?.title) ||
+    item.size ||
+    item.optionName ||
+    item.variant;
+
+  if (variant && typeof variant === "string" && variant.trim()) {
+    return variant.trim()
+  }
+  return ""
+}
+
+export const getItemDisplayName = (item = {}) => {
+  if (!item) return "Item"
+  const name = item.name || item.foodName || item.title || "Item"
+  const variant = getItemVariantLabel(item)
+  return variant ? `${name} (${variant})` : name
+}

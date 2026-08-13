@@ -212,12 +212,17 @@ export const PickupActionModal = ({
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden space-y-2 px-2"
                     >
-                      {items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center p-4 bg-gray-50/30 rounded-2xl border border-gray-50">
-                          <span className="text-gray-800 text-sm font-bold uppercase tracking-tight">{item.name || 'Item Name'}</span>
-                          <span className="text-emerald-700 font-black bg-emerald-100/50 px-3 py-1 rounded-xl text-xs">x{item.quantity || 1}</span>
-                        </div>
-                      ))}
+                      {items.map((item, idx) => {
+                        const name = item.name || item.foodName || item.title || 'Item Name';
+                        const variant = item.variantName || item.variantTitle || item.selectedVariantName || item.selectedVariant?.name || (typeof item.variant === "string" ? item.variant : item.variant?.name) || item.size || "";
+                        const displayName = variant ? `${name} (${variant})` : name;
+                        return (
+                          <div key={idx} className="flex justify-between items-center p-4 bg-gray-50/30 rounded-2xl border border-gray-50">
+                            <span className="text-gray-800 text-sm font-bold uppercase tracking-tight">{displayName}</span>
+                            <span className="text-emerald-700 font-black bg-emerald-100/50 px-3 py-1 rounded-xl text-xs">x{item.quantity || 1}</span>
+                          </div>
+                        );
+                      })}
                     </motion.div>
                   )}
                 </AnimatePresence>

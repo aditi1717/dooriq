@@ -12,6 +12,7 @@ import {
   ThumbsDown,
 } from "lucide-react"
 import BottomPopup from "@delivery/components/BottomPopup"
+import { restaurantAPI } from "@food/api"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -59,6 +60,22 @@ export default function RatingsReviews() {
   const [showThankYouPopup, setShowThankYouPopup] = useState(false)
   const [showNotHelpfulPopup, setShowNotHelpfulPopup] = useState(false)
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
+  const [restaurantRating, setRestaurantRating] = useState(null)
+
+  useEffect(() => {
+    const fetchRating = async () => {
+      try {
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const restaurant = response.data?.data?.restaurant || response.data?.restaurant
+        if (restaurant && typeof restaurant.rating === "number" && restaurant.rating > 0) {
+          setRestaurantRating(restaurant.rating.toFixed(1))
+        }
+      } catch (error) {
+        debugError("Error fetching restaurant rating:", error)
+      }
+    }
+    fetchRating()
+  }, [])
 
   // Lenis smooth scrolling
   useEffect(() => {
@@ -140,7 +157,7 @@ export default function RatingsReviews() {
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-base font-semibold text-gray-900">Your restaurant's rating</h2>
           <div className="bg-green-600 px-3 py-1.5 rounded-lg flex items-center gap-1">
-            <span className="text-white text-sm font-bold">4.0</span>
+            <span className="text-white text-sm font-bold">{restaurantRating || "New"}</span>
             <Star className="w-4 h-4 text-white fill-white" />
           </div>
         </div>

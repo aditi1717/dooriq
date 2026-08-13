@@ -1170,10 +1170,11 @@ export default function Home() {
   }, [landingCategories, normalizeImageUrl, slugifyCategory]);
 
   const displayCategories = useMemo(() => {
+    if (vegMode && menuCategories.length > 0) return menuCategories;
     if (realCategories.length > 0) return realCategories;
     if (menuCategories.length > 0) return menuCategories;
     return normalizedLandingCategories;
-  }, [menuCategories, realCategories, normalizedLandingCategories]);
+  }, [menuCategories, normalizedLandingCategories, realCategories, vegMode]);
 
   // Swipe functionality for hero banner carousel
   const touchStartX = useRef(0);
@@ -1259,9 +1260,6 @@ export default function Home() {
     window.addEventListener("popstate", handlePopState);
     return () => {
       window.removeEventListener("popstate", handlePopState);
-      if (window.history.state?.vegModalOpen) {
-        window.history.back();
-      }
     };
   }, [showVegModePopup, showSwitchOffPopup]);
 
@@ -2444,6 +2442,7 @@ export default function Home() {
           let hasNonVeg = false;
           const sections = Array.isArray(menu?.sections) ? menu.sections : [];
           sections.forEach((section) => {
+            let sectionHasVeg = false;
             const sectionItems = Array.isArray(section?.items)
               ? section.items
               : [];
@@ -2451,7 +2450,10 @@ export default function Home() {
               const foodType = String(item?.foodType || "")
                 .trim()
                 .toLowerCase();
-              if (foodType === "veg") hasVeg = true;
+              if (foodType === "veg") {
+                hasVeg = true;
+                sectionHasVeg = true;
+              }
               if (
                 foodType === "non-veg" ||
                 foodType === "non veg" ||
@@ -2471,7 +2473,10 @@ export default function Home() {
                 const foodType = String(item?.foodType || "")
                   .trim()
                   .toLowerCase();
-                if (foodType === "veg") hasVeg = true;
+                if (foodType === "veg") {
+                  hasVeg = true;
+                  sectionHasVeg = true;
+                }
                 if (
                   foodType === "non-veg" ||
                   foodType === "non veg" ||
@@ -2483,6 +2488,7 @@ export default function Home() {
 
             const categoryName = String(section?.name || "").trim();
             if (!categoryName) return;
+            if (vegMode && !sectionHasVeg) return;
 
             const slug = slugifyCategory(categoryName);
             if (!slug) return;
@@ -3676,9 +3682,6 @@ export default function Home() {
               transition={{ duration: 0.2 }}
               onClick={() => {
                 setShowVegModePopup(false);
-                // Revert veg mode to OFF if popup is closed without applying
-                setVegModeContext(false);
-                setPrevVegMode(false);
               }}
               className="fixed inset-0 bg-black/30 z-[9998] backdrop-blur-sm"
             />
@@ -3705,8 +3708,6 @@ export default function Home() {
                   aria-label="Close veg mode popup"
                   onClick={() => {
                     setShowVegModePopup(false);
-                    setVegModeContext(false);
-                    setPrevVegMode(false);
                   }}
                   className="absolute top-3 right-3 p-1 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                 >
@@ -3782,6 +3783,7 @@ export default function Home() {
 
                 {/* Apply Button */}
                 <button
+                  type="button"
                   onClick={() => {
                     setShowVegModePopup(false);
                     setIsApplyingVegMode(true);
@@ -3858,6 +3860,7 @@ export default function Home() {
                   {/* Buttons */}
                   <div className="space-y-3">
                     <button
+                      type="button"
                       onClick={() => {
                         setShowSwitchOffPopup(false);
                         setIsSwitchingOffVegMode(true);
@@ -3874,6 +3877,7 @@ export default function Home() {
                     </button>
 
                     <button
+                      type="button"
                       onClick={() => {
                         setShowSwitchOffPopup(false);
                         isHandlingSwitchOff.current = false;

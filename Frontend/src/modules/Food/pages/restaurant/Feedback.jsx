@@ -31,7 +31,10 @@ const extractReviewRating = (order) =>
   normalizeRating(
     order?.review?.rating ??
       order?.ratings?.restaurant?.rating ??
+      order?.ratings?.restaurantRating ??
+      order?.ratings?.rating ??
       order?.feedback?.rating ??
+      order?.restaurantRating ??
       order?.rating
   )
 
@@ -40,11 +43,14 @@ const extractReviewText = (order) => {
     order?.review?.comment ??
     order?.review?.text ??
     order?.ratings?.restaurant?.comment ??
+    order?.ratings?.restaurant?.text ??
+    order?.ratings?.restaurantComment ??
     order?.feedback?.comment ??
     order?.feedback?.text ??
+    order?.restaurantComment ??
+    order?.comment ??
     ""
-  const normalized = String(raw || "").trim()
-  return normalized || "No review text"
+  return String(raw || "").trim()
 }
 
 const toComparableId = (value) =>
@@ -280,7 +286,12 @@ export default function Feedback() {
             const outlet = order.restaurantName || (restaurantData?.name) || 'Restaurant'
 
             const rating = extractReviewRating(order)
-            const reviewText = extractReviewText(order)
+            const rawReviewText = extractReviewText(order)
+            const hasText = Boolean(rawReviewText && rawReviewText.trim().length > 0)
+            const hasRating = rating !== null
+
+            // Include if order has either a rating OR written review text
+            if (!hasRating && !hasText) return null
 
             const userOrdersCount = allOrders.filter(o => toComparableId(o.userId) === toComparableId(order.userId)).length
 
@@ -292,13 +303,14 @@ export default function Feedback() {
               userImage: userImage,
               ordersCount: userOrdersCount,
               rating: rating,
+              hasText: hasText,
               date: formattedDate,
               createdAtMs: orderDate.getTime(),
-              reviewText: reviewText,
+              reviewText: hasText ? rawReviewText : "Rating only (No written comment)",
               orderData: order
             }
           })
-          .filter(review => review.rating !== null || (review.reviewText && review.reviewText !== 'No review text'))
+          .filter(Boolean)
 
         const ratings = transformedReviews.map(r => r.rating).filter(r => r !== null)
         const averageRating = ratings.length > 0 ? (ratings.reduce((sum, r) => sum + r, 0) / ratings.length).toFixed(1) : 0
@@ -335,7 +347,8 @@ export default function Feedback() {
       filtered = filtered.filter((review) => {
         const rating = Number(review.rating || 0)
         const selected = filterValues.reviewType
-        if (selected.includes("withText") && String(review.reviewText || "").trim() === "No review text") return false
+        if (selected.includes("withText") && !review.hasText) return false
+        if (selected.includes("ratingOnly") && review.hasText) return false
         if (selected.includes("highRated") && rating < 4) return false
         if (selected.includes("lowRated") && rating >= 4) return false
         return true
@@ -564,27 +577,48 @@ export default function Feedback() {
             </div>
 
             <div className="space-y-4 pb-20">
-              {displayedReviews.map((review) => (
-                <div key={review.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold uppercase">
-                    <span>Order #{review.orderNumber}</span>
-                    <span>{review.date}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <img src={review.userImage} className="w-8 h-8 rounded-full border border-gray-100" />
-                    <p className="font-bold text-gray-900 text-sm">{review.userName}</p>
-                    <div
-                      className="ml-auto flex items-center gap-1 text-white px-1.5 py-0.5 rounded text-[10px] font-bold"
-                      style={{ backgroundColor: "var(--module-theme-color,#2563EB)" }}
-                    >
-                      {review.rating} <Star className="w-2 h-2 fill-current" />
+              {displayedReviews.length === 0 ? (
+                <div className="text-center py-16 bg-gray-50 rounded-3xl border border-dashed border-gray-200">
+                  <p className="text-sm text-gray-500 font-medium">No reviews or ratings found</p>
+                </div>
+              ) : (
+                displayedReviews.map((review) => (
+                  <div key={review.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold uppercase">
+                      <span>Order #{review.orderNumber}</span>
+                      <span>{review.date}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <img src={review.userImage} className="w-8 h-8 rounded-full border border-gray-100" />
+                      <div>
+                        <p className="font-bold text-gray-900 text-sm">{review.userName}</p>
+                        {!review.hasText && (
+                          <span className="inline-block text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 mt-0.5">
+                            Rating Only
+                          </span>
+                        )}
+                      </div>
+                      {review.rating !== null && (
+                        <div
+                          className="ml-auto flex items-center gap-1 text-white px-2 py-1 rounded-lg text-xs font-bold shadow-sm"
+                          style={{ backgroundColor: review.rating >= 4 ? "#16A34A" : review.rating >= 3 ? "#EAB308" : "#DC2626" }}
+                        >
+                          {review.rating} <Star className="w-3 h-3 fill-current" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-3">
+                      {review.hasText ? (
+                        <p className="text-sm text-gray-800 font-medium italic">"{review.reviewText}"</p>
+                      ) : (
+                        <p className="text-xs text-gray-500 font-semibold italic flex items-center gap-1">
+                          <span>⭐ Customer gave a {review.rating}★ rating (no written comment)</span>
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-3">
-                    <p className="text-sm text-gray-800 font-medium italic">"{review.reviewText}"</p>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         )}
@@ -622,9 +656,11 @@ export default function Feedback() {
               <div className="space-y-2">
                 <p className="text-xs font-bold text-gray-500 uppercase">Review Type</p>
                 {[
+                  { id: "all", label: "All ratings & reviews" },
+                  { id: "ratingOnly", label: "Rating only (no written comment)" },
                   { id: "withText", label: "With text review" },
-                  { id: "highRated", label: "High rated (4+)" },
-                  { id: "lowRated", label: "Low rated (<4)" },
+                  { id: "highRated", label: "High rated (4+ ★)" },
+                  { id: "lowRated", label: "Low rated (<4 ★)" },
                 ].map((opt) => {
                   const selected = filterValues.reviewType.includes(opt.id)
                   return (
@@ -633,10 +669,10 @@ export default function Feedback() {
                       onClick={() =>
                         setFilterValues((prev) => ({
                           ...prev,
-                          reviewType: selected ? [] : [opt.id]
+                          reviewType: selected || opt.id === "all" ? [] : [opt.id]
                         }))
                       }
-                      className={`w-full text-left px-3 py-2 rounded-lg border ${selected ? "bg-gray-50" : "border-gray-200"}`}
+                      className={`w-full text-left px-3 py-2 rounded-lg border ${selected ? "bg-gray-50 font-bold" : "border-gray-200"}`}
                       style={selected ? { borderColor: "var(--module-theme-color,#2563EB)" } : undefined}
                     >
                       <span className="text-sm font-medium text-gray-900">{opt.label}</span>

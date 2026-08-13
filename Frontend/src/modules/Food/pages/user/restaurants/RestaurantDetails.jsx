@@ -2353,7 +2353,7 @@ function RestaurantDetailsContent() {
               className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border font-bold px-4 py-1.5 rounded-lg shadow-md flex items-center gap-1 ${
                 shouldShowGrayscale
                   ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
-                  : 'border-[#EB590E] text-[#EB590E] hover:bg-orange-50'
+                  : 'border-red-600 text-red-600 hover:bg-red-50'
               }`}
             >
               <button
@@ -2364,7 +2364,7 @@ function RestaurantDetailsContent() {
                   }
                 }}
                 disabled={shouldShowGrayscale}
-                className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-[#EB590E] hover:text-[#D94F0C]'}
+                className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-700'}
               >
                 <Minus size={14} />
               </button>
@@ -2382,7 +2382,7 @@ function RestaurantDetailsContent() {
                   }
                 }}
                 disabled={shouldShowGrayscale}
-                className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-[#EB590E] hover:text-[#D94F0C]'}
+                className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-700'}
               >
                 <Plus size={14} className="stroke-[3px]" />
               </button>
@@ -2404,7 +2404,7 @@ function RestaurantDetailsContent() {
               className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border font-bold px-6 py-1.5 rounded-lg shadow-md flex items-center gap-1 transition-colors ${
                 shouldShowGrayscale
                   ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
-                  : 'border-[#EB590E] text-[#EB590E] hover:bg-orange-50'
+                  : 'border-red-600 text-red-600 hover:bg-red-50'
               }`}
             >
               ADD <Plus size={14} className="stroke-[3px]" />
@@ -2901,14 +2901,15 @@ function RestaurantDetailsContent() {
 
       {/* Menu Button - Sticky at page bottom right (hidden when filter or menu sheet open) */}
       {!showFilterSheet && !showMenuSheet && !showMenuOptionsSheet && (
-        <div className="sticky dark:bg-[#1a1a1a] bottom-4 flex justify-end px-4 z-50 mt-auto">
+        <div className="sticky bottom-4 flex justify-end px-4 z-50 mt-auto">
           <Button
-            className="bg-[#1a1a1a] dark:bg-[#EB590E] hover:bg-black dark:hover:bg-[#D94F0C] text-white flex items-center gap-2 shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-white/10 dark:border-[#EB590E]/20 px-6 py-6 rounded-full font-bold transform transition-all duration-300 hover:scale-110 active:scale-95 group"
+            className="text-white flex items-center gap-2 shadow-[0_8px_30px_rgba(0,0,0,0.25)] border border-white/20 px-6 py-6 rounded-full font-black transform transition-all duration-300 hover:scale-110 active:scale-95 group"
+            style={{ backgroundColor: "var(--module-theme-color, #FA0272)", color: "#ffffff" }}
             size="lg"
             onClick={() => setShowMenuSheet(true)}
           >
-            <Utensils className="h-5 w-5 text-[#EB590E] dark:text-white group-hover:rotate-12 transition-transform" />
-            <span className="tracking-wide">MENU</span>
+            <Utensils className="h-5 w-5 text-white group-hover:rotate-12 transition-transform" />
+            <span className="tracking-wide text-white font-black">MENU</span>
           </Button>
         </div>
       )}
@@ -2992,7 +2993,7 @@ function RestaurantDetailsContent() {
                   {/* Close Button */}
                   <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-4 bg-white dark:bg-[#1a1a1a]">
                     <Button
-                      className="w-full bg-[#1a1a1a] dark:bg-[#EB590E] hover:bg-[#EB590E] dark:hover:bg-[#D94F0C] text-white border-0 flex items-center justify-center gap-2 py-6 rounded-xl font-bold transition-all shadow-lg"
+                      className="w-full bg-[#1a1a1a] dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700 text-white border-0 flex items-center justify-center gap-2 py-6 rounded-xl font-bold transition-all shadow-lg"
                       onClick={() => setShowMenuSheet(false)}
                     >
                       <X className="h-5 w-5" />
@@ -3877,7 +3878,7 @@ function RestaurantDetailsContent() {
                   {/* Close Button */}
                   <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-4 bg-white dark:bg-[#1a1a1a]">
                     <Button
-                      className="w-full bg-[#1a1a1a] dark:bg-[#EB590E] hover:bg-[#EB590E] dark:hover:bg-[#D94F0C] text-white border-0 flex items-center justify-center gap-2 py-6 rounded-xl font-bold transition-all shadow-lg"
+                      className="w-full bg-[#1a1a1a] dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700 text-white border-0 flex items-center justify-center gap-2 py-6 rounded-xl font-bold transition-all shadow-lg"
                       onClick={() => setShowOffersSheet(false)}
                     >
                       <X className="h-5 w-5" />
