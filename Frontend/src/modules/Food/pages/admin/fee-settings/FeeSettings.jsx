@@ -115,13 +115,6 @@ export default function FeeSettings() {
   const handleSaveFeeSettings = async () => {
     await saveSettings(feeSettings)
   }
-  // Check if any range (other than the one being edited) has a base pay set
-  const hasBasePayConfigured = (excludeIndex = null) => {
-    return feeSettings.deliveryFeeRanges.some((range, idx) => 
-      idx !== excludeIndex && Number(range.deliveryBoyBasePay) > 0
-    )
-  }
-
   // Add or update delivery fee range
   const handleAddRange = async () => {
     // Robust validation: check if values are present and not just empty strings
@@ -153,12 +146,6 @@ export default function FeeSettings() {
     // Mutual exclusivity within range
     if (dbPerKm > 0 && dbBasePay > 0) {
       toast.error('Please set either Per KM Amount or Base Pay, not both')
-      return
-    }
-
-    // Base Pay uniqueness check
-    if (dbBasePay > 0 && hasBasePayConfigured()) {
-      toast.error('Base Pay can only be set for one range. It is already configured in another range.')
       return
     }
 
@@ -251,12 +238,6 @@ export default function FeeSettings() {
     // Mutual exclusivity within range
     if (dbPerKm > 0 && dbBasePay > 0) {
       toast.error('Please set either Per KM Amount or Base Pay, not both')
-      return
-    }
-
-    // Base Pay uniqueness check
-    if (dbBasePay > 0 && hasBasePayConfigured(editingRangeIndex)) {
-      toast.error('Base Pay can only be set for one range. It is already configured in another range.')
       return
     }
 
@@ -457,7 +438,7 @@ export default function FeeSettings() {
                                       <input
                                         type="number"
                                         value={newRange.deliveryBoyBasePay}
-                                        disabled={Number(newRange.deliveryBoyPerKm) > 0 || (hasBasePayConfigured(originalIndex))}
+                                        disabled={Number(newRange.deliveryBoyPerKm) > 0}
                                         onChange={(e) => setNewRange({ ...newRange, deliveryBoyBasePay: e.target.value, deliveryBoyPerKm: '0' })}
                                         className="w-20 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                                         placeholder="0"
@@ -581,7 +562,7 @@ export default function FeeSettings() {
                       <input
                         type="number"
                         value={newRange.deliveryBoyBasePay}
-                        disabled={Number(newRange.deliveryBoyPerKm) > 0 || (hasBasePayConfigured(editingRangeIndex))}
+                        disabled={Number(newRange.deliveryBoyPerKm) > 0}
                         onChange={(e) => setNewRange({ ...newRange, deliveryBoyBasePay: e.target.value, deliveryBoyPerKm: '0' })}
                         min="0"
                         step="1"
