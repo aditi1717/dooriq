@@ -94,6 +94,7 @@ import api, { publicGetOnce, restaurantAPI, adminAPI } from "@food/api";
 import { API_BASE_URL } from "@food/api/config";
 import OptimizedImage from "@food/components/OptimizedImage";
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability";
+import { fetchDrivingDistancesMatrix } from "@food/utils/roadDistance";
 import HomeHeader from "@food/components/user/home/HomeHeader";
 import QuickSection from "@food/components/user/home/QuickSection";
 import PromoRow from "@food/components/user/home/PromoRow";
@@ -136,6 +137,43 @@ const getRestaurantDisplayName = (restaurant) => {
       typeof candidate === "string" && candidate.trim().length > 0,
   );
   return resolvedName ? resolvedName.trim() : "Restaurant";
+};
+
+const formatCardDistance = (distanceInKm) => {
+  if (!Number.isFinite(Number(distanceInKm))) return "1.2 km";
+  const distance = Number(distanceInKm);
+  return distance >= 1 ? `${distance.toFixed(1)} km` : `${Math.round(distance * 1000)} m`;
+};
+
+const getRoadDistancePoint = (entity) => {
+  if (!entity || typeof entity !== "object") return null;
+
+  const queue = [entity];
+  const visited = new Set();
+  while (queue.length > 0) {
+    const source = queue.shift();
+    if (!source || typeof source !== "object" || visited.has(source)) continue;
+    visited.add(source);
+
+    if (Array.isArray(source.coordinates) && source.coordinates.length >= 2) {
+      const [lng, lat] = source.coordinates;
+      if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+        return { lat: Number(lat), lng: Number(lng) };
+      }
+    }
+
+    const lat = Number(source.latitude ?? source.lat);
+    const lng = Number(source.longitude ?? source.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+
+    if (source.location && typeof source.location === "object") {
+      queue.push(source.location);
+    }
+  }
+
+  return null;
 };
 
 // Restaurant Image Carousel Component
@@ -2035,12 +2073,7 @@ export default function Home() {
                   restaurantLng,
                 );
                 // Format distance: show 1 decimal place if >= 1km, otherwise show in meters
-                if (distanceInKm >= 1) {
-                  distance = `${distanceInKm.toFixed(1)} km`;
-                } else {
-                  const distanceInMeters = Math.round(distanceInKm * 1000);
-                  distance = `${distanceInMeters} m`;
-                }
+                distance = formatCardDistance(distanceInKm);
               }
 
               // Get first cuisine or default
@@ -2294,6 +2327,59 @@ export default function Home() {
     fetchRestaurants(appliedFilters);
   }, [appliedFilters, fetchRestaurants]);
 
+  useEffect(() => {
+    if (!effectiveLocation?.latitude || !effectiveLocation?.longitude) return;
+    if (!Array.isArray(restaurantsData) || restaurantsData.length === 0) return;
+
+    let cancelled = false;
+
+    const applyRoadDistances = async () => {
+      const origin = {
+        lat: Number(effectiveLocation.latitude),
+        lng: Number(effectiveLocation.longitude),
+      };
+      const destinations = restaurantsData.map((restaurant) =>
+        getRoadDistancePoint(restaurant.location),
+      );
+      const roadDistances = await fetchDrivingDistancesMatrix(origin, destinations);
+      if (cancelled || !Array.isArray(roadDistances) || roadDistances.length === 0) return;
+
+      startTransition(() => {
+        setRestaurantsData((prevData) => {
+          if (!Array.isArray(prevData) || prevData.length === 0) return prevData;
+
+          let hasChanges = false;
+          const updatedRestaurants = prevData.map((restaurant, index) => {
+            const roadKm = Number(roadDistances[index]);
+            if (!Number.isFinite(roadKm)) return restaurant;
+
+            const nextDistance = formatCardDistance(roadKm);
+            if (
+              restaurant.distance === nextDistance &&
+              Number(restaurant.distanceInKm) === roadKm
+            ) {
+              return restaurant;
+            }
+
+            hasChanges = true;
+            return {
+              ...restaurant,
+              distance: nextDistance,
+              distanceInKm: roadKm,
+            };
+          });
+
+          return hasChanges ? updatedRestaurants : prevData;
+        });
+      });
+    };
+
+    applyRoadDistances();
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveLocation?.latitude, effectiveLocation?.longitude, restaurantsData]);
+
   // Recalculate distances when user location updates
   useEffect(() => {
     if (!effectiveLocation?.latitude || !effectiveLocation?.longitude) return;
@@ -2352,13 +2438,7 @@ export default function Home() {
         );
         let calculatedDistance = null;
 
-        // Format distance: show 1 decimal place if >= 1km, otherwise show in meters
-        if (distanceInKm >= 1) {
-          calculatedDistance = `${distanceInKm.toFixed(1)} km`;
-        } else {
-          const distanceInMeters = Math.round(distanceInKm * 1000);
-          calculatedDistance = `${distanceInMeters} m`;
-        }
+        calculatedDistance = formatCardDistance(distanceInKm);
 
         if (
           restaurant.distance !== calculatedDistance ||

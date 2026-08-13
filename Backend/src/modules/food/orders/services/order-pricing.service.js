@@ -6,6 +6,90 @@ import { FoodOffer } from '../../admin/models/offer.model.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { haversineKm, checkRestaurantOpenStatus } from './order.helpers.js';
 import { calculateCouponDiscount, getCouponIneligibilityReason } from './couponValidation.service.js';
+import { fetchDrivingRoute } from '../utils/googleMaps.js';
+
+const round2 = (value) => Math.round((Number(value) || 0) * 100) / 100;
+
+function toPoint(entity) {
+  if (!entity || typeof entity !== 'object') return null;
+
+  const queue = [entity];
+  const visited = new Set();
+  while (queue.length > 0) {
+    const source = queue.shift();
+    if (!source || typeof source !== 'object' || visited.has(source)) continue;
+    visited.add(source);
+
+    if (Array.isArray(source.coordinates) && source.coordinates.length >= 2) {
+      const [lng, lat] = source.coordinates;
+      if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+        return { lat: Number(lat), lng: Number(lng) };
+      }
+    }
+
+    const lat = Number(source.latitude ?? source.lat);
+    const lng = Number(source.longitude ?? source.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+
+    if (source.location && typeof source.location === 'object') {
+      queue.push(source.location);
+    }
+  }
+
+  return null;
+}
+
+export async function getDeliveryDistanceDetails(restaurant, deliveryAddress) {
+  const restaurantPoint = toPoint(restaurant);
+  const customerPoint = toPoint(deliveryAddress);
+
+  let straightLineDistanceKm = null;
+  if (restaurantPoint && customerPoint) {
+    const straightLine = haversineKm(
+      restaurantPoint.lat,
+      restaurantPoint.lng,
+      customerPoint.lat,
+      customerPoint.lng,
+    );
+    if (Number.isFinite(straightLine)) {
+      straightLineDistanceKm = Number(straightLine.toFixed(2));
+    }
+  }
+
+  if (!restaurantPoint || !customerPoint) {
+    return {
+      distanceKm: straightLineDistanceKm,
+      roadDistanceKm: straightLineDistanceKm,
+      straightLineDistanceKm,
+      roadDurationMins: null,
+    };
+  }
+
+  try {
+    const route = await fetchDrivingRoute(restaurantPoint, customerPoint);
+    if (Number.isFinite(Number(route?.distanceKm))) {
+      return {
+        distanceKm: Number(Number(route.distanceKm).toFixed(2)),
+        roadDistanceKm: Number(Number(route.distanceKm).toFixed(2)),
+        straightLineDistanceKm,
+        roadDurationMins: Number.isFinite(Number(route?.durationSeconds))
+          ? Math.ceil(Number(route.durationSeconds) / 60)
+          : null,
+      };
+    }
+  } catch {
+    // Fall through to straight-line distance.
+  }
+
+  return {
+    distanceKm: straightLineDistanceKm,
+    roadDistanceKm: straightLineDistanceKm,
+    straightLineDistanceKm,
+    roadDurationMins: null,
+  };
+}
 
 export async function calculateOrderPricing(userId, dto) {
   const restaurant = await FoodRestaurant.findById(dto.restaurantId)
@@ -42,6 +126,9 @@ export async function calculateOrderPricing(userId, dto) {
   const freeThreshold = Number(feeSettings.freeDeliveryThreshold || 0);
   let deliveryFee = 0;
   let distanceKm = null;
+  let roadDistanceKm = null;
+  let straightLineDistanceKm = null;
+  let roadDurationMins = null;
   if (
     Number.isFinite(freeThreshold) &&
     freeThreshold > 0 &&
@@ -49,15 +136,14 @@ export async function calculateOrderPricing(userId, dto) {
   ) {
     deliveryFee = 0;
   } else {
-    // Calculate distance if coordinates are available
-    if (
-      restaurant?.location?.coordinates?.length === 2 &&
-      dto.deliveryAddress?.location?.coordinates?.length === 2
-    ) {
-      const [rLng, rLat] = restaurant.location.coordinates;
-      const [dLng, dLat] = dto.deliveryAddress.location.coordinates;
-      distanceKm = haversineKm(rLat, rLng, dLat, dLng);
-    }
+    const distanceDetails = await getDeliveryDistanceDetails(
+      restaurant,
+      dto.deliveryAddress,
+    );
+    distanceKm = distanceDetails.distanceKm;
+    roadDistanceKm = distanceDetails.roadDistanceKm;
+    straightLineDistanceKm = distanceDetails.straightLineDistanceKm;
+    roadDurationMins = distanceDetails.roadDurationMins;
 
     const ranges = Array.isArray(feeSettings.deliveryFeeRanges)
       ? [...feeSettings.deliveryFeeRanges]
@@ -159,9 +245,17 @@ export async function calculateOrderPricing(userId, dto) {
       appliedCoupon,
       couponError,
       distanceKm: Number.isFinite(distanceKm) ? Number(distanceKm.toFixed(2)) : null,
+      roadDistanceKm: Number.isFinite(roadDistanceKm) ? Number(roadDistanceKm.toFixed(2)) : null,
+      straightLineDistanceKm: Number.isFinite(straightLineDistanceKm)
+        ? Number(straightLineDistanceKm.toFixed(2))
+        : null,
+      roadDurationMins: Number.isFinite(Number(roadDurationMins))
+        ? Math.ceil(Number(roadDurationMins))
+        : null,
       deliveryFeeBreakdown: Number.isFinite(distanceKm) ? {
         source: "distance",
         distanceKm: Number(distanceKm.toFixed(2)),
+        roadDistanceKm: Number.isFinite(roadDistanceKm) ? Number(roadDistanceKm.toFixed(2)) : null,
         deliveryFee,
       } : { source: "default", deliveryFee },
     },

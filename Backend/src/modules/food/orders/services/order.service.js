@@ -31,7 +31,7 @@ import { fetchPolyline } from '../utils/googleMaps.js';
 import { getFirebaseDB } from '../../../../config/firebase.js';
 import * as foodTransactionService from './foodTransaction.service.js';
 import * as userWalletService from '../../user/services/userWallet.service.js';
-import { calculateOrderPricing } from './order-pricing.service.js';
+import { calculateOrderPricing, getDeliveryDistanceDetails } from './order-pricing.service.js';
 import * as dispatchService from './order-dispatch.service.js';
 import * as deliveryService from './order-delivery.service.js';
 import * as paymentService from './order-payment.service.js';
@@ -562,15 +562,28 @@ export async function createOrder(userId, dto) {
       qr: {},
     };
 
-    let distanceKm = null;
-    if (
-      restaurant.location?.coordinates?.length === 2 &&
-      dto.address?.location?.coordinates?.length === 2
-    ) {
-      const [rLng, rLat] = restaurant.location.coordinates;
-      const [dLng, dLat] = dto.address.location.coordinates;
-      const d = haversineKm(rLat, rLng, dLat, dLng);
-      distanceKm = Number.isFinite(d) ? d : null;
+    const distanceDetails = await getDeliveryDistanceDetails(
+      restaurant,
+      deliveryAddress,
+    );
+    const distanceKm = Number.isFinite(Number(distanceDetails.distanceKm))
+      ? Number(distanceDetails.distanceKm)
+      : null;
+    const roadDurationMins = Number.isFinite(Number(distanceDetails.roadDurationMins))
+      ? Math.ceil(Number(distanceDetails.roadDurationMins))
+      : null;
+
+    if (distanceKm != null) {
+      normalizedPricing.distanceKm = distanceKm;
+      normalizedPricing.roadDistanceKm = Number.isFinite(Number(distanceDetails.roadDistanceKm))
+        ? Number(distanceDetails.roadDistanceKm)
+        : distanceKm;
+    }
+    if (Number.isFinite(Number(distanceDetails.straightLineDistanceKm))) {
+      normalizedPricing.straightLineDistanceKm = Number(distanceDetails.straightLineDistanceKm);
+    }
+    if (roadDurationMins != null) {
+      normalizedPricing.roadDurationMins = roadDurationMins;
     }
 
     const riderEarning = await getRiderEarning(distanceKm) || 0;
@@ -648,6 +661,8 @@ export async function createOrder(userId, dto) {
       scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
       riderEarning: Number(riderEarning) || 0,
       platformProfit: Number(platformProfit) || 0,
+      tripDistanceKm: distanceKm,
+      tripDurationMins: roadDurationMins,
       coinsEarned: Number(coinsEarned) || 0
     });
 

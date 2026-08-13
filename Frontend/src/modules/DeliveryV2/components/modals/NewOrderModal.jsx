@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, MapPin, FastForward, Clock, Phone, ChefHat, ChevronDown } from 'lucide-react';
 import { ActionSlider } from '@/modules/DeliveryV2/components/ui/ActionSlider';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
-import { getHaversineDistance, calculateETA } from '@/modules/DeliveryV2/utils/geo';
+import { getHaversineDistance } from '@/modules/DeliveryV2/utils/geo';
+import { fetchDrivingDistanceKm, formatDistanceLabel } from '@food/utils/roadDistance';
 
 /**
  * NewOrderModal - Ported to Original 1:1 Theme with Slider Accept.
@@ -47,12 +48,6 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
     return null;
   };
 
-  const formatDistanceLabel = (valueKm) => {
-    if (!Number.isFinite(valueKm) || valueKm < 0) return '--';
-    if (valueKm < 1) return `${Math.round(valueKm * 1000)} M`;
-    return `${valueKm.toFixed(1)} KM`;
-  };
-
   const getStoredDeliveryPartnerId = () => {
     if (typeof localStorage === 'undefined') return '';
     const directId =
@@ -92,14 +87,23 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
     return () => clearInterval(timer);
   }, [timeLeft, onReject]);
 
-  const { pickupDistanceKm, deliveryDistanceKm, etaMins } = useMemo(() => {
+  const [distanceMeta, setDistanceMeta] = useState({
+    pickupDistanceKm: null,
+    deliveryDistanceKm: null,
+    etaMins: null,
+  });
+
+  useEffect(() => {
     if (!order) {
-      return {
+      setDistanceMeta({
         pickupDistanceKm: null,
         deliveryDistanceKm: null,
         etaMins: null,
-      };
+      });
+      return;
     }
+
+    let cancelled = false;
 
     const restaurantPoint =
       getLocationPoint(order.restaurantLocation) ||
@@ -112,56 +116,48 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
       getLocationPoint(order.deliveryAddress) ||
       getLocationPoint(order, ['customer_lat', 'customerLat'], ['customer_lng', 'customerLng']);
 
-    let deliveryDistKm = null;
-    if (restaurantPoint && customerPoint) {
-      const distM = getHaversineDistance(
-        restaurantPoint.lat,
-        restaurantPoint.lng,
-        customerPoint.lat,
-        customerPoint.lng,
-      );
-      deliveryDistKm = Number.isFinite(distM) ? distM / 1000 : null;
-    }
-
-    let pickupDistKm = null;
+    const riderPoint = getLocationPoint(riderLocation);
     const backendPickupDistance = Number(order.pickupDistanceKm);
-    if (Number.isFinite(backendPickupDistance) && backendPickupDistance >= 0 && backendPickupDistance < 100) {
-      pickupDistKm = backendPickupDistance;
-    } else {
-      const riderPoint = getLocationPoint(riderLocation);
-      if (riderPoint && restaurantPoint) {
-        const distM = getHaversineDistance(
-          riderPoint.lat,
-          riderPoint.lng,
-          restaurantPoint.lat,
-          restaurantPoint.lng,
-        );
-        pickupDistKm = Number.isFinite(distM) ? distM / 1000 : null;
-      }
-    }
+    const pickupDistanceKm =
+      Number.isFinite(backendPickupDistance) && backendPickupDistance >= 0 && backendPickupDistance < 100
+        ? backendPickupDistance
+        : riderPoint && restaurantPoint
+          ? (() => {
+              const distM = getHaversineDistance(
+                riderPoint.lat,
+                riderPoint.lng,
+                restaurantPoint.lat,
+                restaurantPoint.lng,
+              );
+              return Number.isFinite(distM) ? Number((distM / 1000).toFixed(2)) : null;
+            })()
+          : null;
 
-    // 6. Calculate prep time
     const basePrepTime = Number(order.estimatedDeliveryTime || order.prepTime || 15) || 15;
-    const getPreparingTimestamp = (order) => {
-      const history = order.statusHistory || [];
-      const preparingEntry = history.find(h => h.to === 'preparing' || h.to === 'confirmed');
+    const getPreparingTimestamp = (currentOrder) => {
+      const history = currentOrder.statusHistory || [];
+      const preparingEntry = history.find((h) => h.to === 'preparing' || h.to === 'confirmed');
       if (preparingEntry && preparingEntry.at) {
         const d = new Date(preparingEntry.at);
-        if (!isNaN(d.getTime())) return d;
+        if (!Number.isNaN(d.getTime())) return d;
       }
-      if (order.createdAt) {
-        const d = new Date(order.createdAt);
-        if (!isNaN(d.getTime())) return d;
+      if (currentOrder.createdAt) {
+        const d = new Date(currentOrder.createdAt);
+        if (!Number.isNaN(d.getTime())) return d;
       }
       return null;
     };
+
     const prepStart = getPreparingTimestamp(order);
-    const elapsedMs = (prepStart && !isNaN(prepStart.getTime())) ? Math.max(0, Date.now() - prepStart.getTime()) : 0;
+    const elapsedMs =
+      prepStart && !Number.isNaN(prepStart.getTime())
+        ? Math.max(0, Date.now() - prepStart.getTime())
+        : 0;
     const remainingSeconds = Math.max(0, basePrepTime * 60 - Math.floor(elapsedMs / 1000));
-    
-    let etaDisplay = "";
+
+    let etaDisplay = '';
     if (remainingSeconds <= 0) {
-      etaDisplay = "0 MINS";
+      etaDisplay = '0 MINS';
     } else if (remainingSeconds <= 60) {
       etaDisplay = `${remainingSeconds} SECS`;
     } else {
@@ -170,12 +166,69 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
       etaDisplay = `${mins} MIN ${secs} SEC`;
     }
 
-    return {
-      pickupDistanceKm: pickupDistKm,
-      deliveryDistanceKm: deliveryDistKm,
-      etaMins: etaDisplay,
+    const applyDistanceMeta = (deliveryDistanceKm) => {
+      if (cancelled) return;
+      setDistanceMeta({
+        pickupDistanceKm,
+        deliveryDistanceKm:
+          Number.isFinite(Number(deliveryDistanceKm))
+            ? Number(Number(deliveryDistanceKm).toFixed(2))
+            : null,
+        etaMins: etaDisplay,
+      });
     };
-  }, [order, riderLocation, timeLeft]);
+
+    const resolveDeliveryDistance = async () => {
+      const backendTripDistance =
+        order.tripDistanceKm ??
+        order.pricing?.roadDistanceKm ??
+        order.distanceKm ??
+        order.pricing?.distanceKm;
+
+      const hasExplicitRoad =
+        order.tripDistanceKm != null ||
+        order.pricing?.roadDistanceKm != null;
+
+      if (hasExplicitRoad && Number.isFinite(Number(backendTripDistance))) {
+        applyDistanceMeta(backendTripDistance);
+        return;
+      }
+
+      const roadDistanceKm = await fetchDrivingDistanceKm(
+        restaurantPoint || order.restaurantLocation || order.restaurantId,
+        customerPoint || order.deliveryAddress,
+      );
+      if (!cancelled && Number.isFinite(Number(roadDistanceKm))) {
+        applyDistanceMeta(roadDistanceKm);
+        return;
+      }
+
+      if (Number.isFinite(Number(backendTripDistance))) {
+        applyDistanceMeta(backendTripDistance);
+        return;
+      }
+
+      if (restaurantPoint && customerPoint) {
+        const distM = getHaversineDistance(
+          restaurantPoint.lat,
+          restaurantPoint.lng,
+          customerPoint.lat,
+          customerPoint.lng,
+        );
+        applyDistanceMeta(Number.isFinite(distM) ? distM / 1000 : null);
+        return;
+      }
+
+      applyDistanceMeta(null);
+    };
+
+    resolveDeliveryDistance();
+    return () => {
+      cancelled = true;
+    };
+  }, [order, riderLocation]);
+
+  const { pickupDistanceKm, deliveryDistanceKm, etaMins } = distanceMeta;
 
   if (!order) return null;
 

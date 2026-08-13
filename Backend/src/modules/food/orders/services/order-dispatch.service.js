@@ -10,6 +10,7 @@ import { config } from '../../../../config/env.js';
 import { getIO, rooms } from '../../../../config/socket.js';
 import { getFirebaseDB } from '../../../../config/firebase.js';
 import { addOrderJob } from '../../../../queues/producers/order.producer.js';
+import { fetchDrivingRoute } from '../utils/googleMaps.js';
 import {
   buildDeliverySocketPayload,
   buildOrderIdentityFilter,
@@ -19,6 +20,95 @@ import {
   isCodOrder,
   extractOrderPayableAmount,
 } from './order.helpers.js';
+
+function toPoint(entity) {
+  if (!entity || typeof entity !== 'object') return null;
+
+  const queue = [entity];
+  const visited = new Set();
+  while (queue.length > 0) {
+    const source = queue.shift();
+    if (!source || typeof source !== 'object' || visited.has(source)) continue;
+    visited.add(source);
+
+    if (Array.isArray(source.coordinates) && source.coordinates.length >= 2) {
+      const [lng, lat] = source.coordinates;
+      if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+        return { lat: Number(lat), lng: Number(lng) };
+      }
+    }
+
+    const lat = Number(source.latitude ?? source.lat);
+    const lng = Number(source.longitude ?? source.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+
+    if (source.location && typeof source.location === 'object') {
+      queue.push(source.location);
+    }
+  }
+
+  return null;
+}
+
+async function enrichPayloadWithTripRoadDistance(order, payload) {
+  const existingRoadKm = order?.tripDistanceKm ?? order?.pricing?.roadDistanceKm;
+  if (Number.isFinite(Number(existingRoadKm))) {
+    const km = Number(Number(existingRoadKm).toFixed(2));
+    const minsRaw = order?.tripDurationMins ?? order?.pricing?.roadDurationMins;
+    const tripDurationMins = Number.isFinite(Number(minsRaw))
+      ? Math.ceil(Number(minsRaw))
+      : payload.tripDurationMins;
+    return {
+      ...payload,
+      tripDistanceKm: km,
+      tripDurationMins: tripDurationMins ?? null,
+      distanceKm: km,
+    };
+  }
+
+  const restaurantPoint = toPoint(order?.restaurantId) || toPoint(order?.restaurantId?.location);
+  const customerPoint = toPoint(order?.deliveryAddress);
+  if (!restaurantPoint || !customerPoint) {
+    return payload;
+  }
+
+  try {
+    const route = await fetchDrivingRoute(restaurantPoint, customerPoint);
+    if (Number.isFinite(Number(route?.distanceKm))) {
+      const tripDurationMins = Number.isFinite(Number(route?.durationSeconds))
+        ? Math.ceil(Number(route.durationSeconds) / 60)
+        : null;
+
+      if (order?._id) {
+        FoodOrder.updateOne(
+          { _id: order._id },
+          {
+            $set: {
+              tripDistanceKm: Number(route.distanceKm),
+              tripDurationMins,
+              'pricing.distanceKm': Number(route.distanceKm),
+              'pricing.roadDistanceKm': Number(route.distanceKm),
+              'pricing.roadDurationMins': tripDurationMins,
+            },
+          },
+        ).catch(() => {});
+      }
+
+      return {
+        ...payload,
+        tripDistanceKm: Number(route.distanceKm),
+        tripDurationMins,
+        distanceKm: Number(route.distanceKm),
+      };
+    }
+  } catch (err) {
+    logger.warn(`Trip road distance enrichment failed: ${err?.message || err}`);
+  }
+
+  return payload;
+}
 
 async function listNearbyOnlineDeliveryPartners(
   restaurantId,
@@ -250,7 +340,8 @@ export async function tryAutoAssign(orderId, options = {}) {
         (partner) => !permanentlyExcludedIds.has(partner.partnerId.toString())
       );
       if (reofferEligible.length > 0) {
-        const payload = buildDeliverySocketPayload(order, order.restaurantId);
+        const basePayload = buildDeliverySocketPayload(order, order.restaurantId);
+        const payload = await enrichPayloadWithTripRoadDistance(order, basePayload);
         const db = getFirebaseDB();
         if (db) {
           for (const p of reofferEligible) {
@@ -281,10 +372,11 @@ export async function tryAutoAssign(orderId, options = {}) {
     }
 
     const io = getIO();
-    const payload = buildDeliverySocketPayload(order, order.restaurantId);
+    const basePayload = buildDeliverySocketPayload(order, order.restaurantId);
+    const payload = await enrichPayloadWithTripRoadDistance(order, basePayload);
 
     // BROADCAST: Notify all eligible riders via Firebase and Sockets
-    logger.info(`Broadcasting order ${order._id} to ${eligible.length} riders.`);
+    logger.info(`Broadcasting order ${order._id} to ${eligible.length} riders. tripDistanceKm=${payload.tripDistanceKm}`);
     const db = getFirebaseDB();
     if (db) {
       for (const p of eligible) {

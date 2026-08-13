@@ -23,6 +23,7 @@ import { useZone } from "@food/hooks/useZone"
 import { useDelayedLoading } from "@food/hooks/useDelayedLoading"
 import { getMenuFromResponse } from "@food/utils/menuItems"
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
+import { fetchDrivingDistancesMatrix } from "@food/utils/roadDistance"
 
 // Filter options
 const filterOptions = [
@@ -36,6 +37,43 @@ const filterOptions = [
 // Mock data removed - using backend data only
 
 const CATEGORY_PAGE_FILTERS_STORAGE_KEY = "food-category-page-filters-v1"
+
+const formatCardDistance = (distanceInKm) => {
+  if (!Number.isFinite(Number(distanceInKm))) return null
+  const distance = Number(distanceInKm)
+  return distance >= 1 ? `${distance.toFixed(1)} km` : `${Math.round(distance * 1000)} m`
+}
+
+const getRoadDistancePoint = (entity) => {
+  if (!entity || typeof entity !== "object") return null
+
+  const queue = [entity]
+  const visited = new Set()
+  while (queue.length > 0) {
+    const source = queue.shift()
+    if (!source || typeof source !== "object" || visited.has(source)) continue
+    visited.add(source)
+
+    if (Array.isArray(source.coordinates) && source.coordinates.length >= 2) {
+      const [lng, lat] = source.coordinates
+      if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+        return { lat: Number(lat), lng: Number(lng) }
+      }
+    }
+
+    const lat = Number(source.latitude ?? source.lat)
+    const lng = Number(source.longitude ?? source.lng)
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng }
+    }
+
+    if (source.location && typeof source.location === "object") {
+      queue.push(source.location)
+    }
+  }
+
+  return null
+}
 
 
 
@@ -917,6 +955,7 @@ export default function CategoryPage() {
                 mongoId: restaurant._id || restaurant.id,
                 slug: restaurant.slug || slugify(restaurant.restaurantName || restaurant.name || ""),
                 name: restaurant.restaurantName || restaurant.name || "Unknown Restaurant",
+                location: restaurant.location || null,
                 image: image,
                 images: allImages,
                 cuisine: Array.isArray(restaurant.cuisines) && restaurant.cuisines.length > 0 ? restaurant.cuisines[0] : "Multi-cuisine",
@@ -1061,6 +1100,51 @@ export default function CategoryPage() {
 
     fetchRestaurants()
   }, [zoneId, isOutOfService])
+
+  useEffect(() => {
+    if (!location?.latitude || !location?.longitude) return
+    if (!Array.isArray(restaurantsData) || restaurantsData.length === 0) return
+
+    let cancelled = false
+
+    const applyRoadDistances = async () => {
+      const origin = { lat: Number(location.latitude), lng: Number(location.longitude) }
+      const destinations = restaurantsData.map((restaurant) => getRoadDistancePoint(restaurant.location))
+      const roadDistances = await fetchDrivingDistancesMatrix(origin, destinations)
+      if (cancelled || !Array.isArray(roadDistances) || roadDistances.length === 0) return
+
+      startTransition(() => {
+        setRestaurantsData((prev) => {
+          if (!Array.isArray(prev) || prev.length === 0) return prev
+
+          let hasChanges = false
+          const updated = prev.map((restaurant, index) => {
+            const roadKm = Number(roadDistances[index])
+            if (!Number.isFinite(roadKm)) return restaurant
+
+            const nextDistance = formatCardDistance(roadKm)
+            if (restaurant.distance === nextDistance && Number(restaurant.distanceInKm) === roadKm) {
+              return restaurant
+            }
+
+            hasChanges = true
+            return {
+              ...restaurant,
+              distance: nextDistance,
+              distanceInKm: roadKm,
+            }
+          })
+
+          return hasChanges ? updated : prev
+        })
+      })
+    }
+
+    applyRoadDistances()
+    return () => {
+      cancelled = true
+    }
+  }, [location?.latitude, location?.longitude, restaurantsData])
 
   // Update selected category when URL changes
   useEffect(() => {

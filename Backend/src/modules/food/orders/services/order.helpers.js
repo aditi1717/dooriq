@@ -227,6 +227,20 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
   console.log(`[DEBUG] buildDeliverySocketPayload - riderEarning in doc: ${order?.riderEarning}`);
   console.log(`[DEBUG] buildDeliverySocketPayload - deliveryFee in doc: ${order?.pricing?.deliveryFee}`);
 
+  const tripDistanceKmRaw =
+    order?.tripDistanceKm ??
+    order?.pricing?.roadDistanceKm ??
+    order?.pricing?.distanceKm;
+  const tripDurationMinsRaw =
+    order?.tripDurationMins ??
+    order?.pricing?.roadDurationMins;
+  const tripDistanceKm = Number.isFinite(Number(tripDistanceKmRaw))
+    ? Number(Number(tripDistanceKmRaw).toFixed(2))
+    : null;
+  const tripDurationMins = Number.isFinite(Number(tripDurationMinsRaw))
+    ? Math.ceil(Number(tripDurationMinsRaw))
+    : (tripDistanceKm != null ? Math.max(1, Math.ceil((tripDistanceKm * 60) / 25)) : null);
+
   return {
     orderMongoId:
       orderDoc?._id?.toString?.() || order?._id?.toString?.() || order?._id,
@@ -272,6 +286,9 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
     userName: order?.customerName || order?.deliveryAddress?.fullName || order?.deliveryAddress?.name || order?.userId?.name || "",
     userPhone: order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "",
     note: order?.note || "",
+    tripDistanceKm,
+    tripDurationMins,
+    distanceKm: tripDistanceKm,
     riderEarning: order?.riderEarning ?? 0,
     earnings: order?.riderEarning ?? 0,
     deliveryFee: order?.pricing?.deliveryFee || 0,

@@ -46,7 +46,12 @@ const pricingSchema = new mongoose.Schema(
         discount: { type: Number, default: 0, min: 0 },
         couponCode: { type: String, default: null, trim: true, uppercase: true },
         total: { type: Number, required: true, min: 0 },
-        currency: { type: String, default: 'INR' }
+        currency: { type: String, default: 'INR' },
+        distanceKm: { type: Number, default: null, min: 0 },
+        roadDistanceKm: { type: Number, default: null, min: 0 },
+        straightLineDistanceKm: { type: Number, default: null, min: 0 },
+        roadDurationMins: { type: Number, default: null, min: 0 },
+        deliveryFeeBreakdown: { type: mongoose.Schema.Types.Mixed, default: null }
     },
     { _id: false }
 );
@@ -284,6 +289,8 @@ const orderSchema = new mongoose.Schema(
         scheduledAt: { type: Date, default: null },
         riderEarning: { type: Number, default: 0, min: 0 },
         platformProfit: { type: Number, default: 0, min: 0 },
+        tripDistanceKm: { type: Number, default: null, min: 0 },
+        tripDurationMins: { type: Number, default: null, min: 0 },
         estimatedDeliveryTime: { type: Number, default: 30 },
         /** Plain 4-digit OTP for handover; cleared after successful verify (never expose to partner in API responses). */
         deliveryOtp: { type: String, default: '', select: false },
