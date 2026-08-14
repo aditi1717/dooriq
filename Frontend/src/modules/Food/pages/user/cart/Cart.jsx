@@ -78,6 +78,29 @@ const formatFullAddress = (address) => {
 const RUPEE_SYMBOL = "\u20B9"
 const CART_RECIPIENT_DETAILS_STORAGE_KEY = "food-cart-recipient-details-v1"
 const CART_ORDER_NOTE_STORAGE_KEY = "food-cart-order-note-v1"
+const CART_COUPON_STORAGE_KEY = "food-cart-applied-coupon-v1"
+
+const loadStoredCartCoupon = () => {
+  try {
+    if (typeof window === "undefined") return null
+    const raw = window.localStorage.getItem(CART_COUPON_STORAGE_KEY)
+    if (!raw) return null
+    const stored = JSON.parse(raw)
+    const code = String(stored?.coupon?.code || stored?.couponCode || "").trim().toUpperCase()
+    if (!code) return null
+    return {
+      coupon: {
+        ...(stored?.coupon || {}),
+        code,
+      },
+      couponCode: code,
+      restaurantId: stored?.restaurantId ? String(stored.restaurantId) : "",
+      cartSignature: stored?.cartSignature ? String(stored.cartSignature) : "",
+    }
+  } catch {
+    return null
+  }
+}
 const RECIPIENT_NAME_REGEX = /^[A-Za-z ]+$/
 const INDIAN_MOBILE_REGEX = /^[6-9]\d{9}$/
 
@@ -134,9 +157,9 @@ export default function Cart() {
   const { location: currentLocation, loading: currentLocationLoading } = useUserLocation() // Get live location address
 
   const [showCoupons, setShowCoupons] = useState(false)
-  const [appliedCoupon, setAppliedCoupon] = useState(null)
-  const [couponCode, setCouponCode] = useState("")
-  const [manualCouponCode, setManualCouponCode] = useState("")
+  const [appliedCoupon, setAppliedCoupon] = useState(() => loadStoredCartCoupon()?.coupon || null)
+  const [couponCode, setCouponCode] = useState(() => loadStoredCartCoupon()?.couponCode || "")
+  const [manualCouponCode, setManualCouponCode] = useState(() => loadStoredCartCoupon()?.couponCode || "")
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("cash")
   const [isCodEnabled, setIsCodEnabled] = useState(true)
   const [showPaymentSheet, setShowPaymentSheet] = useState(false)
@@ -653,6 +676,68 @@ export default function Cart() {
     ? (restaurantData?._id || restaurantData?.restaurantId || cart[0]?.restaurantId || null)
     : null
 
+  const cartCouponSignature = useMemo(() => {
+    if (!cart.length) return ""
+    return cart
+      .map((item) => [
+        item.itemId || item.id || "",
+        item.variantId || "",
+        Number(item.quantity || 1),
+      ].join(":"))
+      .sort()
+      .join("|")
+  }, [cart])
+
+  const clearStoredCoupon = () => {
+    try {
+      window.localStorage.removeItem(CART_COUPON_STORAGE_KEY)
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  const persistAppliedCoupon = (coupon, code) => {
+    const normalizedCode = String(code || coupon?.code || "").trim().toUpperCase()
+    if (!normalizedCode) return
+    try {
+      window.localStorage.setItem(
+        CART_COUPON_STORAGE_KEY,
+        JSON.stringify({
+          coupon: { ...(coupon || {}), code: normalizedCode },
+          couponCode: normalizedCode,
+          restaurantId: restaurantId ? String(restaurantId) : "",
+          cartSignature: cartCouponSignature,
+        }),
+      )
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  useEffect(() => {
+    if (!cart.length) {
+      clearStoredCoupon()
+      setAppliedCoupon(null)
+      setCouponCode("")
+      setManualCouponCode("")
+      return
+    }
+
+    const stored = loadStoredCartCoupon()
+    if (!stored) return
+
+    const storedRestaurantId = String(stored.restaurantId || "")
+    const currentRestaurantId = restaurantId ? String(restaurantId) : ""
+    const restaurantChanged = Boolean(storedRestaurantId && currentRestaurantId && storedRestaurantId !== currentRestaurantId)
+
+    if (restaurantChanged) {
+      clearStoredCoupon()
+      setAppliedCoupon(null)
+      setCouponCode("")
+      setManualCouponCode("")
+    }
+  }, [cart.length, cartCouponSignature, restaurantId])
+
   // Stable restaurant ID for addons fetch (memoized to prevent dependency array issues)
   // Prefer restaurantData IDs (more reliable) over slug from cart
   const restaurantIdForAddons = useMemo(() => {
@@ -1064,14 +1149,27 @@ export default function Cart() {
         })
 
         if (response?.data?.success && response?.data?.data?.pricing) {
-          setPricing(response.data.data.pricing)
+          const pricingData = response.data.data.pricing
+          setPricing(pricingData)
 
           // Update applied coupon if backend returns one
-          if (response.data.data.pricing.appliedCoupon && !appliedCoupon) {
-            const coupon = availableCoupons.find(c => c.code === response.data.data.pricing.appliedCoupon.code)
-            if (coupon) {
-              setAppliedCoupon(coupon)
+          if (pricingData.appliedCoupon) {
+            const appliedCode = String(pricingData.appliedCoupon.code || resolvedCouponCode || "").trim().toUpperCase()
+            const coupon = availableCoupons.find(c => String(c.code || "").toUpperCase() === appliedCode) || appliedCoupon || {
+              code: appliedCode,
+              discount: pricingData.appliedCoupon.discount || 0,
+              minOrder: 0,
+              customerGroup: "all",
             }
+            setAppliedCoupon(coupon)
+            setCouponCode(appliedCode)
+            setManualCouponCode(appliedCode)
+            persistAppliedCoupon(coupon, appliedCode)
+          } else if (resolvedCouponCode) {
+            setAppliedCoupon(null)
+            setCouponCode("")
+            setManualCouponCode("")
+            clearStoredCoupon()
           }
         }
       } catch (error) {
@@ -1247,7 +1345,7 @@ export default function Cart() {
     : null
   const platformFee = pricing?.platformFee || feeSettings.platformFee
   const gstCharges = pricing?.tax || Math.round(subtotal * (feeSettings.gstRate / 100))
-  const discount = pricing?.discount || (appliedCoupon ? Math.min(appliedCoupon.discount, subtotal * 0.5) : 0)
+  const discount = pricing?.discount ?? (appliedCoupon ? Math.min(appliedCoupon.discount, subtotal * 0.5) : 0)
   const totalBeforeDiscount = subtotal + (deliveryFee === 0 ? (feeSettings.deliveryFee ?? 25) : deliveryFee) + platformFee + gstCharges
   const total = subtotal + deliveryFee + platformFee + gstCharges - (pricing?.discount || discount)
   const savings = pricing?.savings ?? Math.max(0, totalBeforeDiscount - total)
@@ -1508,6 +1606,7 @@ export default function Cart() {
         setAppliedCoupon(coupon)
         setCouponCode(coupon.code)
         setManualCouponCode(coupon.code)
+        persistAppliedCoupon(coupon, coupon.code)
         setShowCoupons(false)
       } catch (error) {
         debugError("Error recalculating pricing:", error)
@@ -1573,14 +1672,14 @@ export default function Cart() {
 
       setPricing(pricingData)
       setCouponCode(inputCode)
-      setAppliedCoupon(
-        matchedCoupon || {
+      const applied = matchedCoupon || {
           code: inputCode,
           discount: pricingData.appliedCoupon.discount || 0,
           minOrder: 0,
           customerGroup: "all",
-        },
-      )
+        }
+      setAppliedCoupon(applied)
+      persistAppliedCoupon(applied, inputCode)
       setShowCoupons(false)
       toast.success("Coupon applied")
     } catch (error) {
@@ -1594,6 +1693,7 @@ export default function Cart() {
     setAppliedCoupon(null)
     setCouponCode("")
     setManualCouponCode("")
+    clearStoredCoupon()
 
     // Recalculate pricing without coupon
     if (cart.length > 0 && hasSavedAddress) {
@@ -1750,6 +1850,7 @@ export default function Cart() {
         setAppliedCoupon(null)
         setCouponCode("")
         setManualCouponCode("")
+        clearStoredCoupon()
         setIsPlacingOrder(false)
         return
       }
@@ -1940,6 +2041,7 @@ export default function Cart() {
         setShowOrderSuccess(true)
         window.dispatchEvent(new CustomEvent('order-placed', { detail: { order } }))
         clearCart()
+        clearStoredCoupon()
         setNote("")
         setShowNoteInput(false)
         try {
@@ -1958,6 +2060,7 @@ export default function Cart() {
         setShowOrderSuccess(true)
         window.dispatchEvent(new CustomEvent('order-placed', { detail: { order } }))
         clearCart()
+        clearStoredCoupon()
         setNote("")
         setShowNoteInput(false)
         try {
@@ -2069,6 +2172,7 @@ export default function Cart() {
               setShowOrderSuccess(true)
               window.dispatchEvent(new CustomEvent('order-placed', { detail: { order } }))
               clearCart()
+              clearStoredCoupon()
               setIsPlacingOrder(false)
             } else {
               throw new Error(verifyResponse.data.message || "Payment verification failed")

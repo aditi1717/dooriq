@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { FoodOrder } from '../models/order.model.js';
+import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FoodOfferUsage } from '../../admin/models/offerUsage.model.js';
 
 const toObjectId = (value) => {
@@ -29,6 +30,63 @@ export const calculateCouponDiscount = (offer, subtotal = 0) => {
     0,
     Math.min(safeSubtotal, Math.floor(Number(offer?.discountValue) || 0)),
   );
+};
+
+const releaseAbandonedPendingCouponOrders = async ({ offer, userObjectId }) => {
+  if (!offer?._id || !userObjectId) return;
+
+  const couponCode = String(offer.couponCode || '').trim().toUpperCase();
+  if (!couponCode) return;
+
+  const abandonedOrders = await FoodOrder.find({
+    userId: userObjectId,
+    orderStatus: 'pending_payment',
+    'pricing.couponCode': couponCode,
+    'payment.method': 'razorpay',
+    'payment.status': { $ne: 'paid' },
+  })
+    .select('_id')
+    .lean();
+
+  if (!abandonedOrders.length) return;
+
+  const now = new Date();
+  const orderIds = abandonedOrders.map((order) => order._id);
+
+  const updateResult = await FoodOrder.updateMany(
+    { _id: { $in: orderIds }, orderStatus: 'pending_payment' },
+    {
+      $set: {
+        orderStatus: 'cancelled_by_user',
+        'payment.status': 'failed',
+        note: 'Online payment abandoned before completion',
+      },
+      $push: {
+        statusHistory: {
+          at: now,
+          byRole: 'USER',
+          byId: userObjectId,
+          from: 'pending_payment',
+          to: 'cancelled_by_user',
+          note: 'Online payment abandoned before completion',
+        },
+      },
+    },
+  );
+
+  const releaseCount = Number(updateResult?.modifiedCount || 0);
+  if (releaseCount <= 0) return;
+
+  await Promise.all([
+    FoodOffer.updateOne(
+      { _id: offer._id, usedCount: { $gte: releaseCount } },
+      { $inc: { usedCount: -releaseCount } },
+    ),
+    FoodOfferUsage.updateOne(
+      { offerId: offer._id, userId: userObjectId, count: { $gte: releaseCount } },
+      { $inc: { count: -releaseCount }, $set: { lastUsedAt: now } },
+    ),
+  ]);
 };
 
 export const getCouponIneligibilityReason = async ({
@@ -68,14 +126,19 @@ export const getCouponIneligibilityReason = async ({
 
   if (Number(subtotal) < Number(offer.minOrderValue || 0)) return 'min_order_not_met';
 
+  const userObjectId = toObjectId(userId);
+  await releaseAbandonedPendingCouponOrders({ offer, userObjectId });
+
+  const refreshedOffer = await FoodOffer.findById(offer._id).select('usedCount').lean();
+  const usedCount = Number(refreshedOffer?.usedCount ?? offer.usedCount ?? 0);
+
   if (
     Number(offer.usageLimit) > 0 &&
-    Number(offer.usedCount || 0) >= Number(offer.usageLimit)
+    usedCount >= Number(offer.usageLimit)
   ) {
     return 'global_limit_reached';
   }
 
-  const userObjectId = toObjectId(userId);
   if (userObjectId && Number(offer.perUserLimit) > 0) {
     const usage = await FoodOfferUsage.findOne({
       offerId: offer._id,
@@ -113,7 +176,8 @@ export const getCouponIneligibilityReason = async ({
 
     const userCancelledCount = await FoodOrder.countDocuments({
       userId: userObjectId,
-      orderStatus: 'cancelled_by_user'
+      orderStatus: 'cancelled_by_user',
+      'payment.status': { $ne: 'failed' }
     });
     if (userCancelledCount > 0) return 'user_cancelled_order_exists';
   }

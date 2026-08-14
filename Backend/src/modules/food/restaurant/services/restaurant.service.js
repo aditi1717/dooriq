@@ -170,6 +170,72 @@ const buildActivePublicOfferFilter = (now = new Date()) => {
     };
 };
 
+const releaseAbandonedPendingOfferReservations = async (userId) => {
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return;
+
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const pendingOrders = await FoodOrder.find({
+        userId: userObjectId,
+        orderStatus: 'pending_payment',
+        'payment.method': 'razorpay',
+        'payment.status': { $ne: 'paid' },
+        'pricing.couponCode': { $type: 'string', $ne: '' }
+    })
+        .select('_id pricing.couponCode')
+        .lean();
+
+    if (!pendingOrders.length) return;
+
+    const ordersByCoupon = new Map();
+    pendingOrders.forEach((order) => {
+        const couponCode = String(order?.pricing?.couponCode || '').trim().toUpperCase();
+        if (!couponCode) return;
+        if (!ordersByCoupon.has(couponCode)) ordersByCoupon.set(couponCode, []);
+        ordersByCoupon.get(couponCode).push(order._id);
+    });
+
+    const now = new Date();
+    for (const [couponCode, orderIds] of ordersByCoupon.entries()) {
+        const updateResult = await FoodOrder.updateMany(
+            { _id: { $in: orderIds }, orderStatus: 'pending_payment' },
+            {
+                $set: {
+                    orderStatus: 'cancelled_by_user',
+                    'payment.status': 'failed',
+                    note: 'Online payment abandoned before completion'
+                },
+                $push: {
+                    statusHistory: {
+                        at: now,
+                        byRole: 'USER',
+                        byId: userObjectId,
+                        from: 'pending_payment',
+                        to: 'cancelled_by_user',
+                        note: 'Online payment abandoned before completion'
+                    }
+                }
+            }
+        );
+
+        const releaseCount = Number(updateResult?.modifiedCount || 0);
+        if (releaseCount <= 0) continue;
+
+        const offer = await FoodOffer.findOne({ couponCode }).select('_id').lean();
+        if (!offer?._id) continue;
+
+        await Promise.all([
+            FoodOffer.updateOne(
+                { _id: offer._id, usedCount: { $gte: releaseCount } },
+                { $inc: { usedCount: -releaseCount } }
+            ),
+            FoodOfferUsage.updateOne(
+                { offerId: offer._id, userId: userObjectId, count: { $gte: releaseCount } },
+                { $inc: { count: -releaseCount }, $set: { lastUsedAt: now } }
+            )
+        ]);
+    }
+};
+
 const formatRestaurantOfferSummary = (offer) => {
     if (!offer) return '';
 
@@ -1898,6 +1964,7 @@ export const getApprovedRestaurantByIdOrSlug = async (idOrSlug) => {
 export const listPublicOffers = async (query = {}) => {
     const { subtotal, restaurantId, userId } = query;
     const now = new Date();
+    await releaseAbandonedPendingOfferReservations(userId);
     const filter = buildActivePublicOfferFilter(now);
 
     // If restaurantId is provided, filter for global (all) or specific restaurant coupons
@@ -1924,20 +1991,26 @@ export const listPublicOffers = async (query = {}) => {
     if (userId && mongoose.Types.ObjectId.isValid(userId)) {
         const orderCount = await FoodOrder.countDocuments({
             userId: new mongoose.Types.ObjectId(userId),
-            orderStatus: {
-                $in: [
-                    'pending_payment',
-                    'created',
-                    'confirmed',
-                    'preparing',
-                    'ready_for_pickup',
-                    'reached_pickup',
-                    'picked_up',
-                    'reached_drop',
-                    'delivered',
-                    'cancelled_by_user'
-                ]
-            }
+            $or: [
+                {
+                    orderStatus: {
+                        $in: [
+                            'created',
+                            'confirmed',
+                            'preparing',
+                            'ready_for_pickup',
+                            'reached_pickup',
+                            'picked_up',
+                            'reached_drop',
+                            'delivered'
+                        ]
+                    }
+                },
+                {
+                    orderStatus: 'cancelled_by_user',
+                    'payment.status': { $ne: 'failed' }
+                }
+            ]
         });
         if (orderCount > 0) {
             filter.$and.push({
