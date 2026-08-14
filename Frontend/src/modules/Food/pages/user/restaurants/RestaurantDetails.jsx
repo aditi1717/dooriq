@@ -629,6 +629,7 @@ function RestaurantDetailsContent() {
             menuImages: normalizedMenuImages,
             // Menu sections for display (will be populated from menu API)
             menuSections: [],
+            menuCategories: [],
             // Onboarding data including FSSAI license
             onboarding: actualRestaurant?.onboarding || apiRestaurant?.onboarding || null,
             // Availability fields for grayscale styling
@@ -822,6 +823,7 @@ function RestaurantDetailsContent() {
               debugLog('? Menu resolved using lookup ID:', resolvedMenuLookupId)
               if (menuResponse.data && menuResponse.data.success && menuResponse.data.data && menuResponse.data.data.menu) {
                 const rawSections = menuResponse.data.data.menu.sections || []
+                const rawCategories = menuResponse.data.data.menu.categories || []
                 const toArray = (value) => {
                   if (Array.isArray(value)) return value
                   if (!value || typeof value !== "object") return []
@@ -943,6 +945,7 @@ function RestaurantDetailsContent() {
                 setRestaurant(prev => ({
                   ...prev,
                   menuSections: finalMenuSections,
+                  menuCategories: toArray(rawCategories),
                 }))
 
                 // Set all sections and subsections as expanded by default
@@ -1464,7 +1467,7 @@ function RestaurantDetailsContent() {
   const menuCategories = useMemo(() => {
     if (!restaurant?.menuSections || !Array.isArray(restaurant.menuSections)) return []
 
-    return restaurant.menuSections
+    const sectionCategories = restaurant.menuSections
       .map((section, index) => {
         if (isRecommendedSection(section)) return null
 
@@ -1486,7 +1489,36 @@ function RestaurantDetailsContent() {
         }
       })
       .filter(Boolean)
-  }, [restaurant?.menuSections])
+
+    const mergedById = new Map()
+    sectionCategories.forEach((category) => {
+      mergedById.set(category.id, category)
+    })
+
+    toRenderableArray(restaurant?.menuCategories).forEach((category, index) => {
+      const categoryName = String(category?.name || category?.title || "").trim()
+      const rawId = category?.categoryId || category?.id || category?._id || categoryName || index
+      const id = normalizeMenuCategoryId(rawId) || `category-${index}`
+      const matchingSection = sectionCategories.find(
+        (sectionCategory) =>
+          sectionCategory.id === id ||
+          String(sectionCategory.name || "").trim().toLowerCase() === categoryName.toLowerCase(),
+      )
+      const count = Number(category?.itemCount ?? category?.count ?? matchingSection?.count ?? 0)
+
+      if (!matchingSection && count <= 0) return
+
+      mergedById.set(id, {
+        id,
+        name: categoryName || matchingSection?.name || "Menu",
+        image: category?.image || matchingSection?.image || "",
+        count: Number.isFinite(count) && count > 0 ? count : matchingSection?.count || 0,
+        sectionIndex: matchingSection?.sectionIndex ?? index,
+      })
+    })
+
+    return Array.from(mergedById.values())
+  }, [restaurant?.menuSections, restaurant?.menuCategories])
 
   // Count active filters
   const getActiveFilterCount = () => {
@@ -1971,13 +2003,20 @@ function RestaurantDetailsContent() {
     filters.highlyReordered
   )
 
+  const shouldUseFlatMenuView = Boolean(
+    showOnlyUnder250 ||
+    searchQuery.trim() ||
+    filters.sortBy ||
+    filters.highlyReordered
+  )
+
   const filteredSections = useMemo(
     () => getFilteredSections(),
     [restaurant?.menuSections, showOnlyUnder250, searchQuery, vegMode, filters, selectedMenuCategory]
   )
 
   const flatFilteredItems = useMemo(() => {
-    if (!hasActiveMenuFilters || !restaurant?.menuSections) return []
+    if (!shouldUseFlatMenuView || !restaurant?.menuSections) return []
     const allItems = []
     restaurant.menuSections.forEach(section => {
       if (isRecommendedSection(section)) return
@@ -2027,7 +2066,7 @@ function RestaurantDetailsContent() {
 
     const filtered = filterMenuItems(categoryFiltered)
     return sortMenuItems(filtered)
-  }, [restaurant?.menuSections, hasActiveMenuFilters, filters, searchQuery, showOnlyUnder250, selectedMenuCategory])
+  }, [restaurant?.menuSections, shouldUseFlatMenuView, filters, searchQuery, showOnlyUnder250, selectedMenuCategory])
 
   useEffect(() => {
     if (!hasActiveMenuFilters) return
@@ -2702,7 +2741,7 @@ function RestaurantDetailsContent() {
         {/* Menu Items Section */}
         {restaurant?.menuSections && Array.isArray(restaurant.menuSections) && restaurant.menuSections.length > 0 && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-6 sm:pt-8 md:pt-10 lg:pt-12 pb-32 sm:pb-36 md:pb-40 lg:pb-44 space-y-6 md:space-y-8 lg:space-y-10">
-            {hasActiveMenuFilters ? (
+            {shouldUseFlatMenuView ? (
               // Flat View when filters/sorting is active
               flatFilteredItems.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] px-5 py-8 text-center">
