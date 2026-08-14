@@ -147,92 +147,63 @@ export default function FeedNavbar({ className = "" }) {
     e?.stopPropagation?.();
 
     const next = !isOnline;
-    
-    // Update state immediately for better UX
-    setIsOnline(next);
-    showSingleToast(next);
 
-    // Update backend with location if available
-    try {
-      // Try to get current location from localStorage or geolocation
-      let latitude = null;
-      let longitude = null;
-      
-      // Check localStorage first
+    if (!next) {
+      setIsOnline(false);
+      showSingleToast(false);
       try {
-        const savedLocation = localStorage.getItem('deliveryBoyLastLocation');
-        if (savedLocation) {
-          const location = JSON.parse(savedLocation);
-          if (Array.isArray(location) && location.length === 2) {
-            let [lat, lng] = location;
-            
-            // Validate and check for coordinate swap
-            if (typeof lat === 'number' && typeof lng === 'number' &&
-                lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-              // Check if coordinates might be swapped (lat in lng range for India)
-              const mightBeSwapped = (lat >= 68 && lat <= 98 && lng >= 8 && lng <= 38);
-              
-              if (mightBeSwapped) {
-                debugWarn('?? Saved coordinates might be swapped in FeedNavbar - correcting:', {
-                  original: [lat, lng],
-                  corrected: [lng, lat]
-                });
-                [latitude, longitude] = [lng, lat];
-              } else {
-                [latitude, longitude] = [lat, lng];
-              }
-            }
-          }
-        }
-      } catch (err) {
-        debugWarn('Error reading location from localStorage:', err);
+        await deliveryAPI.updateOnlineStatus(false);
+      } catch (error) {
+        debugError('? Error updating online status in backend:', error);
+        setIsOnline(true);
+        toast.error('Failed to update status. Please try again.');
       }
-      
-      // If no saved location, try to get current location
-      if ((!latitude || !longitude) && navigator.geolocation) {
-        try {
-          const position = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              timeout: 5000,
-              maximumAge: 0,
-              enableHighAccuracy: true
-            });
-          });
-          latitude = position.coords.latitude;
-          longitude = position.coords.longitude;
-          
-          // Validate coordinates
-          if (typeof latitude !== 'number' || typeof longitude !== 'number' ||
-              latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-            debugWarn('?? Invalid coordinates from geolocation:', { latitude, longitude });
-            latitude = null;
-            longitude = null;
-          }
-        } catch (geoError) {
-          debugWarn('Could not get current location:', geoError);
-        }
-      }
-      
-      // Update backend with location if available, otherwise just online status
-      if (latitude && longitude && 
-          latitude >= -90 && latitude <= 90 && 
-          longitude >= -180 && longitude <= 180) {
-        await deliveryAPI.updateLocation(latitude, longitude, next);
-        debugLog('? Online status and location updated in backend:', { 
-          isOnline: next, 
-          latitude, 
-          longitude,
-          format: "lat, lng (correct order)"
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setIsOnline(false);
+      toast.error('Turn on location to go online.');
+      return;
+    }
+
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          timeout: 8000,
+          maximumAge: 0,
+          enableHighAccuracy: true
         });
-      } else {
-        await deliveryAPI.updateOnlineStatus(next);
-        debugLog('? Online status updated in backend (location not available):', next);
+      });
+      const latitude = Number(position?.coords?.latitude);
+      const longitude = Number(position?.coords?.longitude);
+
+      if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude) ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180
+      ) {
+        setIsOnline(false);
+        toast.error('Turn on location to go online.');
+        return;
       }
+
+      await deliveryAPI.updateLocation(latitude, longitude, true);
+      setIsOnline(true);
+      showSingleToast(true);
+      debugLog('? Online status and location updated in backend:', {
+        isOnline: true,
+        latitude,
+        longitude,
+        format: "lat, lng (correct order)"
+      });
     } catch (error) {
       debugError('? Error updating online status in backend:', error);
-      // Revert state if backend update fails
-      setIsOnline(!next);
-      toast.error('Failed to update status. Please try again.');
+      setIsOnline(false);
+      toast.error(error?.response?.data?.message || 'Turn on location to go online.');
     }
   };
 

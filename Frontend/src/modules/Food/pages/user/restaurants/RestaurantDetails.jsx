@@ -1408,7 +1408,14 @@ function RestaurantDetailsContent() {
   }
 
   const isRecommendedItem = (item) => {
-    return item.isRecommended === true && typeof item.isRecommended === "boolean"
+    const value = item?.isRecommended ?? item?.isHighlyReordered ?? item?.highlyReordered
+    if (typeof value === "boolean") return value
+    if (typeof value === "number") return value === 1
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase()
+      return normalized === "true" || normalized === "1" || normalized === "yes"
+    }
+    return false
   }
 
   const getSectionDisplayName = (section) => {
@@ -2390,7 +2397,7 @@ function RestaurantDetailsContent() {
           ) : (
             <motion.button
               layoutId={`add-button-${prefix}-${item.id}`}
-              initial={{ opacity: 0, scale: 0.9 }}
+              initial={false}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
               onClick={(e) => {
@@ -2814,7 +2821,9 @@ function RestaurantDetailsContent() {
                       )}
                       {isExpanded && sectionItems.length > 0 && (
                         <div className="space-y-0">
-                          {sectionItems.map((item) => renderItemCard(item, "direct"))}
+                          {sectionItems.map((item) =>
+                            renderItemCard(item, isRecommended ? "recommended" : `section-${originalIndex}`)
+                          )}
                         </div>
                       )}
 
@@ -2859,7 +2868,9 @@ function RestaurantDetailsContent() {
                                 {/* Subsection Items */}
                                 {isSubsectionExpanded && subsectionItems.length > 0 && (
                                   <div className="space-y-0">
-                                    {subsectionItems.map((item) => renderItemCard(item, "sub"))}
+                                    {subsectionItems.map((item) =>
+                                      renderItemCard(item, `section-${originalIndex}-sub-${subIndex}`)
+                                    )}
                                   </div>
                                 )}
                               </div>

@@ -110,7 +110,7 @@ function BottomPopup({ isOpen, onClose, title, children, maxHeight = "85vh" }) {
  */
 export default function DeliveryHomeV2({ tab = 'feed' }) {
   const navigate = useNavigate();
-  const { isOnline, toggleOnline, activeOrder, tripStatus, setRiderLocation, setActiveOrder, updateTripStatus, clearActiveOrder, riderLocation } = useDeliveryStore();
+  const { isOnline, toggleOnline, setOnline, activeOrder, tripStatus, setRiderLocation, setActiveOrder, updateTripStatus, clearActiveOrder, riderLocation } = useDeliveryStore();
   const { isWithinRange, distanceToTarget } = useProximityCheck();
   const { acceptOrder, rejectOrder, reachPickup, pickUpOrder, reachDrop, completeDelivery, resetTrip } = useOrderManager();
   const { newOrder, clearNewOrder, clearAllOffers, orderStatusUpdate, clearOrderStatusUpdate, isConnected: isSocketConnected, emitLocation } = useDeliveryNotifications();
@@ -497,7 +497,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
   // 2. Online/Offline Status Sync (Low Frequency)
   useEffect(() => {
-    deliveryAPI.updateOnlineStatus(isOnline).catch(() => { });
+    if (!isOnline) {
+      deliveryAPI.updateOnlineStatus(false).catch(() => { });
+    }
   }, [isOnline]);
 
   useEffect(() => {
@@ -851,17 +853,53 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                 <button
                   onClick={async () => {
                     const nextState = !isOnline;
-                    toggleOnline();
-                    if (nextState) {
-                      navigator.geolocation.getCurrentPosition((pos) => {
-                        deliveryAPI.updateLocation(pos.coords.latitude, pos.coords.longitude, true).catch(() => { });
+                    if (!nextState) {
+                      toggleOnline();
+                      deliveryAPI.updateOnlineStatus(false).catch(() => { });
+                      return;
+                    }
+
+                    if (!navigator.geolocation) {
+                      setOnline(false);
+                      toast.error('Turn on location to go online.');
+                      return;
+                    }
+
+                    navigator.geolocation.getCurrentPosition(async (pos) => {
+                      const latitude = Number(pos?.coords?.latitude);
+                      const longitude = Number(pos?.coords?.longitude);
+                      const hasValidLocation =
+                        Number.isFinite(latitude) &&
+                        Number.isFinite(longitude) &&
+                        latitude >= -90 &&
+                        latitude <= 90 &&
+                        longitude >= -180 &&
+                        longitude <= 180;
+
+                      if (!hasValidLocation) {
+                        setOnline(false);
+                        toast.error('Turn on location to go online.');
+                        return;
+                      }
+
+                      try {
+                        await deliveryAPI.updateLocation(latitude, longitude, true);
+                        setRiderLocation({
+                          lat: latitude,
+                          lng: longitude,
+                          heading: pos.coords.heading || 0
+                        });
+                        setOnline(true);
+                        setIsGpsOff(false);
+                        setGpsErrorMessage('');
+                        setIsGpsModalOpen(false);
                         const deliveryPartnerId = deliveryPartnerIdRef.current || getStoredDeliveryPartnerId();
                         deliveryPartnerIdRef.current = deliveryPartnerId;
                         if (deliveryPartnerId) {
                           writeDeliveryLocation({
                             deliveryId: deliveryPartnerId,
-                            lat: pos.coords.latitude,
-                            lng: pos.coords.longitude,
+                            lat: latitude,
+                            lng: longitude,
                             heading: pos.coords.heading || 0,
                             speed: pos.coords.speed || 0,
                             accuracy: pos.coords.accuracy,
@@ -870,10 +908,15 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                             timestamp: Date.now()
                           }).catch(() => { });
                         }
-                      }, (err) => console.warn('Online sync position failed:', err), { enableHighAccuracy: true });
-                    } else {
-                      deliveryAPI.updateOnlineStatus(false).catch(() => { });
-                    }
+                      } catch (error) {
+                        setOnline(false);
+                        toast.error(error?.response?.data?.message || 'Turn on location to go online.');
+                      }
+                    }, (err) => {
+                      setOnline(false);
+                      handleGpsError(err);
+                      toast.error('Turn on location to go online.');
+                    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 });
                   }}
                   className={`relative w-[110px] h-[34px] rounded-full p-1 transition-all duration-300 flex items-center ${isOnline ? 'bg-[#10b981]' : 'bg-[#2a2a2a]'}`}
                 >

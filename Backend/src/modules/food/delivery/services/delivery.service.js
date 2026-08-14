@@ -462,15 +462,29 @@ export const updateDeliveryAvailability = async (userId, payload) => {
     let validStatus = 'offline';
     if (status === 'online' || status === true) validStatus = 'online';
     else if (status === 'offline' || status === false) validStatus = 'offline';
+
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    const hasValidLocation =
+        Number.isFinite(lat) &&
+        Number.isFinite(lng) &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180;
+
+    if (validStatus === 'online' && !hasValidLocation) {
+        throw new ValidationError('Please turn on location to go online');
+    }
     
     partner.availabilityStatus = validStatus;
-    if (typeof latitude === 'number' && typeof longitude === 'number') {
+    if (hasValidLocation) {
         partner.lastLocation = {
             type: 'Point',
-            coordinates: [longitude, latitude]
+            coordinates: [lng, lat]
         };
-        partner.lastLat = latitude;
-        partner.lastLng = longitude;
+        partner.lastLat = lat;
+        partner.lastLng = lng;
         partner.lastLocationAt = new Date();
     }
     await partner.save();
