@@ -53,9 +53,14 @@ function toPoint(entity) {
 }
 
 async function enrichPayloadWithTripRoadDistance(order, payload) {
-  const existingRoadKm = order?.tripDistanceKm ?? order?.pricing?.roadDistanceKm;
-  if (Number.isFinite(Number(existingRoadKm))) {
-    const km = Number(Number(existingRoadKm).toFixed(2));
+  const existingRoadKm = Number(
+    order?.tripDistanceKm ??
+    order?.pricing?.roadDistanceKm ??
+    order?.pricing?.distanceKm ??
+    order?.pricing?.straightLineDistanceKm
+  );
+  if (Number.isFinite(existingRoadKm) && existingRoadKm > 0) {
+    const km = Number(existingRoadKm.toFixed(2));
     const minsRaw = order?.tripDurationMins ?? order?.pricing?.roadDurationMins;
     const tripDurationMins = Number.isFinite(Number(minsRaw))
       ? Math.ceil(Number(minsRaw))
@@ -76,7 +81,8 @@ async function enrichPayloadWithTripRoadDistance(order, payload) {
 
   try {
     const route = await fetchDrivingRoute(restaurantPoint, customerPoint);
-    if (Number.isFinite(Number(route?.distanceKm))) {
+    const routeDistanceKm = Number(route?.distanceKm);
+    if (Number.isFinite(routeDistanceKm) && routeDistanceKm > 0) {
       const tripDurationMins = Number.isFinite(Number(route?.durationSeconds))
         ? Math.ceil(Number(route.durationSeconds) / 60)
         : null;
@@ -86,10 +92,10 @@ async function enrichPayloadWithTripRoadDistance(order, payload) {
           { _id: order._id },
           {
             $set: {
-              tripDistanceKm: Number(route.distanceKm),
+              tripDistanceKm: routeDistanceKm,
               tripDurationMins,
-              'pricing.distanceKm': Number(route.distanceKm),
-              'pricing.roadDistanceKm': Number(route.distanceKm),
+              'pricing.distanceKm': routeDistanceKm,
+              'pricing.roadDistanceKm': routeDistanceKm,
               'pricing.roadDurationMins': tripDurationMins,
             },
           },
@@ -98,9 +104,9 @@ async function enrichPayloadWithTripRoadDistance(order, payload) {
 
       return {
         ...payload,
-        tripDistanceKm: Number(route.distanceKm),
+        tripDistanceKm: routeDistanceKm,
         tripDurationMins,
-        distanceKm: Number(route.distanceKm),
+        distanceKm: routeDistanceKm,
       };
     }
   } catch (err) {

@@ -187,6 +187,18 @@ export async function createInitialTransaction(order) {
             couponCode: couponCode ? String(couponCode).toUpperCase() : null,
             total: totalCustomerPaid,
             currency: String(order.pricing?.currency || order.currency || 'INR'),
+            distanceKm: Number.isFinite(Number(order.pricing?.distanceKm))
+                ? Number(order.pricing.distanceKm)
+                : null,
+            roadDistanceKm: Number.isFinite(Number(order.pricing?.roadDistanceKm))
+                ? Number(order.pricing.roadDistanceKm)
+                : null,
+            straightLineDistanceKm: Number.isFinite(Number(order.pricing?.straightLineDistanceKm))
+                ? Number(order.pricing.straightLineDistanceKm)
+                : null,
+            roadDurationMins: Number.isFinite(Number(order.pricing?.roadDurationMins))
+                ? Number(order.pricing.roadDurationMins)
+                : null,
         },
         amounts: {
             totalCustomerPaid: totalCustomerPaid,

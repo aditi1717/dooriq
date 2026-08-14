@@ -166,9 +166,41 @@ export function normalizeOrderForClient(orderDoc) {
     deliveryPartner && typeof deliveryPartner === "object"
       ? deliveryPartner.phone || deliveryPartner.phoneNumber || deliveryPartner.mobile || ""
       : "";
+  const pricing = order?.pricing && typeof order.pricing === "object"
+    ? { ...order.pricing }
+    : order?.pricing;
+  const roadDistanceRaw = Number(pricing?.roadDistanceKm);
+  const distanceRaw = Number(pricing?.distanceKm);
+  const straightLineRaw = Number(pricing?.straightLineDistanceKm);
+  const preferredDistanceKm =
+    Number.isFinite(roadDistanceRaw) && roadDistanceRaw > 0
+      ? Number(roadDistanceRaw.toFixed(2))
+      : Number.isFinite(distanceRaw) && distanceRaw > 0
+        ? Number(distanceRaw.toFixed(2))
+        : Number.isFinite(straightLineRaw) && straightLineRaw > 0
+          ? Number(straightLineRaw.toFixed(2))
+          : null;
+  const normalizedPricing = pricing
+    ? {
+        ...pricing,
+        distanceKm: preferredDistanceKm,
+        roadDistanceKm: preferredDistanceKm,
+        deliveryFeeBreakdown:
+          pricing?.deliveryFeeBreakdown && typeof pricing.deliveryFeeBreakdown === "object"
+            ? {
+                ...pricing.deliveryFeeBreakdown,
+                distanceKm:
+                  preferredDistanceKm ?? pricing.deliveryFeeBreakdown.distanceKm ?? null,
+                roadDistanceKm:
+                  preferredDistanceKm ?? pricing.deliveryFeeBreakdown.roadDistanceKm ?? null,
+              }
+            : pricing?.deliveryFeeBreakdown,
+      }
+    : pricing;
 
   return {
     ...order,
+    pricing: normalizedPricing,
     orderMongoId: mongoId,
     orderId: displayId,
     status: order?.orderStatus || order?.status || "",
@@ -230,7 +262,8 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
   const tripDistanceKmRaw =
     order?.tripDistanceKm ??
     order?.pricing?.roadDistanceKm ??
-    order?.pricing?.distanceKm;
+    order?.pricing?.distanceKm ??
+    order?.pricing?.straightLineDistanceKm;
   const tripDurationMinsRaw =
     order?.tripDurationMins ??
     order?.pricing?.roadDurationMins;

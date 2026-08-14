@@ -390,6 +390,25 @@ async function getRiderEarning(distanceKm) {
   return finalEarning;
 }
 
+function resolvePreferredDistanceKm(distanceDetails = {}) {
+  const roadDistance = Number(distanceDetails?.roadDistanceKm);
+  if (Number.isFinite(roadDistance) && roadDistance > 0) {
+    return Number(roadDistance.toFixed(2));
+  }
+
+  const directDistance = Number(distanceDetails?.distanceKm);
+  if (Number.isFinite(directDistance) && directDistance > 0) {
+    return Number(directDistance.toFixed(2));
+  }
+
+  const straightLineDistance = Number(distanceDetails?.straightLineDistanceKm);
+  if (Number.isFinite(straightLineDistance) && straightLineDistance > 0) {
+    return Number(straightLineDistance.toFixed(2));
+  }
+
+  return null;
+}
+
 /** Append-only food_order_payments row; never blocks main flow on failure */
 // 🗑️ Deprecated in favor of FoodTransaction system.
 
@@ -566,18 +585,14 @@ export async function createOrder(userId, dto) {
       restaurant,
       deliveryAddress,
     );
-    const distanceKm = Number.isFinite(Number(distanceDetails.distanceKm))
-      ? Number(distanceDetails.distanceKm)
-      : null;
+    const distanceKm = resolvePreferredDistanceKm(distanceDetails);
     const roadDurationMins = Number.isFinite(Number(distanceDetails.roadDurationMins))
       ? Math.ceil(Number(distanceDetails.roadDurationMins))
       : null;
 
     if (distanceKm != null) {
       normalizedPricing.distanceKm = distanceKm;
-      normalizedPricing.roadDistanceKm = Number.isFinite(Number(distanceDetails.roadDistanceKm))
-        ? Number(distanceDetails.roadDistanceKm)
-        : distanceKm;
+      normalizedPricing.roadDistanceKm = distanceKm;
     }
     if (Number.isFinite(Number(distanceDetails.straightLineDistanceKm))) {
       normalizedPricing.straightLineDistanceKm = Number(distanceDetails.straightLineDistanceKm);

@@ -69,13 +69,14 @@ export async function getDeliveryDistanceDetails(restaurant, deliveryAddress) {
 
   try {
     const route = await fetchDrivingRoute(restaurantPoint, customerPoint);
-    if (Number.isFinite(Number(route?.distanceKm))) {
+    const routeDistanceKm = Number(route?.distanceKm);
+    if (Number.isFinite(routeDistanceKm) && routeDistanceKm > 0) {
       return {
-        distanceKm: Number(Number(route.distanceKm).toFixed(2)),
-        roadDistanceKm: Number(Number(route.distanceKm).toFixed(2)),
+        distanceKm: Number(routeDistanceKm.toFixed(2)),
+        roadDistanceKm: Number(routeDistanceKm.toFixed(2)),
         straightLineDistanceKm,
         roadDurationMins: Number.isFinite(Number(route?.durationSeconds))
-          ? Math.ceil(Number(route.durationSeconds) / 60)
+          ? Math.max(1, Math.ceil(Number(route.durationSeconds) / 60))
           : null,
       };
     }

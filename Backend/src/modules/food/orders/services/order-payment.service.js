@@ -258,7 +258,11 @@ export async function getPaymentStatus(orderId, deliveryPartnerId) {
 
   let transaction = await FoodTransaction.findOne({ orderId: order._id }).lean();
   const effectiveMethod = transaction?.payment?.method || order.payment?.method;
-  const hasQrCode = transaction?.payment?.qr?.qrId || order.payment?.qr?.qrId;
+  const hasQrCode =
+    transaction?.payment?.qr?.paymentLinkId ||
+    order.payment?.qr?.paymentLinkId ||
+    transaction?.payment?.qr?.qrId ||
+    order.payment?.qr?.qrId;
   
   logger.info(`[getPaymentStatus] order=${order._id} method=${effectiveMethod} txStatus=${transaction?.payment?.status} hasQr=${!!hasQrCode}`);
 
