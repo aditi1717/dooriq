@@ -2014,7 +2014,13 @@ export default function OrdersMain() {
         autoTable(doc, {
           startY: yPos,
           margin: { left: 20, right: 20 },
-          head: [["Item", "Qty", "Price", "Total"]],
+          tableWidth: 170,
+          head: [[
+            { content: "Item", styles: { halign: "left" } },
+            { content: "Qty", styles: { halign: "center" } },
+            { content: "Price", styles: { halign: "right" } },
+            { content: "Total", styles: { halign: "right" } }
+          ]],
           body: tableData,
           theme: "striped",
           headStyles: {
@@ -2022,10 +2028,10 @@ export default function OrdersMain() {
             textColor: 255,
             fontStyle: "bold",
           },
-          styles: { fontSize: 9 },
+          styles: { fontSize: 9, cellPadding: 3 },
           columnStyles: {
-            0: { cellWidth: 80 },
-            1: { cellWidth: 20, halign: "center" },
+            0: { cellWidth: 75, halign: "left" },
+            1: { cellWidth: 25, halign: "center" },
             2: { cellWidth: 35, halign: "right" },
             3: { cellWidth: 35, halign: "right" },
           },
@@ -2039,16 +2045,12 @@ export default function OrdersMain() {
       doc.setFontSize(10);
       
       const pricing = orderToPrint.pricing || {};
-      const subtotal = Number(pricing.subtotal || 0);
       const packagingFee = Number(pricing.packagingFee || 0);
       const deliveryFee = Number(pricing.deliveryFee || 0);
       const platformFee = Number(pricing.platformFee || 0);
       const tax = Number(pricing.tax || 0);
       const discount = Number(pricing.discount || 0);
       const grandTotal = Number(pricing.total || orderToPrint.total || getPopupOrderTotal(orderToPrint) || 0);
-
-      doc.text(`Subtotal: Rs. ${subtotal.toFixed(2)}`, 20, yPos);
-      yPos += 6;
       
       if (packagingFee > 0) {
         doc.text(`Packaging Fee: Rs. ${packagingFee.toFixed(2)}`, 20, yPos);
@@ -2084,8 +2086,25 @@ export default function OrdersMain() {
       yPos += 10;
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
+
+      const paymentMethodStr = String(
+        orderToPrint.payment?.method ||
+        orderToPrint.paymentMethod ||
+        orderToPrint.paymentMode ||
+        orderToPrint.paymentType ||
+        ""
+      ).toLowerCase();
+      const isCODOrder = paymentMethodStr === "cash" || paymentMethodStr === "cod" || paymentMethodStr.includes("cash") || paymentMethodStr.includes("cod");
+      const rawPayStatus = String(
+        orderToPrint.payment?.status ||
+        orderToPrint.paymentStatus ||
+        ""
+      ).toLowerCase();
+
+      const isOrderPaid = rawPayStatus === "paid" || (!isCODOrder && orderToPrint.status === "confirmed");
+
       doc.text(
-        `Payment Status: ${orderToPrint.status === "confirmed" || orderToPrint.payment?.status === "paid" ? "Paid" : "Pending"}`,
+        `Payment Status: ${isOrderPaid ? "Paid" : "Pending"}`,
         20,
         yPos,
       );
