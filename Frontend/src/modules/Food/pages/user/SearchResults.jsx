@@ -124,6 +124,10 @@ export default function SearchResults() {
     const fetchCategories = async () => {
       try {
         setLoadingCategories(true)
+        if (!zoneId) {
+          setCategories([{ id: 'all', name: "All", image: "" }])
+          return
+        }
         const response = await adminAPI.getPublicCategories(zoneId ? { zoneId } : {})
 
         if (response.data && response.data.success && response.data.data && response.data.data.categories) {
@@ -243,11 +247,13 @@ export default function SearchResults() {
       try {
         setLoadingRestaurants(true)
         debugLog('?? Fetching restaurants from API...')
-        // Optional: Add zoneId if available (for sorting/filtering, but show all restaurants)
-        const params = {}
-        if (zoneId) {
-          params.zoneId = zoneId
+        // Strict zone-only listing for user search results.
+        // If zone is not detected yet, don't fetch global restaurants.
+        if (!zoneId) {
+          setRestaurantsData([])
+          return
         }
+        const params = { zoneId }
         const response = await restaurantAPI.getRestaurants(params)
 
         debugLog('?? Full API Response:', response)
@@ -727,8 +733,7 @@ export default function SearchResults() {
         return false
       })
     } else if (!deferredQuery.trim()) {
-      // Show all restaurants when no category selected (category is 'all')
-      // Don't filter - show all restaurants
+      // No category selected - keep the current zone-scoped restaurant set.
     }
 
     // Apply filters
@@ -847,8 +852,7 @@ export default function SearchResults() {
         return false
       })
     } else if (!deferredQuery.trim()) {
-      // Show all restaurants when no category selected (category is 'all')
-      // Don't filter - show all restaurants
+      // No category selected - keep the current zone-scoped restaurant set.
     }
 
     // Apply filters
