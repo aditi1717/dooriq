@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { ArrowLeft, Search, MoreVertical, ChevronRight, Star, RotateCcw, AlertCircle, Loader2, Clock, X, Share2, MessageCircle, Send, Copy, Mail, MessagesSquare, Link2 } from "lucide-react"
 import { orderAPI } from "@food/api"
@@ -19,6 +19,9 @@ const toNum = (value) => {
 export default function Orders() {
   const navigate = useNavigate()
   const goBack = useAppBackNavigation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const openRatingId = searchParams.get('openRating')
+  const [closedRatingOrderIds, setClosedRatingOrderIds] = useState(new Set())
   const { replaceCart } = useCart()
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
@@ -162,8 +165,8 @@ export default function Orders() {
       const hasDeliveryRating = Number.isFinite(Number(order.deliveryPartnerRating))
       const hasRating = hasRestaurantRating && (!hasDeliveryPartner || hasDeliveryRating)
 
-      const orderId = order.id || order._id || order.mongoId
-      const hasShownPopup = shownRatingForOrders.has(orderId)
+      const orderId = String(order.id || order._id || order.mongoId || '')
+      const hasShownPopup = shownRatingForOrders.has(orderId) || closedRatingOrderIds.has(orderId)
 
       // Also check if order has deliveredAt timestamp (indicates it was delivered)
       const hasDeliveredAt = order.deliveredAt !== null && order.deliveredAt !== undefined
@@ -190,7 +193,7 @@ export default function Orders() {
     // Show popup for the first delivered order that needs rating
     if (deliveredOrders.length > 0) {
       const orderToRate = deliveredOrders[0]
-      const orderId = orderToRate.id || orderToRate._id || orderToRate.mongoId
+      const orderId = String(orderToRate.id || orderToRate._id || orderToRate.mongoId || '')
 
       debugLog('?? Showing rating popup for order:', {
         orderId,
@@ -217,7 +220,26 @@ export default function Orders() {
       }, 800) // Show after 0.8 seconds
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, shownRatingForOrders, ratingModal.open])
+  }, [orders, shownRatingForOrders, ratingModal.open, closedRatingOrderIds])
+
+  // Auto-open rating modal if openRating query parameter is present in URL
+  useEffect(() => {
+    if (!openRatingId || orders.length === 0 || ratingModal.open || closedRatingOrderIds.has(openRatingId)) return
+    const targetOrder = orders.find(o =>
+      String(o.id) === String(openRatingId) ||
+      String(o.orderId) === String(openRatingId) ||
+      String(o.mongoId) === String(openRatingId)
+    )
+    if (targetOrder) {
+      handleOpenRating(targetOrder)
+      if (searchParams.get('openRating')) {
+        const newParams = new URLSearchParams(searchParams)
+        newParams.delete('openRating')
+        setSearchParams(newParams, { replace: true })
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRatingId, orders, ratingModal.open, closedRatingOrderIds])
 
   // Fetch orders from backend API
   useEffect(() => {
@@ -648,11 +670,27 @@ Order again from this restaurant in the ${companyName} app.`
   }
 
   const handleCloseRating = () => {
+    if (ratingModal.order) {
+      const orderId = String(ratingModal.order.id || ratingModal.order._id || ratingModal.order.mongoId || '')
+      if (orderId) {
+        setClosedRatingOrderIds(prev => new Set([...prev, orderId]))
+        try {
+          localStorage.setItem('dismissed_rating_' + orderId, 'true')
+          localStorage.setItem('dismissed_card_' + orderId, 'true')
+        } catch (_) {}
+      }
+    }
     setRatingModal({ open: false, order: null })
     setSelectedRestaurantRating(null)
     setSelectedDeliveryRating(null)
     setRestaurantFeedbackText("")
     setDeliveryFeedbackText("")
+
+    if (searchParams.get('openRating')) {
+      const newParams = new URLSearchParams(searchParams)
+      newParams.delete('openRating')
+      setSearchParams(newParams, { replace: true })
+    }
   }
 
   // Submit rating & feedback to backend
@@ -696,16 +734,40 @@ Order again from this restaurant in the ${companyName} app.`
       toast.success("Thanks for rating your order!")
 
       // Mark this order as rated so popup doesn't show again (before closing modal)
-      const orderId = order.id || order._id || order.mongoId
+      const orderId = String(order.id || order._id || order.mongoId || '')
+      if (orderId) {
+        try {
+          localStorage.setItem('dismissed_rating_' + orderId, 'true')
+          localStorage.setItem('dismissed_card_' + orderId, 'true')
+          window.dispatchEvent(new CustomEvent('order-rated', { detail: { orderId } }))
+        } catch (_) {}
+      }
       setShownRatingForOrders(prev => new Set([...prev, orderId]))
 
       handleCloseRating()
     } catch (error) {
       debugError("Error submitting order ratings:", error)
-      toast.error(
-        error?.response?.data?.message ||
-        "Failed to submit ratings. Please try again."
-      )
+      const errorMsg = error?.response?.data?.error || error?.response?.data?.message || ""
+      const isAlreadySubmitted = /already submitted|already rated/i.test(errorMsg) || error?.response?.status === 400
+
+      const orderId = String(ratingModal.order?.id || ratingModal.order?._id || ratingModal.order?.mongoId || '')
+      if (orderId) {
+        try {
+          localStorage.setItem('dismissed_rating_' + orderId, 'true')
+          localStorage.setItem('dismissed_card_' + orderId, 'true')
+          window.dispatchEvent(new CustomEvent('order-rated', { detail: { orderId } }))
+        } catch (_) {}
+        setShownRatingForOrders(prev => new Set([...prev, orderId]))
+        setClosedRatingOrderIds(prev => new Set([...prev, orderId]))
+      }
+
+      if (isAlreadySubmitted) {
+        toast.info("Ratings already submitted for this order")
+      } else {
+        toast.error(errorMsg || "Failed to submit ratings. Please try again.")
+      }
+
+      handleCloseRating()
     } finally {
       setSubmittingRating(false)
     }
@@ -1134,27 +1196,30 @@ Order again from this restaurant in the ${companyName} app.`
       {ratingModal.open && ratingModal.order && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200">
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-zinc-900 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-            {/* Header with gradient */}
-            <div className="bg-gradient-to-r from-[#EB590E] to-[#D94F0C] px-6 py-5">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <Star className="w-5 h-5 fill-white" />
-                  Rate Your Delivery
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-zinc-800 px-6 py-5 bg-white dark:bg-zinc-900">
+              <div>
+                <h2 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2 tracking-tight">
+                  <Star className="w-5 h-5" style={{ color: "var(--module-theme-color, #EB590E)", fill: "var(--module-theme-color, #EB590E)" }} />
+                  Rate Your Order
                 </h2>
-                <button
-                  type="button"
-                  onClick={handleCloseRating}
-                  className="text-white/80 hover:text-white transition-colors p-1 rounded-full hover:bg-white/20"
-                >
-                  <span className="text-xl">x</span>
-                </button>
+                <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mt-0.5">
+                  {ratingModal.order.restaurant}
+                </p>
               </div>
-              <p className="text-sm text-white/90">{ratingModal.order.restaurant}</p>
+              <button
+                type="button"
+                onClick={handleCloseRating}
+                className="rounded-full p-2 text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+                aria-label="Close rating modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <div className="px-6 py-6">
               <div className="mb-6">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                <p className="text-sm font-bold text-gray-900 dark:text-white mb-3">
                   Restaurant rating (out of 5)
                 </p>
                 <div className="flex items-center justify-center gap-2 mb-3">
@@ -1181,14 +1246,14 @@ Order again from this restaurant in the ${companyName} app.`
                   rows={2}
                   value={restaurantFeedbackText}
                   onChange={(e) => setRestaurantFeedbackText(e.target.value)}
-                  className="w-full rounded-xl border-2 border-gray-200 dark:border-zinc-800 bg-transparent px-4 py-2 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#EB590E] focus:border-[#EB590E] resize-none transition-all"
+                  className="w-full rounded-xl border border-gray-200 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-800/50 px-4 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--module-theme-color,#EB590E)] focus:border-[var(--module-theme-color,#EB590E)] resize-none transition-all"
                   placeholder="Restaurant feedback (optional)"
                 />
               </div>
 
               {ratingModalHasDeliveryPartner && (
                 <div className="mb-6">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                  <p className="text-sm font-bold text-gray-900 dark:text-white mb-3">
                     Delivery partner rating (out of 5)
                   </p>
                   <div className="flex items-center justify-center gap-2 mb-3">
@@ -1215,7 +1280,7 @@ Order again from this restaurant in the ${companyName} app.`
                     rows={2}
                     value={deliveryFeedbackText}
                     onChange={(e) => setDeliveryFeedbackText(e.target.value)}
-                    className="w-full rounded-xl border-2 border-gray-200 dark:border-zinc-800 bg-transparent px-4 py-2 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#EB590E] focus:border-[#EB590E] resize-none transition-all"
+                    className="w-full rounded-xl border border-gray-200 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-800/50 px-4 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--module-theme-color,#EB590E)] focus:border-[var(--module-theme-color,#EB590E)] resize-none transition-all"
                     placeholder="Delivery partner feedback (optional)"
                   />
                 </div>
@@ -1226,12 +1291,12 @@ Order again from this restaurant in the ${companyName} app.`
                 type="button"
                 disabled={ratingSubmitDisabled}
                 onClick={handleSubmitRating}
-                className="w-full rounded-xl text-white text-base font-bold py-3.5 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                className="w-full rounded-xl text-white text-base font-bold py-3.5 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg"
                 style={{
                   background:
-                    "linear-gradient(135deg, rgba(var(--module-theme-rgb,250,2,114),0.94), var(--module-theme-color,#FA0272))",
+                    "linear-gradient(135deg, var(--module-theme-color, #EB590E), rgba(var(--module-theme-rgb, 235, 89, 14), 0.85))",
                   boxShadow:
-                    "0 12px 24px rgba(var(--module-theme-rgb,250,2,114),0.30)",
+                    "0 10px 22px rgba(var(--module-theme-rgb, 235, 89, 14), 0.28)",
                 }}
               >
                 {submittingRating ? (
@@ -1248,7 +1313,7 @@ Order again from this restaurant in the ${companyName} app.`
               </button>
 
               {ratingSubmitDisabled && (
-                <p className="text-xs text-center text-red-500 mt-2">Please select all required ratings to continue</p>
+                <p className="text-xs text-center text-red-500 font-medium mt-2.5">Please select all required ratings to continue</p>
               )}
             </div>
           </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { UtensilsCrossed, ChevronRight, X } from "lucide-react";
+import { UtensilsCrossed, ChevronRight, X, Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const CookingAnimation = memo(() => (
@@ -268,12 +268,23 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
       fetchOrders();
     };
 
+    const handleOrderRated = (event) => {
+      const detail = event?.detail || {};
+      const ratedId = detail?.orderId || detail?.id;
+      if (ratedId) {
+        setDismissedKey(String(ratedId));
+      }
+      fetchOrders();
+    };
+
     window.addEventListener("orderStatusNotification", handleOrderStatusNotification);
     window.addEventListener("order-placed", handleOrderPlaced);
+    window.addEventListener("order-rated", handleOrderRated);
 
     return () => {
       window.removeEventListener("orderStatusNotification", handleOrderStatusNotification);
       window.removeEventListener("order-placed", handleOrderPlaced);
+      window.removeEventListener("order-rated", handleOrderRated);
     };
   }, [fetchOrders]);
 
@@ -333,42 +344,70 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
 
   const [dismissedKey, setDismissedKey] = useState(null);
 
-  if (!activeOrder) {
+  const deliveredOrderToRate = useMemo(() => {
+    if (activeOrder) return null;
+    return (uniqueOrders || []).find((order) => {
+      const s = getOrderStatus(order);
+      const p = getOrderPhase(order);
+      const isDelivered = s === "delivered" || s === "completed" || p === "delivered" || p === "completed";
+      if (!isDelivered) return false;
+
+      const key = order.id || order._id || order.orderId;
+      if (!key) return false;
+
+      const hasRestaurantRating = Number.isFinite(Number(order.restaurantRating));
+      const hasDeliveryPartner = !!(order.deliveryPartnerId || order.deliveryPartnerName || order.deliveryPartner);
+      const hasDeliveryRating = Number.isFinite(Number(order.deliveryPartnerRating));
+      const isAlreadyRated = order.rating || (hasRestaurantRating && (!hasDeliveryPartner || hasDeliveryRating));
+      if (isAlreadyRated) return false;
+
+      const isDismissed =
+        dismissedKey === key ||
+        localStorage.getItem("dismissed_rating_" + key) === "true" ||
+        localStorage.getItem("dismissed_card_" + key) === "true";
+      if (isDismissed) return false;
+
+      return true;
+    }) || null;
+  }, [activeOrder, uniqueOrders, dismissedKey]);
+
+  const targetOrder = activeOrder || deliveredOrderToRate;
+  if (!targetOrder) {
     return null;
   }
 
-  const currentOrderKey = activeOrder.id || activeOrder._id || activeOrder.orderId;
+  const isRatingPrompt = !activeOrder && !!deliveredOrderToRate;
+  const currentOrderKey = targetOrder.id || targetOrder._id || targetOrder.orderId;
   if (dismissedKey === currentOrderKey) {
     return null;
   }
 
-  const orderStatus = getOrderStatus(activeOrder) || "preparing";
-  const orderPhase = getOrderPhase(activeOrder);
-  if (orderStatus === "delivered" || orderStatus === "completed") {
-    return null;
-  }
+  const orderStatus = getOrderStatus(targetOrder) || "preparing";
+  const orderPhase = getOrderPhase(targetOrder);
 
   const restaurantName =
-    activeOrder.restaurantId?.restaurantName ||
-    activeOrder.restaurantId?.name ||
-    activeOrder.restaurantName ||
-    activeOrder.restaurant_name ||
-    activeOrder.restaurant ||
+    targetOrder.restaurantId?.restaurantName ||
+    targetOrder.restaurantId?.name ||
+    targetOrder.restaurantName ||
+    targetOrder.restaurant_name ||
+    targetOrder.restaurant ||
     "Restaurant";
 
   const restaurantImage = (() => {
     const img =
-      activeOrder.restaurantId?.profileImage ||
-      activeOrder.restaurantId?.logo ||
-      activeOrder.restaurantImage ||
-      activeOrder.restaurant?.profileImage ||
-      activeOrder.restaurant?.logo;
+      targetOrder.restaurantId?.profileImage ||
+      targetOrder.restaurantId?.logo ||
+      targetOrder.restaurantImage ||
+      targetOrder.restaurant?.profileImage ||
+      targetOrder.restaurant?.logo;
     if (!img) return "";
     if (typeof img === "string") return img;
     if (typeof img === "object") return img.url || img.secure_url || "";
     return "";
   })();
+
   const statusText = (() => {
+    if (isRatingPrompt) return "Rate restaurant & delivery";
     const s = String(orderStatus);
     const p = String(orderPhase);
 
@@ -388,6 +427,36 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
   const themeRgb = "var(--module-theme-rgb, 235,89,14)";
   const cardShadow = "0 8px 30px rgba(var(--module-theme-rgb, 235,89,14), 0.18)";
 
+  const handleDismiss = (e) => {
+    e.stopPropagation();
+    if (currentOrderKey) {
+      localStorage.setItem("dismissed_rating_" + currentOrderKey, "true");
+      localStorage.setItem("dismissed_card_" + currentOrderKey, "true");
+    }
+    setDismissedKey(currentOrderKey);
+  };
+
+  const handleCardClick = () => {
+    if (isRatingPrompt) {
+      navigate(`/food/user/orders?openRating=${encodeURIComponent(currentOrderKey)}`);
+    } else {
+      navigate(`/food/user/orders/${currentOrderKey}`);
+    }
+  };
+
+  const displayOrderId = (() => {
+    const raw =
+      targetOrder.orderId ||
+      targetOrder.customOrderId ||
+      targetOrder.displayOrderId ||
+      (typeof targetOrder.id === "string" && targetOrder.id.startsWith("FOD-") ? targetOrder.id : null);
+    if (raw) return raw.startsWith("#") ? raw : `#${raw}`;
+    const fallback = targetOrder.id || targetOrder._id;
+    if (!fallback) return "";
+    const str = String(fallback);
+    return str.startsWith("FOD-") ? `#${str}` : `#${str.slice(-6).toUpperCase()}`;
+  })();
+
   return (
     <AnimatePresence>
       <motion.div
@@ -398,11 +467,7 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
         className={`fixed ${hasBottomNav ? "bottom-20" : "bottom-6"} left-4 right-4 z-[9999]`}
       >
         <div 
-          onClick={() =>
-            navigate(
-              `/food/user/orders/${activeOrder.id || activeOrder._id || activeOrder.orderId}`,
-            )
-          }
+          onClick={handleCardClick}
           className="relative bg-white/95 backdrop-blur-xl rounded-[20px] p-4 border overflow-visible cursor-pointer group"
           style={{
             boxShadow: cardShadow,
@@ -418,7 +483,7 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
           />
           
           <button 
-             onClick={(e) => { e.stopPropagation(); setDismissedKey(currentOrderKey); }}
+             onClick={handleDismiss}
              className="absolute top-2 right-2 p-1.5 rounded-full transition-colors z-20 shadow-sm"
              style={{
                backgroundColor: "rgba(var(--module-theme-rgb, 235,89,14), 0.20)",
@@ -431,7 +496,7 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
 
           <div className="flex items-center gap-4 relative z-10 w-full">
             {restaurantImage ? (
-              <div className="w-12 h-12 rounded-xl border border-gray-100 overflow-hidden shadow-sm shrink-0 bg-white flex items-center justify-center">
+              <div className="w-12 h-12 rounded-xl border border-gray-100 overflow-hidden shadow-sm shrink-0 bg-white flex items-center justify-center relative">
                 <img 
                   src={restaurantImage} 
                   alt={restaurantName} 
@@ -440,36 +505,56 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
                     e.target.style.display = 'none';
                   }}
                 />
+                {isRatingPrompt && (
+                  <div className="absolute -bottom-1 -right-1 rounded-full p-0.5 shadow-sm border border-white" style={{ backgroundColor: themeColor }}>
+                    <Star className="w-3 h-3 text-white fill-white" />
+                  </div>
+                )}
+              </div>
+            ) : isRatingPrompt ? (
+              <div className="w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 shadow-sm" style={{ backgroundColor: "rgba(var(--module-theme-rgb, 235,89,14), 0.08)", borderColor: "rgba(var(--module-theme-rgb, 235,89,14), 0.2)" }}>
+                <Star className="w-6 h-6 fill-current" style={{ color: themeColor }} />
               </div>
             ) : (
               <CookingAnimation />
             )}
 
             <div className="flex-1 min-w-0 pr-4">
-              <p className="text-gray-900 font-bold text-base md:text-lg truncate tracking-tight">{restaurantName}</p>
+              <div className="flex items-center gap-2 max-w-full">
+                <p className="text-gray-900 font-bold text-base md:text-lg truncate tracking-tight">{restaurantName}</p>
+                {displayOrderId && (
+                  <span className="text-[10px] font-black tracking-wider text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-zinc-800 border border-gray-200/60 dark:border-zinc-700/60 px-2 py-0.5 rounded-full shrink-0">
+                    {displayOrderId}
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <p className="text-gray-500 font-medium text-xs md:text-sm truncate">{statusText}</p>
-                <ChevronRight className="w-3.5 h-3.5 shrink-0 group-hover:translate-x-1 transition-transform" style={{ color: themeColor }} />
+                <p className="font-bold text-xs md:text-sm truncate" style={{ color: isRatingPrompt ? themeColor : "#6B7280" }}>
+                  {statusText}
+                </p>
+                <ChevronRight className="w-4 h-4 shrink-0 group-hover:translate-x-1 transition-transform" style={{ color: themeColor }} />
               </div>
             </div>
 
-            <div
-              className="shadow-lg rounded-xl px-4 py-2 shrink-0 flex flex-col items-center justify-center border"
-              style={{
-                background: `linear-gradient(135deg, ${themeColor}, rgba(${themeRgb}, 0.84))`,
-                boxShadow: "0 10px 18px rgba(var(--module-theme-rgb, 235,89,14), 0.25)",
-                borderColor: "rgba(var(--module-theme-rgb, 235,89,14), 0.35)",
-              }}
-            >
-              <p className="text-orange-50 text-[10px] font-bold uppercase tracking-wider opacity-95 leading-tight mb-[2px]">
-                arriving in
-              </p>
-              <p className="text-white text-base md:text-[17px] font-black leading-tight drop-shadow-sm">
-                {timeRemaining !== null
-                  ? `${Math.max(1, timeRemaining)} min`
-                  : "--"}
-              </p>
-            </div>
+            {!isRatingPrompt && (
+              <div
+                className="shadow-lg rounded-xl px-4 py-2 shrink-0 flex flex-col items-center justify-center border"
+                style={{
+                  background: `linear-gradient(135deg, ${themeColor}, rgba(${themeRgb}, 0.84))`,
+                  boxShadow: "0 10px 18px rgba(var(--module-theme-rgb, 235,89,14), 0.25)",
+                  borderColor: "rgba(var(--module-theme-rgb, 235,89,14), 0.35)",
+                }}
+              >
+                <p className="text-orange-50 text-[10px] font-bold uppercase tracking-wider opacity-95 leading-tight mb-[2px]">
+                  arriving in
+                </p>
+                <p className="text-white text-base md:text-[17px] font-black leading-tight drop-shadow-sm">
+                  {timeRemaining !== null
+                    ? `${Math.max(1, timeRemaining)} min`
+                    : "--"}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </motion.div>
