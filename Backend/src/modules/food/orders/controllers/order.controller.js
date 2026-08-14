@@ -45,6 +45,18 @@ export async function verifyPaymentController(req, res, next) {
     }
 }
 
+export async function abandonPendingPaymentController(req, res, next) {
+    try {
+        const userId = req.user?.userId;
+        const orderId = req.params.orderId;
+        const reason = req.body?.reason || 'Payment cancelled by user';
+        const order = await orderService.abandonPendingPaymentOrder(orderId, userId, reason);
+        return sendResponse(res, 200, 'Pending payment cancelled', { order });
+    } catch (err) {
+        next(err);
+    }
+}
+
 export async function listOrdersUserController(req, res, next) {
     try {
         const userId = req.user?.userId;

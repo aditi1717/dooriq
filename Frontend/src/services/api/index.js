@@ -2692,6 +2692,10 @@ export const orderAPI = {
     apiClient.patch(`/food/orders/${String(orderId)}/cancel`, body ?? {}, {
       contextModule: "user",
     }),
+  abandonPendingPayment: (orderId, body = {}) =>
+    apiClient.patch(`/food/orders/${String(orderId)}/abandon-payment`, body ?? {}, {
+      contextModule: "user",
+    }),
   updateOrderInstructions: (orderId, instructions) =>
     apiClient.patch(`/food/orders/${String(orderId)}/instructions`, { instructions }, {
       contextModule: "user",

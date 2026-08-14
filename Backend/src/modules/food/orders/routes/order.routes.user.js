@@ -3,6 +3,7 @@ import {
     calculateOrderController,
     createOrderController,
     verifyPaymentController,
+    abandonPendingPaymentController,
     listOrdersUserController,
     getOrderPaymentsUserController,
     getOrderByIdUserController,
@@ -20,6 +21,7 @@ router.post('/verify-payment', verifyPaymentController);
 router.get('/', listOrdersUserController);
 router.get('/:orderId/payments', getOrderPaymentsUserController);
 router.get('/:orderId/drop-otp', getOrderDropOtpUserController);
+router.patch('/:orderId/abandon-payment', abandonPendingPaymentController);
 router.get('/:orderId', getOrderByIdUserController);
 router.patch('/:orderId/cancel', cancelOrderController);
 router.patch('/:orderId/ratings', submitOrderRatingsController);

@@ -2007,6 +2007,17 @@ export default function Cart() {
 
       // Get company name for Razorpay
       const companyName = await getCompanyNameAsync()
+      const pendingPaymentOrderId = order?._id || order?.id || order?.orderMongoId
+      let paymentFlowCompleted = false
+      const abandonPendingPaymentOrder = async (reason = "Payment cancelled by user") => {
+        if (!pendingPaymentOrderId || paymentFlowCompleted) return
+        try {
+          await orderAPI.abandonPendingPayment(pendingPaymentOrderId, { reason })
+          debugLog("? Pending payment order cancelled and coupon reservation released:", pendingPaymentOrderId)
+        } catch (cleanupError) {
+          debugWarn("Unable to cleanup pending payment order:", cleanupError)
+        }
+      }
 
       // Initialize Razorpay payment
       await initRazorpayPayment({
@@ -2027,6 +2038,7 @@ export default function Cart() {
           restaurantId: restaurantId || "unknown"
         },
         handler: async (response) => {
+          paymentFlowCompleted = true
           try {
             debugLog("? Payment successful, verifying...", {
               razorpay_order_id: response.razorpay_order_id,
@@ -2079,11 +2091,14 @@ export default function Cart() {
           if (error?.code !== 'PAYMENT_CANCELLED' && error?.message !== 'PAYMENT_CANCELLED') {
             const errorMessage = error?.description || error?.message || "Payment failed. Please try again."
             alert(errorMessage)
+          } else {
+            void abandonPendingPaymentOrder("Payment cancelled by user")
           }
           setIsPlacingOrder(false)
         },
         onClose: () => {
           debugLog("?? Payment modal closed by user")
+          void abandonPendingPaymentOrder("Payment modal closed by user")
           setIsPlacingOrder(false)
         }
       })

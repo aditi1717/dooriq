@@ -1301,6 +1301,7 @@ export async function cancelOrder(orderId, userId, reason) {
     order.payment.refund = { status: "failed", amount: order.pricing.total };
   }
 
+  await revertCouponUsageOnCancellation(order);
   await order.save();
 
   enqueueOrderEvent("order_cancelled_by_user", {
@@ -1372,6 +1373,51 @@ export async function cancelOrder(orderId, userId, reason) {
     }
   } catch (err) {
     logger.warn(`cancelOrder socket emit failed: ${err?.message || err}`);
+  }
+
+  return normalizeOrderForClient(order);
+}
+
+export async function abandonPendingPaymentOrder(orderId, userId, reason = "Payment cancelled by user") {
+  const identity = buildOrderIdentityFilter(orderId);
+  if (!identity) throw new ValidationError("Order id required");
+
+  const order = await FoodOrder.findOne({
+    ...identity,
+    userId: new mongoose.Types.ObjectId(userId),
+  });
+  if (!order) throw new NotFoundError("Order not found");
+
+  const paymentMethod = String(order.payment?.method || "").toLowerCase();
+  const paymentStatus = String(order.payment?.status || "").toLowerCase();
+  if (order.orderStatus !== "pending_payment" || paymentMethod !== "razorpay" || paymentStatus === "paid") {
+    throw new ValidationError("Only pending online payment orders can be cancelled here");
+  }
+
+  const from = order.orderStatus;
+  order.orderStatus = "cancelled_by_user";
+  order.payment.status = "failed";
+  order.note = String(reason || "").trim() || "Payment cancelled by user";
+  pushStatusHistory(order, {
+    byRole: "USER",
+    byId: userId,
+    from,
+    to: "cancelled_by_user",
+    note: order.note,
+  });
+
+  await revertCouponUsageOnCancellation(order);
+  await order.save();
+
+  try {
+    await foodTransactionService.updateTransactionStatus(order._id, "payment_abandoned", {
+      status: "failed",
+      note: order.note,
+      recordedByRole: "USER",
+      recordedById: userId,
+    });
+  } catch (err) {
+    logger.warn(`abandonPendingPaymentOrder transaction sync failed: ${err?.message || err}`);
   }
 
   return normalizeOrderForClient(order);
