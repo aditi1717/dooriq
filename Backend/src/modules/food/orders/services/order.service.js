@@ -436,8 +436,149 @@ function toObjectId(id, fieldName = 'ID') {
   return new mongoose.Types.ObjectId(id);
 }
 
+const couponLimitErrorMessage = (reason, offer = {}) => {
+  const errorMap = {
+    not_found: "Invalid coupon code",
+    inactive: "Coupon is currently inactive",
+    not_started: "Coupon offer has not started yet",
+    expired: "Coupon offer has expired",
+    restaurant_mismatch: "Coupon is not valid for this restaurant",
+    min_order_not_met: `Minimum order value of INR ${offer.minOrderValue || 0} not met`,
+    global_limit_reached: "Coupon usage limit has been reached",
+    per_user_limit_reached: "You have already used this coupon",
+    pending_order_exists: "First-time coupon is not valid as you currently have an active/pending order",
+    delivered_order_exists: "First-time coupon is only valid for your very first order",
+    user_cancelled_order_exists: "First-time coupon is not applicable as your previous order was cancelled by you"
+  };
+  return errorMap[reason] || "Coupon is not applicable for this order";
+};
+
+async function reserveCouponUsage({ couponCode, userId, restaurantId, subtotal }) {
+  const code = couponCode ? String(couponCode).trim().toUpperCase() : "";
+  if (!code) return null;
+
+  const offer = await FoodOffer.findOne({ couponCode: code }).lean();
+  if (!offer) {
+    throw new ValidationError("Invalid coupon code");
+  }
+
+  const ineligibilityReason = await getCouponIneligibilityReason({
+    offer,
+    userId,
+    restaurantId,
+    subtotal,
+  });
+  if (ineligibilityReason) {
+    throw new ValidationError(couponLimitErrorMessage(ineligibilityReason, offer));
+  }
+
+  const usageLimit = Number(offer.usageLimit || 0);
+  const globalFilter = { _id: offer._id };
+  if (usageLimit > 0) {
+    globalFilter.$expr = {
+      $lt: [{ $ifNull: ["$usedCount", 0] }, usageLimit]
+    };
+  }
+
+  const globalUpdate = await FoodOffer.updateOne(globalFilter, { $inc: { usedCount: 1 } });
+  if (globalUpdate.modifiedCount !== 1) {
+    throw new ValidationError("Coupon usage limit has been reached");
+  }
+
+  const reservation = {
+    offerId: offer._id,
+    userId: toObjectId(userId, 'User ID'),
+    globalReserved: true,
+    userReserved: false
+  };
+
+  const perUserLimit = Number(offer.perUserLimit || 0);
+  if (perUserLimit > 0) {
+    try {
+      const userUpdate = await FoodOfferUsage.updateOne(
+        {
+          offerId: offer._id,
+          userId: reservation.userId,
+          $or: [
+            { count: { $lt: perUserLimit } },
+            { count: { $exists: false } }
+          ]
+        },
+        {
+          $inc: { count: 1 },
+          $set: { lastUsedAt: new Date() },
+          $setOnInsert: { offerId: offer._id, userId: reservation.userId }
+        },
+        { upsert: true }
+      );
+
+      if (userUpdate.modifiedCount !== 1 && userUpdate.upsertedCount !== 1) {
+        await rollbackCouponUsage(reservation);
+        throw new ValidationError("You have already used this coupon");
+      }
+
+      reservation.userReserved = true;
+    } catch (error) {
+      if (error instanceof ValidationError) throw error;
+      await rollbackCouponUsage(reservation);
+      if (error?.code === 11000) {
+        throw new ValidationError("You have already used this coupon");
+      }
+      throw error;
+    }
+  } else {
+    try {
+      await FoodOfferUsage.updateOne(
+        { offerId: offer._id, userId: reservation.userId },
+        {
+          $inc: { count: 1 },
+          $set: { lastUsedAt: new Date() },
+          $setOnInsert: { offerId: offer._id, userId: reservation.userId }
+        },
+        { upsert: true }
+      );
+    } catch (error) {
+      if (error?.code !== 11000) {
+        await rollbackCouponUsage(reservation);
+        throw error;
+      }
+      await FoodOfferUsage.updateOne(
+        { offerId: offer._id, userId: reservation.userId },
+        { $inc: { count: 1 }, $set: { lastUsedAt: new Date() } }
+      );
+    }
+    reservation.userReserved = true;
+  }
+
+  return reservation;
+}
+
+async function rollbackCouponUsage(reservation) {
+  if (!reservation?.offerId) return;
+
+  const tasks = [];
+  if (reservation.globalReserved) {
+    tasks.push(FoodOffer.updateOne(
+      { _id: reservation.offerId, usedCount: { $gt: 0 } },
+      { $inc: { usedCount: -1 } }
+    ));
+  }
+  if (reservation.userReserved && reservation.userId) {
+    tasks.push(FoodOfferUsage.updateOne(
+      { offerId: reservation.offerId, userId: reservation.userId, count: { $gt: 0 } },
+      { $inc: { count: -1 }, $set: { lastUsedAt: new Date() } }
+    ));
+  }
+
+  await Promise.all(tasks).catch((error) => {
+    logger.error(`Coupon reservation rollback failed: ${error?.message || error}`);
+  });
+}
+
 // ----- Create order -----
 export async function createOrder(userId, dto) {
+  let couponReservation = null;
+  let shouldRollbackCouponReservation = false;
   try {
     const restaurantId = toObjectId(dto.restaurantId, 'Restaurant ID');
     const restaurant = await FoodRestaurant.findById(restaurantId)
@@ -705,7 +846,18 @@ export async function createOrder(userId, dto) {
       }
     }
 
+    if (normalizedPricing.couponCode) {
+      couponReservation = await reserveCouponUsage({
+        couponCode: normalizedPricing.couponCode,
+        userId,
+        restaurantId,
+        subtotal: normalizedPricing.subtotal,
+      });
+      shouldRollbackCouponReservation = true;
+    }
+
     await order.save();
+    shouldRollbackCouponReservation = false;
     void addOrderJob(
       {
         action: "ORDER_ACCEPTANCE_TIMEOUT_CHECK",
@@ -727,6 +879,8 @@ export async function createOrder(userId, dto) {
         await userWalletService.deductWalletBalance(userId, order.pricing.total, `Payment for order #${order.order_id || order._id}`, { orderId: order._id });
       } catch (err) {
         await FoodOrder.deleteOne({ _id: order._id });
+        await rollbackCouponUsage(couponReservation);
+        couponReservation = null;
         throw err;
       }
     }
@@ -767,27 +921,12 @@ export async function createOrder(userId, dto) {
       logger.warn(`Notifications failed for order ${order._id}: ${err.message}`);
     }
 
-    // Handle Coupon usage
-    const couponCode = dto.pricing?.couponCode ? String(dto.pricing.couponCode).trim().toUpperCase() : "";
-    if (couponCode) {
-      try {
-        const offer = await FoodOffer.findOne({ couponCode }).lean();
-        if (offer) {
-          await FoodOffer.updateOne({ _id: offer._id }, { $inc: { usedCount: 1 } });
-          await FoodOfferUsage.updateOne(
-            { offerId: offer._id, userId: toObjectId(userId, 'User ID') },
-            { $inc: { count: 1 }, $set: { lastUsedAt: new Date() } },
-            { upsert: true },
-          );
-        }
-      } catch (err) {
-        logger.error(`Coupon usage update failed: ${err.message}`);
-      }
-    }
-
     const saved = normalizeOrderForClient(order);
     return { order: saved, razorpay: razorpayPayload };
   } catch (err) {
+    if (shouldRollbackCouponReservation && couponReservation) {
+      await rollbackCouponUsage(couponReservation);
+    }
     logger.error(`Order placement error: ${err.message}`, { stack: err.stack, userId, dto });
     if (err instanceof ValidationError || err instanceof ForbiddenError || err instanceof NotFoundError) {
       throw err;
