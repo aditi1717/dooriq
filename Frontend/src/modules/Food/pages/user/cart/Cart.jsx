@@ -2209,7 +2209,7 @@ export default function Cart() {
       </div>
 
       {/* Scrollable Content Area */}
-      <div className={`flex-1 overflow-y-auto overflow-x-hidden ${isKeyboardOpen ? "pb-4" : "pb-[250px] md:pb-[300px]"}`}>
+      <div className={`flex-1 overflow-y-auto overflow-x-hidden ${isKeyboardOpen ? "pb-4" : "pb-[380px] md:pb-[340px]"}`}>
         {/* Savings Banner */}
         {savings > 0 && (
           <div className="bg-blue-100 dark:bg-blue-900/20 px-4 md:px-6 py-2 md:py-3 flex-shrink-0">
