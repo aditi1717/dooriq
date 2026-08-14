@@ -1547,6 +1547,16 @@ export async function updateOrderStatusRestaurant(
     to: orderStatus,
     note: note || "",
   });
+
+  if (String(orderStatus).includes("cancel")) {
+    try {
+      await applyCancellationRefund(order, { cancelledBy: 'restaurant' });
+    } catch (err) {
+      logger.warn(`Restaurant cancellation refund failed for order ${order._id}: ${err?.message || err}`);
+      order.payment.refund = { status: "failed", amount: order.pricing?.total || 0 };
+    }
+  }
+
   await order.save();
 
   if (String(orderStatus) === "delivered") {
@@ -1733,16 +1743,6 @@ export async function updateOrderStatusRestaurant(
         from,
         to: orderStatus
     });
-
-    if (String(orderStatus).includes("cancel")) {
-      try {
-        await applyCancellationRefund(order, { cancelledBy: 'restaurant' });
-      } catch (err) {
-        console.error(`Automated refund failed for Order ${order._id.toString()} (Restaurant Cancel):`, err);
-        order.payment.refund = { status: "failed", amount: order.pricing.total };
-      }
-      await order.save();
-    }
 
     return normalizeOrderForClient(order);
 }
