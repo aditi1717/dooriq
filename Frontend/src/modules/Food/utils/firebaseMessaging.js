@@ -53,6 +53,43 @@ function normalizeModuleFromPath(pathname = window.location.pathname) {
   return "user";
 }
 
+function getTargetModuleFromPayload(payload = {}) {
+  const data = isRecord(payload?.data) ? payload.data : {};
+  const explicitTarget = String(
+    data.module ||
+      data.targetModule ||
+      data.ownerType ||
+      data.targetType ||
+      "",
+  ).toLowerCase();
+
+  if (explicitTarget.includes("restaurant")) return "restaurant";
+  if (explicitTarget.includes("delivery")) return "delivery";
+  if (explicitTarget.includes("admin")) return "admin";
+  if (explicitTarget.includes("user")) return "user";
+
+  const targetUrl = String(
+    data.targetUrl ||
+      data.link ||
+      data.click_action ||
+      payload?.fcmOptions?.link ||
+      "",
+  ).toLowerCase();
+
+  if (targetUrl.includes("/restaurant") && !targetUrl.includes("/restaurants")) return "restaurant";
+  if (targetUrl.includes("/delivery")) return "delivery";
+  if (targetUrl.includes("/admin")) return "admin";
+  if (targetUrl.includes("/user")) return "user";
+
+  const eventType = String(data.type || data.eventType || data.event || "").toLowerCase();
+  if (eventType.includes("restaurant")) return "restaurant";
+  if (eventType.includes("delivery")) return "delivery";
+  if (eventType.includes("admin")) return "admin";
+  if (eventType.includes("user")) return "user";
+
+  return normalizeModuleFromPath();
+}
+
 function hasModuleSession(moduleName = normalizeModuleFromPath()) {
   if (typeof window === "undefined") return false;
   if (!moduleName) return false;
@@ -274,8 +311,7 @@ function ensurePushSoundAudio() {
   return pushSoundAudio;
 }
 
-function createPushPlaybackAudio() {
-  const moduleName = normalizeModuleFromPath();
+function createPushPlaybackAudio(moduleName = normalizeModuleFromPath()) {
   const audioSources = getPushSoundSources(moduleName).map((source) =>
     typeof window === "undefined" || !source.startsWith("/")
       ? source
@@ -383,8 +419,15 @@ async function triggerWebViewNativeNotification(payload = {}) {
 
 async function playPushSound(payload = {}) {
   try {
+    const moduleName = getTargetModuleFromPayload(payload);
+    if (!hasModuleSession(moduleName)) {
+      pushDebugLog(PUSH_DEBUG_PREFIX, "Skipping push sound: target module is logged out", { moduleName });
+      return;
+    }
+
     pushDebugLog(PUSH_DEBUG_PREFIX, "playPushSound called", {
       notificationKey: getNotificationKey(payload),
+      moduleName,
       pushSoundUnlocked,
       notificationPermission: typeof Notification !== "undefined" ? Notification.permission : "unsupported",
       payload,
@@ -406,7 +449,7 @@ async function playPushSound(payload = {}) {
       return;
     }
 
-    const players = createPushPlaybackAudio();
+    const players = createPushPlaybackAudio(moduleName);
     for (const audio of players) {
       try {
         audio.currentTime = 0;
@@ -616,6 +659,27 @@ function setSavedToken(moduleName, token) {
   localStorage.setItem(`${tokenCachePrefix}${moduleName}`, token);
 }
 
+function clearSavedToken(moduleName) {
+  localStorage.removeItem(`${tokenCachePrefix}${moduleName}`);
+}
+
+async function getNativeWebViewFcmToken(moduleName) {
+  if (!isFlutterWebView()) return "";
+
+  const handlerNames = ["getFcmToken", "getFCMToken", "getPushToken", "getFirebaseToken"];
+  for (const handlerName of handlerNames) {
+    try {
+      const token = await window.flutter_inappwebview.callHandler(handlerName, { module: moduleName });
+      const normalizedToken = String(token || "").trim();
+      if (normalizedToken.length >= 20) return normalizedToken;
+    } catch {
+      // Try next handler.
+    }
+  }
+
+  return "";
+}
+
 async function saveTokenByModule(moduleName, token, platform = "web") {
   pushDebugLog(PUSH_DEBUG_PREFIX, "saveTokenByModule starting", { moduleName, platform, tokenPreview: `${token?.slice(0, 10)}...` });
   if (moduleName === "restaurant") {
@@ -638,29 +702,19 @@ async function saveTokenByModule(moduleName, token, platform = "web") {
 async function registerNativeWebViewFcmToken(moduleName) {
   if (!isFlutterWebView()) return;
 
-  const handlerNames = ["getFcmToken", "getFCMToken", "getPushToken", "getFirebaseToken"];
-  for (const handlerName of handlerNames) {
-    try {
-      const token = await window.flutter_inappwebview.callHandler(handlerName, { module: moduleName });
-      const normalizedToken = String(token || "").trim();
-      if (normalizedToken.length < 20) continue;
+  const normalizedToken = await getNativeWebViewFcmToken(moduleName);
+  if (!normalizedToken) return;
 
-      const lastSavedToken = getSavedToken(moduleName);
-      if (lastSavedToken !== normalizedToken) {
-        await saveTokenByModule(moduleName, normalizedToken, "mobile");
-        setSavedToken(moduleName, normalizedToken);
-      }
-
-      pushDebugLog(PUSH_DEBUG_PREFIX, "Registered native WebView FCM token", {
-        moduleName,
-        handlerName,
-        tokenPreview: `${normalizedToken.slice(0, 12)}...`,
-      });
-      return;
-    } catch {
-      // Try next handler.
-    }
+  const lastSavedToken = getSavedToken(moduleName);
+  if (lastSavedToken !== normalizedToken) {
+    await saveTokenByModule(moduleName, normalizedToken, "mobile");
+    setSavedToken(moduleName, normalizedToken);
   }
+
+  pushDebugLog(PUSH_DEBUG_PREFIX, "Registered native WebView FCM token", {
+    moduleName,
+    tokenPreview: `${normalizedToken.slice(0, 12)}...`,
+  });
 }
 
 function showForegroundNotification(payload = {}) {
@@ -668,7 +722,7 @@ function showForegroundNotification(payload = {}) {
     pushDebugWarn(PUSH_DEBUG_PREFIX, "Ignoring malformed foreground notification payload", { payload });
     return;
   }
-  const moduleName = normalizeModuleFromPath();
+  const moduleName = getTargetModuleFromPayload(payload);
   if (!hasModuleSession(moduleName)) {
     pushDebugLog(PUSH_DEBUG_PREFIX, "Skipping foreground notification: module is logged out", { moduleName });
     return;
@@ -930,7 +984,55 @@ export async function registerWebPushForCurrentModule(pathname = window.location
   return null;
 }
 
+export async function cleanupPushForModule(moduleName = normalizeModuleFromPath()) {
+  if (typeof window === "undefined") return;
 
+  const normalizedModule = String(moduleName || "").trim().toLowerCase();
+  if (!normalizedModule) return;
+
+  const nativeToken = await getNativeWebViewFcmToken(normalizedModule);
+  const tokens = [getSavedToken(normalizedModule), nativeToken]
+    .map((token) => String(token || "").trim())
+    .filter(Boolean);
+
+  const seen = new Set();
+  for (const token of tokens) {
+    if (seen.has(token)) continue;
+    seen.add(token);
+
+    for (const platform of ["web", "mobile"]) {
+      try {
+        if (normalizedModule === "restaurant") {
+          await restaurantAPI.removeFcmToken(token, platform);
+        } else if (normalizedModule === "delivery") {
+          await deliveryAPI.removeFcmToken(token, platform);
+        } else if (normalizedModule === "admin") {
+          await adminAPI.removeFcmToken(token, { platform });
+        } else if (normalizedModule === "user") {
+          await userAPI.removeFcmToken(token, { platform });
+        }
+      } catch (error) {
+        pushDebugWarn(PUSH_DEBUG_PREFIX, "Failed to remove module push token during cleanup", {
+          moduleName: normalizedModule,
+          platform,
+          error: error?.message || error,
+        });
+      }
+    }
+  }
+
+  clearSavedToken(normalizedModule);
+  lastWebRegistrationAtByModule.delete(normalizedModule);
+
+  try {
+    if (pushSoundAudio) {
+      pushSoundAudio.pause();
+      pushSoundAudio.currentTime = 0;
+    }
+  } catch {
+    // Ignore audio cleanup failures.
+  }
+}
 
 
 

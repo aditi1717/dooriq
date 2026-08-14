@@ -110,10 +110,6 @@ const ForgotPassword = lazy(() => import("@food/pages/restaurant/auth/ForgotPass
 
 const VerificationPending = lazy(() => import("@food/pages/restaurant/auth/VerificationPending"))
 
-const PostApprovalPayment = lazy(() => import("@food/pages/restaurant/auth/PostApprovalPayment"))
-
-
-
 export default function RestaurantRouter() {
   useEffect(() => {
     try {
@@ -168,7 +164,6 @@ export default function RestaurantRouter() {
       void import("@food/pages/restaurant/auth/ForgotPassword")
       void import("@food/pages/restaurant/Onboarding")
       void import("@food/pages/restaurant/auth/VerificationPending")
-      void import("@food/pages/restaurant/auth/PostApprovalPayment")
     }
 
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
@@ -199,10 +194,6 @@ export default function RestaurantRouter() {
         <Route path="forgot-password" element={<AuthRedirect module="restaurant"><ForgotPassword /></AuthRedirect>} />
 
         <Route path="pending-verification" element={<VerificationPending />} />
-
-        <Route element={<ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login"><PostApprovalPayment /></ProtectedRoute>} path="onboarding-payment" />
-
-
 
         {/* Protected Routes */}
 

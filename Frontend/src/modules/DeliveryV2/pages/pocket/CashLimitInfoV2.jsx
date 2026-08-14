@@ -3,6 +3,7 @@ import {
   ArrowLeft, Loader2, IndianRupee, HelpCircle,
   ShieldCheck, AlertTriangle
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { deliveryAPI } from '@food/api';
 import { toast } from 'sonner';
 import { formatCurrency } from '@food/utils/currency';
@@ -16,6 +17,7 @@ import useDeliveryBackNavigation from '../../hooks/useDeliveryBackNavigation';
  */
 export const CashLimitInfoV2 = () => {
   const goBack = useDeliveryBackNavigation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [walletState, setWalletState] = useState({
      totalCashLimit: 0,
@@ -144,6 +146,18 @@ export const CashLimitInfoV2 = () => {
              </div>
 
              <div className="pt-2">
+                <button
+                  onClick={() => navigate('/food/delivery/pocket')}
+                  className="w-full py-4 rounded-[20px] font-black text-sm uppercase tracking-widest active:scale-[0.98] transition-all mb-3 disabled:bg-gray-200 disabled:text-gray-400"
+                  disabled={walletState.cashInHand <= 0}
+                  style={walletState.cashInHand > 0 ? {
+                    background: "linear-gradient(135deg, rgba(var(--module-theme-rgb, 0,183,97), 0.88), var(--module-theme-color, #00B761))",
+                    boxShadow: "0 8px 20px rgba(var(--module-theme-rgb, 0,183,97), 0.30)",
+                    color: "#fff",
+                  } : undefined}
+                >
+                  {walletState.cashInHand > 0 ? "Settle Cash Limit" : "No Cash To Settle"}
+                </button>
                 <button 
                   onClick={goBack}
                   className="w-full py-4 text-white rounded-[20px] font-black text-sm uppercase tracking-widest active:scale-[0.98] transition-all"

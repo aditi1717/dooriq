@@ -194,14 +194,30 @@ export default function HubFinance() {
   }, [financeData, pastCyclesData])
 
   const getItemAmount = (order) => {
-    return Number(
+    const fromKnownFields = Number(
+      order?.itemAmount ??
       order?.pricing?.subtotal ??
       order?.subtotal ??
       order?.itemsSubtotal ??
       order?.itemTotal ??
-      order?.totalAmount ??
       0
     )
+    if (Number.isFinite(fromKnownFields) && fromKnownFields > 0) {
+      return fromKnownFields
+    }
+
+    const items = Array.isArray(order?.items) ? order.items : []
+    return items.reduce((sum, item) => {
+      const quantity = Math.max(1, Number(item?.quantity || item?.qty || 1) || 1)
+      const unitPrice = Number(
+        item?.price ??
+        item?.unitPrice ??
+        item?.foodPrice ??
+        item?.itemPrice ??
+        0
+      ) || 0
+      return sum + (unitPrice * quantity)
+    }, 0)
   }
 
   const invoiceSummary = useMemo(() => {
@@ -799,12 +815,13 @@ export default function HubFinance() {
                   <div className="py-8 text-center text-gray-500">Loading...</div>
                 ) : (
                   <>
-                    <p className="text-4xl font-bold text-gray-900 mb-2">
-                      ₹{(financeData?.currentCycle?.netAvailable ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <p className="text-4xl font-bold text-gray-900 mb-1">
+                      ₹{Number(financeData?.currentCycle?.totalEarnings ?? financeData?.currentCycle?.estimatedPayout ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
-                    <p className="text-sm text-gray-600 mb-4">
-                      {financeData?.currentCycle?.totalOrders || 0} {financeData?.currentCycle?.totalOrders === 1 ? 'order' : 'orders'}
-                    </p>
+                    <div className="flex items-center justify-between text-xs text-gray-600 mb-4">
+                      <span>{financeData?.currentCycle?.totalOrders || 0} {financeData?.currentCycle?.totalOrders === 1 ? 'order' : 'orders'}</span>
+                      <span className="font-medium">Withdrawable Net: <strong className="text-gray-900 font-bold">₹{Number(financeData?.currentCycle?.netAvailable ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                    </div>
                     <button
                       onClick={() => {
                         setShowWithdrawalModal(true);
@@ -1094,39 +1111,54 @@ export default function HubFinance() {
                     {/* Show past cycles orders if available */}
                     {pastCyclesData && pastCyclesData.orders && pastCyclesData.orders.length > 0 ? (
                       <div className="bg-white rounded-lg p-4 space-y-3">
-                        {pastCyclesData.orders.map((order, index) => (
-                          <div key={order.orderId || index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <p className="text-sm font-semibold text-gray-900 mb-1">
-                                  Order ID: {order.orderId || 'N/A'}
-                                </p>
-                                <p className="text-xs text-gray-600">
-                                  {order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'}
-                                </p>
-                                {Number(order.discount || 0) > 0 && (
-                                  <p className="mt-1 text-[11px] font-medium text-rose-600">
-                                    Discount ₹{Number(order.restaurantDiscountShare || order.discount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    {Number(order.adminDiscountShare || 0) > 0
-                                      ? ` | Admin bear ₹${Number(order.adminDiscountShare || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                      : ""}
-                                    {Number(order.restaurantDiscountShare || 0) > 0 && Number(order.discount || 0) > Number(order.restaurantDiscountShare || 0)
-                                      ? ` | Total coupon ₹${Number(order.discount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                      : ""}
+                        {pastCyclesData.orders.map((order, index) => {
+                          const isCancelled = String(order.orderStatus || '').toLowerCase().includes('cancel')
+                          const isDelivered = String(order.orderStatus || '').toLowerCase() === 'delivered' || String(order.orderStatus || '').toLowerCase() === 'completed'
+                          return (
+                            <div key={order.orderId || index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
+                              <div className="flex justify-between items-start gap-2">
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <p className="text-sm font-semibold text-gray-900">
+                                      Order ID: {order.orderId || 'N/A'}
+                                    </p>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                                      isDelivered
+                                        ? 'bg-green-100 text-green-700'
+                                        : isCancelled
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-amber-100 text-amber-700'
+                                    }`}>
+                                      {String(order.orderStatus || 'Pending').replace(/_/g, ' ')}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-600">
+                                    {order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'}
                                   </p>
-                                )}
-                              </div>
-                              <div className="text-right ml-4">
-                                <p className="text-sm font-bold text-gray-900">
-                                  ₹{(order.payout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  Earning
-                                </p>
+                                  {Number(order.discount || 0) > 0 && (
+                                    <p className="mt-1 text-[11px] font-medium text-rose-600">
+                                      Discount ₹{Number(order.restaurantDiscountShare || order.discount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      {Number(order.adminDiscountShare || 0) > 0
+                                        ? ` | Admin bear ₹${Number(order.adminDiscountShare || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        : ""}
+                                      {Number(order.restaurantDiscountShare || 0) > 0 && Number(order.discount || 0) > Number(order.restaurantDiscountShare || 0)
+                                        ? ` | Total coupon ₹${Number(order.discount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        : ""}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="text-right ml-4 flex-shrink-0">
+                                  <p className="text-sm font-bold text-gray-900">
+                                    ₹{(order.payout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    Earning
+                                  </p>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     ) : (pastCyclesData && pastCyclesData.orders && pastCyclesData.orders.length === 0) ? (
                       <div className="bg-white rounded-lg p-8 text-center border border-dashed border-gray-300">
@@ -1137,39 +1169,54 @@ export default function HubFinance() {
                     {/* Show current cycle orders if past cycles data is not requested or not being viewed */}
                     {(!pastCyclesData || !pastCyclesData.orders) && !loadingPastCycles && financeData?.currentCycle?.orders && financeData.currentCycle.orders.length > 0 && (
                       <div className="bg-white rounded-lg p-4 space-y-3">
-                        {financeData.currentCycle.orders.map((order, index) => (
-                          <div key={order.orderId || index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <p className="text-sm font-semibold text-gray-900 mb-1">
-                                  Order ID: {order.orderId || 'N/A'}
-                                </p>
-                                <p className="text-xs text-gray-600">
-                                  {order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'}
-                                </p>
-                                {Number(order.discount || 0) > 0 && (
-                                  <p className="mt-1 text-[11px] font-medium text-rose-600">
-                                    Discount ₹{Number(order.restaurantDiscountShare || order.discount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    {Number(order.adminDiscountShare || 0) > 0
-                                      ? ` | Admin bear ₹${Number(order.adminDiscountShare || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                      : ""}
-                                    {Number(order.restaurantDiscountShare || 0) > 0 && Number(order.discount || 0) > Number(order.restaurantDiscountShare || 0)
-                                      ? ` | Total coupon ₹${Number(order.discount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                      : ""}
+                        {financeData.currentCycle.orders.map((order, index) => {
+                          const isCancelled = String(order.orderStatus || '').toLowerCase().includes('cancel')
+                          const isDelivered = String(order.orderStatus || '').toLowerCase() === 'delivered' || String(order.orderStatus || '').toLowerCase() === 'completed'
+                          return (
+                            <div key={order.orderId || index} className="border-b border-gray-200 pb-3 last:border-b-0 last:pb-0">
+                              <div className="flex justify-between items-start gap-2">
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <p className="text-sm font-semibold text-gray-900">
+                                      Order ID: {order.orderId || 'N/A'}
+                                    </p>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                                      isDelivered
+                                        ? 'bg-green-100 text-green-700'
+                                        : isCancelled
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-amber-100 text-amber-700'
+                                    }`}>
+                                      {String(order.orderStatus || 'Pending').replace(/_/g, ' ')}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-600">
+                                    {order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'}
                                   </p>
-                                )}
-                              </div>
-                              <div className="text-right ml-4">
-                                <p className="text-sm font-bold text-gray-900">
-                                  ₹{(order.payout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  Earning
-                                </p>
+                                  {Number(order.discount || 0) > 0 && (
+                                    <p className="mt-1 text-[11px] font-medium text-rose-600">
+                                      Discount ₹{Number(order.restaurantDiscountShare || order.discount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      {Number(order.adminDiscountShare || 0) > 0
+                                        ? ` | Admin bear ₹${Number(order.adminDiscountShare || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        : ""}
+                                      {Number(order.restaurantDiscountShare || 0) > 0 && Number(order.discount || 0) > Number(order.restaurantDiscountShare || 0)
+                                        ? ` | Total coupon ₹${Number(order.discount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        : ""}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="text-right ml-4 flex-shrink-0">
+                                  <p className="text-sm font-bold text-gray-900">
+                                    ₹{(order.payout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    Earning
+                                  </p>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                     

@@ -17,11 +17,9 @@ import { logger } from "../../utils/logger.js";
 import { sendAdminResetOtpEmail } from "../../utils/email.js";
 import mongoose from "mongoose";
 import { creditReferralReward } from "../../modules/food/user/services/userWallet.service.js";
-import { getRestaurantSubscriptionSettings } from "../../modules/food/admin/services/admin.service.js";
-import { FEATURE_KEYS, isFeatureEnabled } from "../../modules/food/admin/services/featureSettings.service.js";
-import { isSubscriptionExpired, resolveRestaurantPlanEligibility } from "../../modules/food/restaurant/services/subscriptionPlan.service.js";
 import { ADMIN_FULL_PERMISSIONS, sanitizeAdminPermissions } from '../../constants/permissions.js';
 import { isMobilePlatform } from "../../utils/platform.js";
+import { upsertFirebaseDeviceToken } from "../notifications/firebase.service.js";
 
 const ROLES = {
   USER: "USER",
@@ -112,24 +110,13 @@ export const verifyUserOtpAndLogin = async (
 
   // Update FCM token if provided
   if (fcmToken) {
-    let isModified = false;
-    if (isMobilePlatform(platform)) {
-      if (!userDoc.fcmTokenMobile) userDoc.fcmTokenMobile = [];
-      if (!userDoc.fcmTokenMobile.includes(fcmToken)) {
-        userDoc.fcmTokenMobile.push(fcmToken);
-        isModified = true;
-      }
-    } else {
-      // Default to web if not explicitly mobile
-      if (!userDoc.fcmTokens) userDoc.fcmTokens = [];
-      if (!userDoc.fcmTokens.includes(fcmToken)) {
-        userDoc.fcmTokens.push(fcmToken);
-        isModified = true;
-      }
-    }
-    if (isModified) {
-      await userDoc.save();
-    }
+    await upsertFirebaseDeviceToken({
+      ownerType: ROLES.USER,
+      ownerId: userDoc._id,
+      token: fcmToken,
+      platform: isMobilePlatform(platform) ? "mobile" : "web",
+    });
+    userDoc = await FoodUser.findById(userDoc._id);
   }
 
   // Ensure referralCode exists (used for share links on older accounts).
@@ -279,23 +266,13 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
 
   // Update FCM token if provided
   if (fcmToken) {
-    let isModified = false;
-    if (isMobilePlatform(platform)) {
-      if (!restaurant.fcmTokenMobile) restaurant.fcmTokenMobile = [];
-      if (!restaurant.fcmTokenMobile.includes(fcmToken)) {
-        restaurant.fcmTokenMobile.push(fcmToken);
-        isModified = true;
-      }
-    } else {
-      if (!restaurant.fcmTokens) restaurant.fcmTokens = [];
-      if (!restaurant.fcmTokens.includes(fcmToken)) {
-        restaurant.fcmTokens.push(fcmToken);
-        isModified = true;
-      }
-    }
-    if (isModified) {
-      await restaurant.save();
-    }
+    await upsertFirebaseDeviceToken({
+      ownerType: ROLES.RESTAURANT,
+      ownerId: restaurant._id,
+      token: fcmToken,
+      platform: isMobilePlatform(platform) ? "mobile" : "web",
+    });
+    restaurant = await FoodRestaurant.findById(restaurant._id);
   }
 
   // Allow login for previously-operational restaurants even if they are temporarily
@@ -322,53 +299,6 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
     ...(restaurant.toObject ? restaurant.toObject() : restaurant),
     role: ROLES.RESTAURANT
   };
-
-  const isRestaurantSubscriptionEnabled = await isFeatureEnabled(FEATURE_KEYS.RESTAURANT_SUBSCRIPTION, true);
-  if (isRestaurantSubscriptionEnabled && (!restaurant.onboardingFeePaid || isSubscriptionExpired(restaurant))) {
-    const settings = await getRestaurantSubscriptionSettings();
-    const onboardingFeeBase = Number(settings?.onboardingFee ?? 799);
-    const onboardingFeeGST = Math.round(onboardingFeeBase * 0.18);
-    const needsOnboardingPayment = !restaurant.onboardingFeePaid;
-    const onboardingFeeTotal = needsOnboardingPayment ? onboardingFeeBase + onboardingFeeGST : 0;
-    const subscriptionTotal = Number(restaurant.subscriptionAmount || 0);
-    const subscriptionPaid = Number(restaurant.subscriptionPaidAmount || 0);
-    const subscriptionDue = Math.max(0, subscriptionTotal - subscriptionPaid);
-    const eligibility = await resolveRestaurantPlanEligibility(restaurant._id, settings);
-
-    const payload = { userId: restaurant._id.toString(), role: ROLES.RESTAURANT };
-    const accessToken = signAccessToken(payload);
-    const refreshToken = signRefreshToken(payload);
-    const ttlMs = ms(config.jwtRefreshExpiresIn || "7d");
-    const expiresAt = new Date(Date.now() + ttlMs);
-    await FoodRefreshToken.create({
-      userId: restaurant._id,
-      token: refreshToken,
-      expiresAt,
-    });
-
-    return {
-      paymentRequired: true,
-      paymentReason: needsOnboardingPayment ? "onboarding_fee_pending" : "subscription_expired",
-      needsRegistration: false,
-      user: userObj,
-      accessToken,
-      refreshToken,
-      paymentSummary: {
-        mode: needsOnboardingPayment ? "onboarding" : "renewal",
-        onboardingFeeBase: needsOnboardingPayment ? onboardingFeeBase : 0,
-        onboardingFeeGST: needsOnboardingPayment ? onboardingFeeGST : 0,
-        onboardingFeeTotal,
-        subscriptionPlan: restaurant.subscriptionPlan || eligibility.eligiblePlan || "starter",
-        subscriptionTotal,
-        subscriptionPaid,
-        subscriptionDue,
-        eligiblePlan: eligibility.eligiblePlan,
-        gmvLast30Days: eligibility.gmv30d,
-        thresholdsUsed: eligibility.thresholdsUsed,
-        planCatalog: eligibility.planCatalog,
-      },
-    };
-  }
 
   const payload = { userId: restaurant._id.toString(), role: ROLES.RESTAURANT };
   const accessToken = signAccessToken(payload);
@@ -448,23 +378,13 @@ export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) 
   // Update FCM token if provided - CRITICAL: do this BEFORE returning pendingApproval
   // so we can notify them when approved.
   if (fcmToken) {
-    let isModified = false;
-    if (isMobilePlatform(platform)) {
-      if (!deliveryPartner.fcmTokenMobile) deliveryPartner.fcmTokenMobile = [];
-      if (!deliveryPartner.fcmTokenMobile.includes(fcmToken)) {
-        deliveryPartner.fcmTokenMobile.push(fcmToken);
-        isModified = true;
-      }
-    } else {
-      if (!deliveryPartner.fcmTokens) deliveryPartner.fcmTokens = [];
-      if (!deliveryPartner.fcmTokens.includes(fcmToken)) {
-        deliveryPartner.fcmTokens.push(fcmToken);
-        isModified = true;
-      }
-    }
-    if (isModified) {
-      await deliveryPartner.save();
-    }
+    await upsertFirebaseDeviceToken({
+      ownerType: ROLES.DELIVERY_PARTNER,
+      ownerId: deliveryPartner._id,
+      token: fcmToken,
+      platform: isMobilePlatform(platform) ? "mobile" : "web",
+    });
+    deliveryPartner = await FoodDeliveryPartner.findById(deliveryPartner._id);
   }
 
   if (deliveryPartner.status && deliveryPartner.status !== "approved") {

@@ -260,16 +260,6 @@ export async function updateTransactionStatus(orderId, kind, details = {}) {
 
     await transaction.save();
 
-    // Auto-settle subscription dues as soon as earnings become withdrawable.
-    if (details?.status === 'captured' && transaction?.restaurantId) {
-        try {
-            const { attemptAutoSettleSubscriptionDue } = await import('../../restaurant/services/subscriptionPlan.service.js');
-            await attemptAutoSettleSubscriptionDue(transaction.restaurantId);
-        } catch (_error) {
-            // Fail-safe: transaction update must not fail due to subscription settlement side-effect.
-        }
-    }
-
     return transaction;
 }
 

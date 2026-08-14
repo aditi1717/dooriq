@@ -1461,15 +1461,21 @@ export default function OrdersMain() {
           const targetOrders = response.data.data.orders.filter((order) => {
             if (hasOrderBeenShown(order)) return false;
 
-            const isConfirmed = order.status === "confirmed";
+            const normalizedStatus = String(order.status || order.orderStatus || "")
+              .trim()
+              .toLowerCase();
+            const isNewOrderStatus =
+              normalizedStatus === "confirmed" ||
+              normalizedStatus === "created" ||
+              normalizedStatus === "pending";
             const isCreatedScheduled =
-              order.status === "created" && order.scheduledAt;
+              normalizedStatus === "created" && order.scheduledAt;
 
-            if (isConfirmed && !order.scheduledAt) return true; // ordinary confirmed fallback
+            if (isNewOrderStatus && !order.scheduledAt) return true; // ordinary live fallback
 
             if (
               order.scheduledAt &&
-              (order.status === "created" || order.status === "confirmed")
+              (normalizedStatus === "created" || normalizedStatus === "confirmed")
             ) {
               const scheduledTime = new Date(order.scheduledAt).getTime();
               // Show popup if scheduled time is <= 30 mins from now
@@ -1531,12 +1537,12 @@ export default function OrdersMain() {
       }
     };
 
-    // Check once on mount, and then every minute
+    // Keep the already-open home page in sync when a socket event is missed.
     checkOrdersToPopup();
     const intervalId = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
       checkOrdersToPopup();
-    }, 60000);
+    }, 5000);
     const handleVisibilityChange = () => {
       if (typeof document !== "undefined" && !document.hidden) {
         checkOrdersToPopup();

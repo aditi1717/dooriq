@@ -384,8 +384,6 @@ export default function Cart() {
   useEffect(() => {
     if (!isCodEnabled && selectedPaymentMethod === "cash") {
       setSelectedPaymentMethod("wallet")
-    } else if (selectedPaymentMethod === "razorpay") {
-      setSelectedPaymentMethod(isCodEnabled ? "cash" : "wallet")
     }
   }, [isCodEnabled, selectedPaymentMethod])
 
@@ -1225,11 +1223,27 @@ export default function Cart() {
   })()
   const deliveryFee = pricing?.deliveryFee || fallbackDeliveryFee
   const deliveryFeeBreakdown = pricing?.deliveryFeeBreakdown || null
-  const hasDistanceDeliveryBreakdown =
-    deliveryFeeBreakdown?.source === "distance" &&
-    Number.isFinite(Number(deliveryFeeBreakdown?.distanceKm))
+  const deliveryDistanceKm = (() => {
+    const roadDistance = Number(
+      deliveryFeeBreakdown?.roadDistanceKm ??
+      pricing?.roadDistanceKm
+    )
+    if (Number.isFinite(roadDistance) && roadDistance > 0) return roadDistance
+
+    const directDistance = Number(
+      deliveryFeeBreakdown?.distanceKm ??
+      pricing?.distanceKm
+    )
+    if (Number.isFinite(directDistance) && directDistance > 0) return directDistance
+
+    const straightLineDistance = Number(pricing?.straightLineDistanceKm)
+    if (Number.isFinite(straightLineDistance) && straightLineDistance > 0) return straightLineDistance
+
+    return null
+  })()
+  const hasDistanceDeliveryBreakdown = deliveryDistanceKm != null
   const deliveryFeeBreakdownText = hasDistanceDeliveryBreakdown
-    ? deliveryFeeBreakdown.message || `Distance: ${Number(deliveryFeeBreakdown.distanceKm).toFixed(1)} km`
+    ? deliveryFeeBreakdown?.message || `Distance: ${Number(deliveryDistanceKm).toFixed(1)} km`
     : null
   const platformFee = pricing?.platformFee || feeSettings.platformFee
   const gstCharges = pricing?.tax || Math.round(subtotal * (feeSettings.gstRate / 100))
@@ -3110,6 +3124,15 @@ export default function Cart() {
 
                     <div className="space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-4 flex-1 min-h-0">
                       {[
+                        {
+                          id: 'razorpay',
+                          name: 'Online Payment',
+                          description: 'Pay securely now',
+                          icon: <Zap className="w-5 h-5" />,
+                          color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400',
+                          selectedColor: 'bg-emerald-500 text-white',
+                          badge: 'FAST'
+                        },
                         {
                           id: 'wallet',
                           name: 'Quick Wallet',

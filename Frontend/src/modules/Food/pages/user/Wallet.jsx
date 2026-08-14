@@ -455,9 +455,13 @@ export default function Wallet() {
                   onClick={() => setActiveTab("wallet")}
                   className={`pb-3 font-bold text-sm md:text-base border-b-2 transition-all flex items-center gap-2 ${
                     activeTab === "wallet"
-                      ? "border-green-600 dark:border-green-500 text-green-600 dark:text-green-400"
+                      ? "border-b-2 text-gray-900 dark:text-white"
                       : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                   }`}
+                  style={activeTab === "wallet" ? {
+                    borderColor: "var(--module-theme-color)",
+                    color: "var(--module-theme-color)",
+                  } : undefined}
                 >
                   <span>💼</span> Dooriq Money
                 </button>
@@ -465,9 +469,13 @@ export default function Wallet() {
                   onClick={() => setActiveTab("coins")}
                   className={`pb-3 font-bold text-sm md:text-base border-b-2 transition-all flex items-center gap-2 ${
                     activeTab === "coins"
-                      ? "border-amber-500 dark:border-amber-400 text-amber-500 dark:text-amber-400"
+                      ? "border-b-2 text-gray-900 dark:text-white"
                       : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                   }`}
+                  style={activeTab === "coins" ? {
+                    borderColor: "var(--module-theme-color)",
+                    color: "var(--module-theme-color)",
+                  } : undefined}
                 >
                   <span>🪙</span> Reward Coins ({activeCoinsBalance || 0})
                 </button>
@@ -616,19 +624,31 @@ export default function Wallet() {
               <div className="space-y-6 md:space-y-8">
                 {/* Coins Balance Card */}
                 {coinsInfo?.settings?.isActive && (
-                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800/30 rounded-2xl p-5 md:p-6 lg:p-8 flex flex-col gap-5 shadow-sm">
+                  <div 
+                    className="border rounded-2xl p-5 md:p-6 lg:p-8 flex flex-col gap-5 shadow-sm"
+                    style={{
+                      backgroundColor: "rgba(var(--module-theme-rgb, 250, 2, 114), 0.04)",
+                      borderColor: "rgba(var(--module-theme-rgb, 250, 2, 114), 0.2)",
+                    }}
+                  >
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-amber-100 dark:bg-amber-800/40 flex items-center justify-center flex-shrink-0 border border-amber-300/50 dark:border-amber-700/50">
+                        <div 
+                          className="w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center flex-shrink-0 border"
+                          style={{
+                            backgroundColor: "rgba(var(--module-theme-rgb, 250, 2, 114), 0.1)",
+                            borderColor: "rgba(var(--module-theme-rgb, 250, 2, 114), 0.25)",
+                          }}
+                        >
                           <span className="text-2xl md:text-3xl">🪙</span>
                         </div>
                         <div>
-                          <h3 className="text-lg md:text-xl font-bold text-amber-900 dark:text-amber-100">Reward Coins</h3>
-                          <p className="text-sm md:text-base text-amber-700 dark:text-amber-300/80 mt-1">
+                          <h3 className="text-lg md:text-xl font-bold text-gray-900 dark:text-white">Reward Coins</h3>
+                          <p className="text-sm md:text-base text-gray-600 dark:text-gray-300 mt-1">
                             {coinsLoading ? (
                               <Loader2 className="h-4 w-4 animate-spin inline" />
                             ) : (
-                              <>You have <strong className="text-amber-600 dark:text-amber-400 font-bold">{activeCoinsBalance || 0}</strong> valid coins</>
+                              <>You have <strong className="font-bold" style={{ color: "var(--module-theme-color)" }}>{activeCoinsBalance || 0}</strong> valid coins</>
                             )}
                           </p>
                         </div>
@@ -637,13 +657,19 @@ export default function Wallet() {
                       <Button
                         onClick={() => setRedeemModalOpen(true)}
                         disabled={coinsLoading || !activeCoinsBalance || activeCoinsBalance <= 0}
-                        className="bg-amber-500 hover:bg-amber-600 text-white font-medium shadow-sm transition-colors border-0 w-full md:w-auto"
+                        className="text-white font-medium shadow-sm transition-all border-0 w-full md:w-auto"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, rgba(var(--module-theme-rgb, 250, 2, 114), 0.94), var(--module-theme-color))",
+                          boxShadow:
+                            "0 8px 16px rgba(var(--module-theme-rgb, 250, 2, 114), 0.25)",
+                        }}
                       >
                         Redeem Coins
                       </Button>
                     </div>
 
-                    {!coinsLoading && activeCoinBatches.length > 0 && (
+                    {false && !coinsLoading && activeCoinBatches.length > 0 && (
                       <div className="border-t border-amber-200/40 dark:border-amber-800/20 pt-4">
                         <p className="text-[11px] font-bold text-amber-800/85 dark:text-amber-300/85 uppercase tracking-wider mb-2">
                           Coins Expiry Schedule
@@ -696,9 +722,13 @@ export default function Wallet() {
                               onClick={() => setSelectedCoinFilter(filter.id)}
                               className={`px-4 md:px-5 lg:px-6 py-2 md:py-2.5 lg:py-3 rounded-lg md:rounded-xl text-xs md:text-sm lg:text-base font-medium whitespace-nowrap flex-shrink-0 transition-all ${
                                 isSelected
-                                  ? "bg-white dark:bg-[#1a1a1a] border-2 border-amber-500 dark:border-amber-500 text-amber-600 dark:text-amber-400 shadow-sm"
+                                  ? "bg-white dark:bg-[#1a1a1a] border-2 text-gray-900 dark:text-white shadow-sm"
                                   : "bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-sm"
                               }`}
+                              style={isSelected ? {
+                                borderColor: "var(--module-theme-color)",
+                                color: "var(--module-theme-color)",
+                              } : undefined}
                             >
                               {filter.label}
                             </button>
@@ -804,7 +834,7 @@ export default function Wallet() {
                                         {formatDate(item.createdAt || item.date)}
                                       </p>
                                       {!isExpired && item.expiresAt && (
-                                        <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium mt-1">
+                                        <p className="text-[11px] font-medium mt-1" style={{ color: "var(--module-theme-color, #FA0272)" }}>
                                           ⏳ Expires on {formatExpiryDate(item.expiresAt)}
                                         </p>
                                       )}

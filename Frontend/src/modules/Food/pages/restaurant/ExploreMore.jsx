@@ -35,6 +35,7 @@ import { Card, CardContent } from "@food/components/ui/card"
 import { DateRangeCalendar } from "@food/components/ui/date-range-calendar"
 import { clearModuleAuth, clearAuthData, getCurrentUser } from "@food/utils/auth"
 import { restaurantAPI } from "@food/api"
+import { cleanupPushForModule } from "@food/utils/firebaseMessaging"
 import { firebaseAuth, ensureFirebaseInitialized } from "@food/firebase"
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders"
 import DeleteAccountModal from "@food/components/DeleteAccountModal"
@@ -551,6 +552,8 @@ export default function ExploreMore() {
         debugWarn("Logout API call failed, continuing with local cleanup:", apiError)
       }
 
+      await cleanupPushForModule("restaurant")
+
       // Sign out from Firebase if restaurant logged in via Google
       try {
         const { signOut } = await import("firebase/auth")
@@ -614,6 +617,8 @@ export default function ExploreMore() {
         // Continue with logout even if API call fails (network issues, etc.)
         debugWarn("Logout API call failed, continuing with local cleanup:", apiError)
       }
+
+      await cleanupPushForModule("restaurant")
 
       // Sign out from Firebase if restaurant logged in via Google
       try {

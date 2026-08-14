@@ -2,7 +2,6 @@ import { FoodRestaurant } from '../models/restaurant.model.js';
 import { uploadImageBuffer } from '../../../../services/cloudinary.service.js';
 import { ValidationError, NotFoundError } from '../../../../core/auth/errors.js';
 import mongoose from 'mongoose';
-import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured, verifyPaymentSignature } from '../../orders/helpers/razorpay.helper.js';
 import { FoodZone } from '../../admin/models/zone.model.js';
 import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FoodOfferUsage } from '../../admin/models/offerUsage.model.js';
@@ -10,17 +9,6 @@ import { FoodRestaurantMenu } from '../models/restaurantMenu.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodOrder } from '../../orders/models/order.model.js';
 import { FoodRestaurantOutletTimings } from '../models/outletTimings.model.js';
-import { getRestaurantSubscriptionSettings } from '../../admin/services/admin.service.js';
-import { FEATURE_KEYS, isFeatureEnabled } from '../../admin/services/featureSettings.service.js';
-import {
-    attemptAutoSettleSubscriptionDue,
-    buildSubscriptionTotals,
-    getRestaurantGmvLast30Days,
-    isSubscriptionExpired,
-    normalizePlanName,
-    resolvePlanPricingFromEligibility,
-} from './subscriptionPlan.service.js';
-import { logRestaurantSubscriptionHistory } from './subscriptionHistory.service.js';
 
 const normalizeName = (value) =>
     String(value || '')
@@ -47,42 +35,6 @@ const normalizeDayName = (value) => {
     const abbr = raw.slice(0, 3).toLowerCase();
     return DAY_NAMES.find((d) => d.toLowerCase().startsWith(abbr)) || null;
 };
-
-export const createRestaurantOnboardingOrder = async (payload = {}) => {
-    const amount = Number(payload?.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-        throw new ValidationError('Invalid payment amount');
-    }
-    if (amount > 100000) {
-        throw new ValidationError('Payment amount exceeds maximum allowed value');
-    }
-
-    const amountPaise = Math.round(amount * 100);
-    const receipt = `restaurant_onboarding_${Date.now()}`;
-
-    if (!isRazorpayConfigured()) {
-        return {
-            razorpay: {
-                key: getRazorpayKeyId() || 'rzp_test_dummy',
-                orderId: `order_dev_${Date.now()}`,
-                amount: amountPaise,
-                currency: 'INR'
-            }
-        };
-    }
-
-    const order = await createRazorpayOrder(amountPaise, 'INR', receipt);
-    return {
-        razorpay: {
-            key: getRazorpayKeyId(),
-            orderId: String(order.id),
-            amount: Number(order.amount) || amountPaise,
-            currency: order.currency || 'INR'
-        }
-    };
-};
-
-const GST_RATE = 0.18;
 
 const normalizeRatingValue = (value) => {
     const numeric = Number(value);
@@ -420,18 +372,6 @@ const toRestaurantProfile = (doc) => {
             diningType: String(doc.diningSettings?.diningType || 'family-dining').trim() || 'family-dining'
         },
         isAcceptingOrders: doc.isAcceptingOrders !== false,
-        subscriptionPlan: doc.subscriptionPlan || '',
-        subscriptionAmount: Number.isFinite(Number(doc.subscriptionAmount)) ? Number(doc.subscriptionAmount) : 0,
-        subscriptionPaidAmount: Number.isFinite(Number(doc.subscriptionPaidAmount)) ? Number(doc.subscriptionPaidAmount) : 0,
-        subscriptionDueAmount: Number.isFinite(Number(doc.subscriptionDueAmount)) ? Number(doc.subscriptionDueAmount) : 0,
-        subscriptionStatus: doc.subscriptionStatus || 'due',
-        subscriptionValidTill: doc.subscriptionValidTill || null,
-        onboardingFeePaid: Boolean(doc.onboardingFeePaid),
-        onboardingFeePaidAt: doc.onboardingFeePaidAt || null,
-        onboardingFeePaymentMethod: doc.onboardingFeePaymentMethod || '',
-        onboardingFeePaymentOrderId: doc.onboardingFeePaymentOrderId || '',
-        onboardingFeePaymentId: doc.onboardingFeePaymentId || '',
-        onboardingFeePaymentSignature: doc.onboardingFeePaymentSignature || '',
         status: doc.status || null,
         createdAt: doc.createdAt,
         updatedAt: doc.updatedAt,
@@ -555,10 +495,6 @@ export const registerRestaurant = async (payload, files) => {
         ifscCode,
         accountHolderName,
         accountType,
-        subscriptionPlan,
-        subscriptionAmount,
-        subscriptionPaidAmount,
-        subscriptionDueAmount,
         // Pre-uploaded image URLs from background uploads
         profileImage: preUploadedProfileImage,
         panImage: preUploadedPanImage,
@@ -570,17 +506,6 @@ export const registerRestaurant = async (payload, files) => {
     if (!ownerPhone) {
         throw new ValidationError('Owner phone is required to register a restaurant');
     }
-
-    const settings = await getRestaurantSubscriptionSettings();
-    // First-time onboarding restaurants have zero earnings by definition.
-    const planName = 'starter';
-    const planCatalog = {
-        starter: Number(settings?.starterPrice || 999),
-        growth: Number(settings?.growthPrice || 1999),
-        premium: Number(settings?.premiumPrice || 2999),
-    };
-    const planBase = Number(planCatalog[planName] || planCatalog.starter || 999);
-    const planTotals = buildSubscriptionTotals(planBase, 'later', 0);
 
     const { digits: ownerPhoneDigits, last10: ownerPhoneLast10 } = normalizePhone(ownerPhone);
     if (!ownerPhoneLast10) {
@@ -705,18 +630,18 @@ export const registerRestaurant = async (payload, files) => {
             accountHolderName,
             accountType,
             menuImages,
-            onboardingFeePaid: false,
+            onboardingFeePaid: true,
             onboardingFeePaidAt: null,
             onboardingFeePaymentMethod: '',
             onboardingFeePaymentOrderId: '',
             onboardingFeePaymentId: '',
             onboardingFeePaymentSignature: '',
-            subscriptionPlan: planName,
-            subscriptionAmount: planTotals.planTotal,
+            subscriptionPlan: '',
+            subscriptionAmount: 0,
             subscriptionPaidAmount: 0,
-            subscriptionDueAmount: planTotals.planTotal,
-            subscriptionStatus: 'due',
-            subscriptionValidTill: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Valid for 30 days
+            subscriptionDueAmount: 0,
+            subscriptionStatus: 'paid',
+            subscriptionValidTill: null,
             ...images
         });
 
@@ -774,338 +699,6 @@ export const registerRestaurant = async (payload, files) => {
     }
 };
 
-export const createPostApprovalOnboardingPaymentOrder = async (restaurantId, payload = {}) => {
-    const isRestaurantSubscriptionEnabled = await isFeatureEnabled(FEATURE_KEYS.RESTAURANT_SUBSCRIPTION, true);
-    if (!isRestaurantSubscriptionEnabled) {
-        throw new ValidationError('Restaurant subscription is currently disabled');
-    }
-    if (!restaurantId) throw new ValidationError('Restaurant ID is required');
-    const restaurant = await FoodRestaurant.findById(restaurantId);
-    if (!restaurant) throw new NotFoundError('Restaurant not found');
-    if (String(restaurant.status || '') !== 'approved') {
-        throw new ValidationError('Payment is allowed only after admin approval');
-    }
-    const needsOnboardingPayment = !restaurant.onboardingFeePaid;
-    const isExpiredRenewal = restaurant.onboardingFeePaid && isSubscriptionExpired(restaurant);
-    if (!needsOnboardingPayment && !isExpiredRenewal) {
-        throw new ValidationError('No subscription payment is required right now');
-    }
-
-    const settings = await getRestaurantSubscriptionSettings();
-    const onboardingFeeBase = Number(settings?.onboardingFee ?? 799);
-    const onboardingFeeGST = Math.round(onboardingFeeBase * GST_RATE);
-    const onboardingFeeTotal = needsOnboardingPayment ? onboardingFeeBase + onboardingFeeGST : 0;
-    const { planName, baseAmount: planBase, eligibility } = await resolvePlanPricingFromEligibility(restaurant._id, settings);
-    const subscription = buildSubscriptionTotals(
-        planBase,
-        payload?.subscriptionPaymentType || payload?.paymentType || 'later',
-        payload?.subscriptionPartialAmount
-    );
-
-    if (subscription.paymentType === 'partial' && subscription.paidBase <= 0) {
-        throw new ValidationError('Please enter a valid partial subscription amount');
-    }
-
-    const paymentAmountTotal = onboardingFeeTotal + subscription.paidTotal;
-    if (paymentAmountTotal === 0) {
-        const dueBefore = Number(restaurant.subscriptionDueAmount || 0);
-        const paidBefore = Number(restaurant.subscriptionPaidAmount || 0);
-
-        if (needsOnboardingPayment) {
-            restaurant.onboardingFeePaid = true;
-            restaurant.onboardingFeePaidAt = new Date();
-            restaurant.onboardingFeePaymentMethod = 'waived';
-            restaurant.onboardingFeePaymentOrderId = '';
-            restaurant.onboardingFeePaymentId = '';
-            restaurant.onboardingFeePaymentSignature = '';
-        }
-
-        restaurant.subscriptionPlan = planName;
-        restaurant.subscriptionAmount = needsOnboardingPayment
-            ? subscription.planTotal
-            : (Number(restaurant.subscriptionAmount || 0) + subscription.planTotal);
-        restaurant.subscriptionPaidAmount = paidBefore;
-        restaurant.subscriptionDueAmount = needsOnboardingPayment
-            ? subscription.dueTotal
-            : Math.max(0, dueBefore + subscription.dueTotal);
-        restaurant.subscriptionStatus = restaurant.subscriptionDueAmount > 0 ? 'due' : 'paid';
-        restaurant.subscriptionValidTill = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await restaurant.save();
-
-        const gmvLast30Days = await getRestaurantGmvLast30Days(restaurant._id);
-        await logRestaurantSubscriptionHistory({
-            restaurantId: restaurant._id,
-            eventType: 'subscription_payment',
-            plan: planName,
-            paymentType: subscription.paymentType,
-            amount: 0,
-            dueBefore,
-            dueAfter: Number(restaurant.subscriptionDueAmount || 0),
-            paidBefore,
-            paidAfter: paidBefore,
-            gmvLast30Days,
-            note: needsOnboardingPayment
-                ? 'Onboarding fee waived; subscription deferred'
-                : 'Renewal subscription deferred',
-            metadata: {
-                mode: needsOnboardingPayment ? 'onboarding' : 'renewal',
-                onboardingFeeApplied: false,
-                subscriptionTotal: subscription.planTotal,
-                zeroPaymentCompletion: true,
-            },
-        }).catch(() => null);
-
-        await attemptAutoSettleSubscriptionDue(restaurant._id);
-        const updatedRestaurant = await FoodRestaurant.findById(restaurant._id);
-
-        return {
-            paymentRequired: false,
-            completed: true,
-            restaurant: updatedRestaurant ? updatedRestaurant.toObject() : restaurant.toObject(),
-            paymentSummary: {
-                mode: needsOnboardingPayment ? 'onboarding' : 'renewal',
-                onboardingFeeBase: 0,
-                onboardingFeeGST: 0,
-                onboardingFeeTotal: 0,
-                subscriptionPlan: planName,
-                subscriptionBase: planBase,
-                subscriptionGST: subscription.planGST,
-                subscriptionTotal: subscription.planTotal,
-                subscriptionPaymentType: subscription.paymentType,
-                subscriptionPaidNowTotal: 0,
-                subscriptionDueAfterPayment: subscription.dueTotal,
-                payableNow: 0,
-                eligiblePlan: eligibility.eligiblePlan,
-                gmvLast30Days: eligibility.gmv30d,
-                thresholdsUsed: eligibility.thresholdsUsed,
-                planCatalog: eligibility.planCatalog
-            }
-        };
-    }
-
-    const orderPayload = await createRestaurantOnboardingOrder({ amount: paymentAmountTotal });
-
-    return {
-        paymentRequired: true,
-        ...orderPayload,
-        paymentSummary: {
-            mode: needsOnboardingPayment ? 'onboarding' : 'renewal',
-            onboardingFeeBase: needsOnboardingPayment ? onboardingFeeBase : 0,
-            onboardingFeeGST: needsOnboardingPayment ? onboardingFeeGST : 0,
-            onboardingFeeTotal,
-            subscriptionPlan: planName,
-            subscriptionBase: planBase,
-            subscriptionGST: subscription.planGST,
-            subscriptionTotal: subscription.planTotal,
-            subscriptionPaymentType: subscription.paymentType,
-            subscriptionPaidNowTotal: subscription.paidTotal,
-            subscriptionDueAfterPayment: subscription.dueTotal,
-            payableNow: paymentAmountTotal,
-            eligiblePlan: eligibility.eligiblePlan,
-            gmvLast30Days: eligibility.gmv30d,
-            thresholdsUsed: eligibility.thresholdsUsed,
-            planCatalog: eligibility.planCatalog
-        }
-    };
-};
-
-export const verifyPostApprovalOnboardingPayment = async (restaurantId, payload = {}) => {
-    const isRestaurantSubscriptionEnabled = await isFeatureEnabled(FEATURE_KEYS.RESTAURANT_SUBSCRIPTION, true);
-    if (!isRestaurantSubscriptionEnabled) {
-        throw new ValidationError('Restaurant subscription is currently disabled');
-    }
-    if (!restaurantId) throw new ValidationError('Restaurant ID is required');
-    const restaurant = await FoodRestaurant.findById(restaurantId);
-    if (!restaurant) throw new NotFoundError('Restaurant not found');
-    if (String(restaurant.status || '') !== 'approved') {
-        throw new ValidationError('Payment is allowed only after admin approval');
-    }
-    const needsOnboardingPayment = !restaurant.onboardingFeePaid;
-    const isExpiredRenewal = restaurant.onboardingFeePaid && isSubscriptionExpired(restaurant);
-    if (!needsOnboardingPayment && !isExpiredRenewal) {
-        return restaurant.toObject();
-    }
-
-    const razorpayOrderId = String(payload?.razorpayOrderId || '').trim();
-    const razorpayPaymentId = String(payload?.razorpayPaymentId || '').trim();
-    const razorpaySignature = String(payload?.razorpaySignature || '').trim();
-    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
-        throw new ValidationError('Payment verification details are required');
-    }
-
-    if (isRazorpayConfigured()) {
-        const valid = verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
-        if (!valid) throw new ValidationError('Payment verification failed');
-    }
-
-    const settings = await getRestaurantSubscriptionSettings();
-    const { planName, baseAmount: planBase } = await resolvePlanPricingFromEligibility(restaurant._id, settings);
-    const subscription = buildSubscriptionTotals(
-        planBase,
-        payload?.subscriptionPaymentType || payload?.paymentType || 'later',
-        payload?.subscriptionPartialAmount
-    );
-
-    if (subscription.paymentType === 'partial' && subscription.paidBase <= 0) {
-        throw new ValidationError('Please enter a valid partial subscription amount');
-    }
-
-    if (needsOnboardingPayment) {
-        restaurant.onboardingFeePaid = true;
-        restaurant.onboardingFeePaidAt = new Date();
-        restaurant.onboardingFeePaymentMethod = 'razorpay';
-        restaurant.onboardingFeePaymentOrderId = razorpayOrderId;
-        restaurant.onboardingFeePaymentId = razorpayPaymentId;
-        restaurant.onboardingFeePaymentSignature = razorpaySignature;
-    }
-    const dueBefore = Number(restaurant.subscriptionDueAmount || 0);
-    const paidBefore = Number(restaurant.subscriptionPaidAmount || 0);
-    restaurant.subscriptionPlan = planName;
-    restaurant.subscriptionAmount = needsOnboardingPayment
-        ? subscription.planTotal
-        : (Number(restaurant.subscriptionAmount || 0) + subscription.planTotal);
-    restaurant.subscriptionPaidAmount = Number(restaurant.subscriptionPaidAmount || 0) + subscription.paidTotal;
-    restaurant.subscriptionDueAmount = needsOnboardingPayment
-        ? subscription.dueTotal
-        : Math.max(0, Number(restaurant.subscriptionDueAmount || 0) + subscription.dueTotal);
-    restaurant.subscriptionStatus = subscription.dueTotal > 0 ? 'due' : 'paid';
-    restaurant.subscriptionValidTill = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    await restaurant.save();
-    const gmvLast30Days = await getRestaurantGmvLast30Days(restaurant._id);
-    await logRestaurantSubscriptionHistory({
-        restaurantId: restaurant._id,
-        eventType: 'subscription_payment',
-        plan: planName,
-        paymentType: subscription.paymentType,
-        amount: subscription.paidTotal,
-        dueBefore,
-        dueAfter: Number(restaurant.subscriptionDueAmount || 0),
-        paidBefore,
-        paidAfter: Number(restaurant.subscriptionPaidAmount || 0),
-        gmvLast30Days,
-        note: needsOnboardingPayment ? 'Onboarding subscription payment captured' : 'Renewal subscription payment captured',
-        metadata: {
-            mode: needsOnboardingPayment ? 'onboarding' : 'renewal',
-            onboardingFeeApplied: needsOnboardingPayment,
-            subscriptionTotal: subscription.planTotal,
-        },
-    }).catch(() => null);
-
-    await attemptAutoSettleSubscriptionDue(restaurant._id);
-
-    return restaurant.toObject();
-};
-
-export const payRestaurantDues = async (restaurantId, paymentDetails = {}) => {
-    const isRestaurantSubscriptionEnabled = await isFeatureEnabled(FEATURE_KEYS.RESTAURANT_SUBSCRIPTION, true);
-    if (!isRestaurantSubscriptionEnabled) {
-        throw new Error('Restaurant subscription is currently disabled');
-    }
-    if (!restaurantId) throw new Error('Restaurant ID is required');
-
-    const restaurant = await FoodRestaurant.findById(restaurantId);
-    if (!restaurant) throw new Error('Restaurant not found');
-
-    const dueAmount = Number(restaurant.subscriptionDueAmount || 0);
-    if (dueAmount <= 0) {
-        throw new Error('No outstanding dues found');
-    }
-
-    // In a real flow, we would verify the paymentDetails.razorpayPaymentId here.
-    // For this end-to-end "direct" implementation, we'll mark it as paid.
-
-    const dueBefore = Number(restaurant.subscriptionDueAmount || 0);
-    const paidBefore = Number(restaurant.subscriptionPaidAmount || 0);
-    restaurant.subscriptionPaidAmount = (Number(restaurant.subscriptionPaidAmount) || 0) + dueAmount;
-    restaurant.subscriptionDueAmount = 0;
-    restaurant.subscriptionStatus = 'paid';
-
-    // Log payment metadata if provided
-    if (paymentDetails.razorpayPaymentId) {
-        restaurant.subscriptionPaymentId = paymentDetails.razorpayPaymentId;
-        restaurant.subscriptionPaymentOrderId = paymentDetails.razorpayOrderId;
-        restaurant.subscriptionPaymentMethod = 'razorpay';
-    }
-
-    await restaurant.save();
-    const gmvLast30Days = await getRestaurantGmvLast30Days(restaurant._id);
-    await logRestaurantSubscriptionHistory({
-        restaurantId: restaurant._id,
-        eventType: 'subscription_payment',
-        plan: restaurant.subscriptionPlan,
-        paymentType: 'manual',
-        amount: dueAmount,
-        dueBefore,
-        dueAfter: 0,
-        paidBefore,
-        paidAfter: Number(restaurant.subscriptionPaidAmount || 0),
-        gmvLast30Days,
-        note: 'Manual subscription due payment settled',
-    }).catch(() => null);
-    return restaurant.toObject();
-};
-
-/**
- * Creates a Razorpay order for outstanding subscription dues.
- */
-export const createDuesPaymentOrder = async (restaurantId) => {
-    const isRestaurantSubscriptionEnabled = await isFeatureEnabled(FEATURE_KEYS.RESTAURANT_SUBSCRIPTION, true);
-    if (!isRestaurantSubscriptionEnabled) {
-        throw new Error('Restaurant subscription is currently disabled');
-    }
-    if (!restaurantId) throw new Error('Restaurant ID is required');
-
-    const restaurant = await FoodRestaurant.findById(restaurantId);
-    if (!restaurant) throw new Error('Restaurant not found');
-
-    const dueAmount = Number(restaurant.subscriptionDueAmount || 0);
-    if (dueAmount <= 0) {
-        throw new Error('No outstanding dues found');
-    }
-
-    const { createRazorpayOrder, isRazorpayConfigured } = await import('../../orders/helpers/razorpay.helper.js');
-    if (!isRazorpayConfigured()) {
-        throw new Error('Payment gateway not configured');
-    }
-
-    // Convert to paise (e.g., ₹100 -> 10000 paise)
-    const amountPaise = Math.round(dueAmount * 100);
-
-    // Razorpay receipt limit is 40 characters.
-    const receiptId = `dues_${String(restaurantId).slice(-10)}_${Date.now()}`;
-    const order = await createRazorpayOrder(amountPaise, 'INR', receiptId);
-
-    return {
-        orderId: order.id,
-        amount: dueAmount,
-        currency: 'INR',
-        keyId: (await import('../../orders/helpers/razorpay.helper.js')).getRazorpayKeyId(),
-        restaurant: {
-            name: restaurant.restaurantName,
-            phone: restaurant.ownerPhone
-        }
-    };
-};
-
-/**
- * Verifies Razorpay payment signature and settles dues.
- */
-export const verifyDuesPayment = async (restaurantId, paymentData = {}) => {
-    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = paymentData;
-    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
-        throw new Error('Missing payment verification details');
-    }
-
-    const { verifyPaymentSignature } = await import('../../orders/helpers/razorpay.helper.js');
-    const isValid = verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
-    if (!isValid) {
-        throw new Error('Invalid payment signature');
-    }
-
-    // Reuse the settle logic
-    return await payRestaurantDues(restaurantId, { razorpayOrderId, razorpayPaymentId });
-};
-
 export const getCurrentRestaurantProfile = async (restaurantId) => {
     if (!restaurantId) return null;
     const doc = await FoodRestaurant.findById(restaurantId)
@@ -1153,18 +746,6 @@ export const getCurrentRestaurantProfile = async (restaurantId) => {
                 'estimatedDeliveryTimeMinutes',
                 'diningSettings',
                 'isAcceptingOrders',
-                'subscriptionPlan',
-                'subscriptionAmount',
-                'subscriptionPaidAmount',
-                'subscriptionDueAmount',
-                'subscriptionStatus',
-                'subscriptionValidTill',
-                'onboardingFeePaid',
-                'onboardingFeePaidAt',
-                'onboardingFeePaymentMethod',
-                'onboardingFeePaymentOrderId',
-                'onboardingFeePaymentId',
-                'onboardingFeePaymentSignature',
                 'status',
                 'createdAt',
                 'updatedAt'
@@ -1172,19 +753,6 @@ export const getCurrentRestaurantProfile = async (restaurantId) => {
         )
         .lean();
     const profile = toRestaurantProfile(doc);
-    if (!profile) return null;
-    try {
-        const settings = await getRestaurantSubscriptionSettings();
-        const { eligibility } = await resolvePlanPricingFromEligibility(restaurantId, settings);
-        profile.subscriptionEligibility = {
-            eligiblePlan: eligibility.eligiblePlan,
-            gmvLast30Days: eligibility.gmv30d,
-            thresholdsUsed: eligibility.thresholdsUsed,
-            planCatalog: eligibility.planCatalog
-        };
-    } catch (_error) {
-        // Keep profile response resilient even if eligibility calculation fails.
-    }
     return profile;
 };
 

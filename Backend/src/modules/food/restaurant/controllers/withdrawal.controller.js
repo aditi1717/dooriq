@@ -1,9 +1,6 @@
 import { sendResponse, sendError } from '../../../../utils/response.js';
 import { FoodRestaurantWithdrawal } from '../models/foodRestaurantWithdrawal.model.js';
-import { FoodRestaurant } from '../models/restaurant.model.js';
 import { getRestaurantFinance } from '../services/restaurantFinance.service.js';
-import { FEATURE_KEYS, isFeatureEnabled } from '../../admin/services/featureSettings.service.js';
-import { attemptAutoSettleSubscriptionDue } from '../services/subscriptionPlan.service.js';
 import { FoodBusinessSettings } from '../../admin/models/businessSettings.model.js';
 
 export const createWithdrawalRequestController = async (req, res, next) => {
@@ -14,30 +11,18 @@ export const createWithdrawalRequestController = async (req, res, next) => {
         if (!restaurantId) return sendError(res, 401, 'Restaurant authentication required');
         if (!amount || amount <= 0) return sendError(res, 400, 'Invalid withdrawal amount');
 
-        await attemptAutoSettleSubscriptionDue(restaurantId).catch(() => null);
-
-        // Check if restaurant has enough balance
         const finance = await getRestaurantFinance(restaurantId);
-        const restaurant = await FoodRestaurant.findById(restaurantId).select('subscriptionStatus subscriptionDueAmount');
-        const isRestaurantSubscriptionEnabled = await isFeatureEnabled(FEATURE_KEYS.RESTAURANT_SUBSCRIPTION, true);
-
-        const subscriptionDue = Number(restaurant?.subscriptionDueAmount || 0);
         const netAvailable = Math.max(0, Number(finance?.currentCycle?.netAvailable || 0));
 
         if (amount > netAvailable) {
-            if (isRestaurantSubscriptionEnabled && subscriptionDue > 0) {
-                return sendError(res, 400, `Withdrawal restricted. You can withdraw a maximum of ₹${netAvailable.toLocaleString('en-IN')} after reserving ₹${subscriptionDue.toLocaleString('en-IN')} for your outstanding subscription dues.`);
-            }
-            return sendError(res, 400, `Insufficient balance. Available to withdraw: ₹${netAvailable.toLocaleString('en-IN')}`);
+            return sendError(res, 400, `Insufficient balance. Available to withdraw: INR ${netAvailable.toLocaleString('en-IN')}`);
         }
 
-        // Fetch TDS settings
         const settings = await FoodBusinessSettings.findOne().lean();
         const tdsPercentage = Number(settings?.restaurantTdsPercentage || 0);
         const tdsAmount = Number((Number(amount) * (tdsPercentage / 100)).toFixed(2));
         const netAmount = Number((Number(amount) - tdsAmount).toFixed(2));
 
-        // Create the withdrawal request
         const withdrawal = new FoodRestaurantWithdrawal({
             restaurantId,
             amount: Number(amount),

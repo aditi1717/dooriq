@@ -132,7 +132,6 @@ export default function OrderDetailPage() {
   const packagingFee = toNumber(pricing.packagingFee)
   const deliveryFee = toNumber(pricing.deliveryFee)
   const platformFee = toNumber(pricing.platformFee)
-  const subscriptionFee = toNumber(pricing.subscriptionFee)
   const totalDiscount = toNumber(pricing.discount)
   const grandTotal = toNumber(pricing.total || pricing.grandTotal)
 
@@ -140,7 +139,7 @@ export default function OrderDetailPage() {
   const subtotalCandidate = toNumber(pricing.subtotal || pricing.itemTotal || pricing.itemsTotal)
   const derivedItemTotal =
     grandTotal > 0
-      ? grandTotal - taxAndCharges - packagingFee - deliveryFee - platformFee - subscriptionFee + totalDiscount
+      ? grandTotal - taxAndCharges - packagingFee - deliveryFee - platformFee + totalDiscount
       : 0
   const itemTotal = subtotalCandidate > 0
     ? subtotalCandidate
@@ -324,12 +323,6 @@ export default function OrderDetailPage() {
               <div className="flex justify-between text-xs font-bold text-gray-500 uppercase tracking-wider">
                 <span>Platform Fee</span>
                 <span className="text-gray-900">{formatMoney(platformFee)}</span>
-              </div>
-            )}
-            {subscriptionFee > 0 && (
-              <div className="flex justify-between text-xs font-bold text-gray-500 uppercase tracking-wider">
-                <span>Subscription Fee</span>
-                <span className="text-gray-900">{formatMoney(subscriptionFee)}</span>
               </div>
             )}
             {totalDiscount > 0 && (

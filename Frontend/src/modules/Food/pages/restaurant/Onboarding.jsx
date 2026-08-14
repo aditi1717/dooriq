@@ -22,6 +22,7 @@ import { toast } from "sonner"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { clearModuleAuth, clearAuthData } from "@food/utils/auth"
+import { cleanupPushForModule } from "@food/utils/firebaseMessaging"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -420,7 +421,7 @@ const hasSuspiciousEmailTld = (emailValue) => {
 }
 
 // Helper functions for localStorage
-const saveOnboardingToLocalStorage = (step1, step2, step3, currentStep, step4State) => {
+const saveOnboardingToLocalStorage = (step1, step2, step3, currentStep) => {
   try {
     // Persist only stable URL-based values. File/Blob objects are not serializable and
     // restoring metadata-only placeholders breaks preview/upload flows.
@@ -459,7 +460,6 @@ const saveOnboardingToLocalStorage = (step1, step2, step3, currentStep, step4Sta
       step1,
       step2: serializableStep2,
       step3: serializableStep3,
-      step4: step4State,
       currentStep,
       timestamp: Date.now(),
     }
@@ -710,21 +710,10 @@ export default function RestaurantOnboarding() {
 
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [paymentProcessing, setPaymentProcessing] = useState(false)
   const [error, setError] = useState("")
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const [step4State, setStep4State] = useState({
-    subscriptionPlan: 'starter',
-    subscriptionAmount: 0,
-    paymentType: 'full',
-    customAmount: 0,
-    errors: []
-  })
   const [registrationProcessing, setRegistrationProcessing] = useState(false)
   const [uploadingAttachments, setUploadingAttachments] = useState({})
-  const [subscriptionSettings, setSubscriptionSettings] = useState(null)
-  const [settingsLoading, setSettingsLoading] = useState(true)
-  const [settingsError, setSettingsError] = useState(null)
 
   const goToStep = (targetStep) => {
     const n = Math.min(3, Math.max(1, targetStep))
@@ -732,9 +721,6 @@ export default function RestaurantOnboarding() {
     navigate(`?step=${n}`, { replace: false })
     window.scrollTo({ top: 0, behavior: "instant" })
   }
-
-  // Subscription settings are now fetched only on the post-approval payment page.
-
 
   const triggerBackgroundUpload = async (file, folder, fieldName, isArray = false, arrayIndex = -1) => {
     if (!file || !isUploadableFile(file)) return;
@@ -780,6 +766,7 @@ export default function RestaurantOnboarding() {
     setIsLoggingOut(true)
     try {
       await restaurantAPI.logout()
+      await cleanupPushForModule("restaurant")
       clearModuleAuth("restaurant")
       clearAuthData()
       // Clear onboarding data and files
@@ -790,6 +777,7 @@ export default function RestaurantOnboarding() {
       navigate("/food/restaurant/login", { replace: true })
     } catch (error) {
       debugError("Logout failed:", error)
+      await cleanupPushForModule("restaurant")
       clearModuleAuth("restaurant")
       navigate("/food/restaurant/login", { replace: true })
     } finally {
@@ -1448,15 +1436,6 @@ export default function RestaurantOnboarding() {
           accountType: normalizeAccountTypeValue(localData?.step3?.accountType || bankData.accountType || backendData?.accountType || ""),
         }))
 
-        // Hydrate Step 4
-        if (localData?.step4) {
-          setStep4State((prev) => ({
-            ...prev,
-            ...localData.step4,
-            errors: []
-          }))
-        }
-
         // Set Step
         const stepParam = searchParams.get("step")
         if (stepParam) {
@@ -1516,7 +1495,7 @@ export default function RestaurantOnboarding() {
   useEffect(() => {
     if (!isOnboardingHydrated) return
     if (isRestoringOnboardingRef.current) return
-    saveOnboardingToLocalStorage(step1, step2, step3, step, step4State)
+    saveOnboardingToLocalStorage(step1, step2, step3, step)
     
     // Save images to IndexedDB
     const saveFiles = async () => {
@@ -1546,7 +1525,7 @@ export default function RestaurantOnboarding() {
       await persistMenuImagesToDB(step2.menuImages || [], dbInstance)
     }
     saveFiles()
-  }, [isOnboardingHydrated, step1, step2, step3, step, step4State])
+  }, [isOnboardingHydrated, step1, step2, step3, step])
 
   useEffect(() => {
     syncOnboardingFileCache(step2, step3)
@@ -1869,8 +1848,6 @@ export default function RestaurantOnboarding() {
     formData.append('ifscCode', (step3.ifscCode || '').toUpperCase())
     formData.append('accountHolderName', step3.accountHolderName || '')
     formData.append('accountType', step3.accountType || '')
-    formData.append('subscriptionPlan', 'starter')
-
     setRegistrationProcessing(true)
     const loadingToast = toast.loading('Submitting onboarding request...')
     try {
@@ -3334,627 +3311,6 @@ export default function RestaurantOnboarding() {
     </div>
   )
 
-  const renderStep4 = () => {
-    if (settingsLoading) {
-      return (
-        <div className="flex flex-col items-center justify-center p-12 space-y-4 bg-white rounded-md border border-gray-100">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
-          <p className="text-gray-500 font-medium">Loading subscription details...</p>
-        </div>
-      )
-    }
-
-    if (settingsError || !subscriptionSettings) {
-      return (
-        <div className="p-8 bg-red-50 border border-red-200 rounded-md text-center space-y-4">
-          <p className="text-red-700 font-medium">{settingsError || "Subscription settings not found."}</p>
-          <Button 
-            variant="outline" 
-            onClick={() => window.location.reload()}
-            className="bg-white border-red-200 text-red-700 hover:bg-red-100"
-          >
-            Retry Loading
-          </Button>
-        </div>
-      )
-    }
-
-    const starterPrice = Number(subscriptionSettings.starterPrice || 999)
-    const growthPrice = Number(subscriptionSettings.growthPrice || 1999)
-    const premiumPrice = Number(subscriptionSettings.premiumPrice || 2999)
-    const onboardingFeeBase = Math.max(0, Number(subscriptionSettings.onboardingFee ?? 799))
-
-
-    const subscriptionPlans = [
-      { id: 'starter', price: starterPrice, label: 'Starter Plan', gmvLabel: `GMV: ₹${Number(subscriptionSettings?.starterMinGmv ?? 0).toFixed(2)} - ₹${Number(subscriptionSettings?.starterMaxGmv ?? 30000).toFixed(2)}`, features: ['Starter Plan', 'Basic features', 'Standard support'] },
-      { id: 'growth', price: growthPrice, label: 'Growth Plan', gmvLabel: `GMV: ₹${Number(subscriptionSettings?.growthMinGmv ?? 30000.01).toFixed(2)} - ₹${Number(subscriptionSettings?.growthMaxGmv ?? 60000).toFixed(2)}`, features: ['Growth Plan', 'Advanced features', 'Priority support'] },
-      { id: 'premium', price: premiumPrice, label: 'Premium Plan', gmvLabel: `GMV: ₹${Number(subscriptionSettings?.premiumMinGmv ?? 60000.01).toFixed(2)}+`, features: ['Premium Plan', 'Full features', 'Dedicated support'] }
-    ]
-    const eligiblePlanId = 'starter'
-
-    const GST_RATE = 0.18
-    const onboardingGST = Math.round(onboardingFeeBase * GST_RATE)
-    const onboardingFeeTotal = onboardingFeeBase + onboardingGST
-    const hasOnboardingFee = onboardingFeeTotal > 0
-
-    const selectedPlan = subscriptionPlans.find(p => p.id === step4State.subscriptionPlan)
-    const selectedPlanBase = selectedPlan ? selectedPlan.price : 0
-    const planLabel = selectedPlan ? selectedPlan.label : 'None'
-    
-    const subscriptionPlanGST = Math.round(selectedPlanBase * GST_RATE)
-    const subscriptionPlanTotal = selectedPlanBase + subscriptionPlanGST
-
-    const customAmountBase = Number(step4State.customAmount || 0)
-    const paymentType = step4State.paymentType
-
-    const subscriptionPaidNowBase = paymentType === 'full'
-      ? selectedPlanBase
-      : paymentType === 'later'
-      ? 0
-      : Math.max(0, customAmountBase)
-
-    const subscriptionPaidNowGST = Math.round(subscriptionPaidNowBase * GST_RATE)
-    const subscriptionPaidNowTotal = subscriptionPaidNowBase + subscriptionPaidNowGST
-
-    const currentPaymentTotal = onboardingFeeTotal + subscriptionPaidNowTotal
-    const subscriptionDueLaterTotal = subscriptionPlanTotal - subscriptionPaidNowTotal
-
-    return (
-      <div className="space-y-6">
-        {hasOnboardingFee && (
-          <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
-            <h2 className="text-lg font-semibold text-black">Onboarding setup</h2>
-            <div className="text-sm text-gray-600">
-              <p>Complete the setup with payment to activate your restaurant. The onboarding fee is mandatory.</p>
-            </div>
-
-            <div className="border border-orange-200 bg-orange-50 px-3 py-2 rounded-md">
-              <p className="text-sm font-medium text-orange-900">Onboarding fee</p>
-              <p className="text-lg font-semibold text-orange-600">₹{onboardingFeeBase} + ₹{onboardingGST} (18% GST)</p>
-              <p className="text-xl font-bold text-orange-700">Total: ₹{onboardingFeeTotal}</p>
-              <p className="text-xs text-orange-700">Mandatory to activate account</p>
-            </div>
-          </section>
-        )}
-
-        <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
-          <h2 className="text-lg font-semibold text-black">Select subscription plan</h2>
-          <p className="text-sm text-gray-600">For new onboarding GMV is ₹0, so only Starter plan is selectable right now.</p>
-
-          <div className="space-y-3">
-            {subscriptionPlans.map((plan) => {
-              const isSelectable = plan.id === eligiblePlanId
-              const selected = step4State.subscriptionPlan === plan.id
-              return (
-              <button
-                key={plan.id}
-                type="button"
-                disabled={!isSelectable}
-                onClick={() => {
-                  if (!isSelectable) return
-                  setStep4State({ ...step4State, subscriptionPlan: plan.id, paymentType: 'full', customAmount: 0, errors: [] })
-                }}
-                className={`w-full p-4 border-2 rounded-md text-left transition-colors ${
-                  selected
-                    ? 'border-black bg-black/5'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
-                } ${!isSelectable ? 'opacity-60 cursor-not-allowed' : ''}`}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-medium text-black">{plan.label} (₹{plan.price}/mo + 18% GST)</p>
-                    <p className="text-xs text-indigo-700 mt-1 font-medium">{plan.gmvLabel}</p>
-                    <p className="text-sm font-semibold text-gray-700">Total: ₹{Math.round(plan.price * 1.18)}</p>
-                    <ul className="mt-2 space-y-1">
-                      {plan.features.map((f, i) => (
-                        <li key={i} className="text-xs text-gray-600">• {f}</li>
-                      ))}
-                    </ul>
-                    {!isSelectable ? <p className="text-xs text-amber-700 mt-2">Locked for now. Available after GMV slab eligibility.</p> : null}
-                  </div>
-                  <div className={`w-5 h-5 rounded-full border-2 ${selected ? 'border-black bg-black' : 'border-gray-300'}`} />
-                </div>
-              </button>
-            )})}
-          </div>
-        </section>
-
-        {step4State.subscriptionPlan && (
-          <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
-            <h2 className="text-lg font-semibold text-black">Payment option</h2>
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => setStep4State({ ...step4State, paymentType: 'full', customAmount: 0, errors: [] })}
-                className={`w-full p-4 border-2 rounded-md text-left transition-colors ${
-                  step4State.paymentType === 'full'
-                    ? 'border-black bg-black/5'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
-                }`}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-medium text-black">Pay now</p>
-                    <p className="text-xs text-gray-600 mt-1">
-                      {hasOnboardingFee
-                        ? `Pay onboarding fee (₹${onboardingFeeTotal}) plus the selected subscription plan (₹${subscriptionPlanTotal}) in full now.`
-                        : `Pay the selected subscription plan (₹${subscriptionPlanTotal}) in full now.`}
-                    </p>
-                  </div>
-                  <div className={`w-5 h-5 rounded-full border-2 ${step4State.paymentType === 'full' ? 'border-black bg-black' : 'border-gray-300'}`} />
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setStep4State({ ...step4State, paymentType: 'partial', customAmount: 0, errors: [] })}
-                className={`w-full p-4 border-2 rounded-md text-left transition-colors ${
-                  step4State.paymentType === 'partial'
-                    ? 'border-black bg-black/5'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
-                }`}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-medium text-black">Pay partial</p>
-                    <p className="text-xs text-gray-600 mt-1">
-                      {hasOnboardingFee
-                        ? "Pay part of the subscription now. Onboarding fee is always collected."
-                        : "Pay part of the subscription now."}
-                    </p>
-                  </div>
-                  <div className={`w-5 h-5 rounded-full border-2 ${step4State.paymentType === 'partial' ? 'border-black bg-black' : 'border-gray-300'}`} />
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setStep4State({ ...step4State, paymentType: 'later', customAmount: 0, errors: [] })}
-                className={`w-full p-4 border-2 rounded-md text-left transition-colors ${
-                  step4State.paymentType === 'later'
-                    ? 'border-black bg-black/5'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
-                }`}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-medium text-black">Pay later</p>
-                    <p className="text-xs text-gray-600 mt-1">
-                      {hasOnboardingFee
-                        ? `Pay subscription later. Only onboarding fee (₹${onboardingFeeTotal} with GST) will be collected now.`
-                        : "Pay nothing now. The subscription amount will become due."}
-                    </p>
-                  </div>
-                  <div className={`w-5 h-5 rounded-full border-2 ${step4State.paymentType === 'later' ? 'border-black bg-black' : 'border-gray-300'}`} />
-                </div>
-              </button>
-            </div>
-
-            {step4State.paymentType === 'partial' && (
-              <div className="mt-4">
-                <Label className="text-xs text-gray-700 mb-1 block">Enter subscription partial amount</Label>
-                <Input
-                  type="number"
-                  value={step4State.customAmount || ''}
-                  min={1}
-                  max={selectedPlanBase}
-                  onChange={(e) => {
-                    const value = Number(e.target.value || 0)
-                    setStep4State((prev) => ({ ...prev, customAmount: value, errors: [] }))
-                  }}
-                  className="bg-white text-sm"
-                  placeholder={`Enter partial plan base payment (₹1 - ₹${selectedPlanBase})`}
-                />
-                <p className="text-xs text-gray-500 mt-2">
-                  {hasOnboardingFee
-                    ? `Onboarding fee (₹${onboardingFeeTotal} inc. GST) is mandatory. The partial payment for subscription will also have 18% GST added.`
-                    : "The partial payment for subscription will have 18% GST added."}
-                </p>
-              </div>
-            )}
-          </section>
-        )}
-
-        {step4State.subscriptionPlan && (
-          <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
-            <h2 className="text-lg font-semibold text-black">Payment summary</h2>
-            <div className="space-y-2 text-sm">
-              {hasOnboardingFee && (
-                <>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Onboarding fee (Base)</span>
-                    <span className="font-medium">₹{onboardingFeeBase}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Onboarding GST (18%)</span>
-                    <span className="font-medium">₹{onboardingGST}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-gray-100 pt-1">
-                    <span className="text-gray-800 font-medium">Onboarding Total</span>
-                    <span className="font-bold">₹{onboardingFeeTotal}</span>
-                  </div>
-                </>
-              )}
-              
-              <div className="mt-2 pt-2 border-t border-gray-100">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Subscription ({planLabel}) Base</span>
-                  <span className="font-medium">₹{selectedPlanBase}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Subscription GST (18%)</span>
-                  <span className="font-medium">₹{subscriptionPlanGST}</span>
-                </div>
-                <div className="flex justify-between border-t border-gray-100 pt-1">
-                  <span className="text-gray-800 font-medium">Subscription Total</span>
-                  <span className="font-bold">₹{subscriptionPlanTotal}</span>
-                </div>
-              </div>
-
-              <div className="mt-2 pt-2 border-t border-gray-200">
-                <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Breakdown of Pay now</div>
-                {hasOnboardingFee && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Onboarding (Total)</span>
-                    <span className="font-medium">₹{onboardingFeeTotal}</span>
-                  </div>
-                )}
-                
-                {subscriptionPaidNowTotal > 0 && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Subscription ({paymentType === 'partial' ? 'Partial' : 'Pay now'}) Base</span>
-                      <span className="font-medium">₹{subscriptionPaidNowBase}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Subscription ({paymentType === 'partial' ? 'Partial' : 'Pay now'}) GST</span>
-                      <span className="font-medium">₹{subscriptionPaidNowGST}</span>
-                    </div>
-                  </>
-                )}
-
-                <div className="flex justify-between border-t border-orange-100 mt-2 pt-1">
-                  <span className="text-gray-700 font-semibold text-base">Total to pay now</span>
-                  <span className="text-orange-600 font-bold text-lg">₹{currentPaymentTotal}</span>
-                </div>
-                
-                {subscriptionDueLaterTotal > 0 && (
-                  <div className="flex justify-between text-xs mt-1 bg-gray-50 p-1 rounded">
-                    <span className="text-gray-500 italic">Remaining due later (inc. GST)</span>
-                    <span className="text-gray-500 font-medium">₹{subscriptionDueLaterTotal}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-        )}
-
-        {step4State.errors.length > 0 && (
-          <div className="bg-red-50 border border-red-200 p-3 rounded-md">
-            {step4State.errors.map((err, i) => (
-              <p key={i} className="text-sm text-red-700">{err}</p>
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  const handleStep4Payment = async () => {
-    setPaymentProcessing(true)
-    setError('')
-
-    try {
-      const GST_RATE = 0.18
-      const starterPrice = Number(subscriptionSettings.starterPrice || 999)
-      const growthPrice = Number(subscriptionSettings.growthPrice || 1999)
-      const premiumPrice = Number(subscriptionSettings.premiumPrice || 2999)
-      const onboardingFeeBase = Math.max(0, Number(subscriptionSettings.onboardingFee ?? 799))
-
-      const selectedPlanBase =
-        step4State.subscriptionPlan === 'premium'
-          ? premiumPrice
-          : step4State.subscriptionPlan === 'growth'
-            ? growthPrice
-            : step4State.subscriptionPlan === 'starter'
-              ? starterPrice
-              : 0
-      const planErrors = []
-      if (!selectedPlanBase) {
-        planErrors.push('Please select a subscription plan')
-      }
-
-      const paymentType = step4State.paymentType || 'full'
-      const onboardingGST = Math.round(onboardingFeeBase * GST_RATE)
-      const onboardingFeeTotal = onboardingFeeBase + onboardingGST
-      
-      let paymentAmountTotal = 0
-      let subscriptionPaidAmountBase = 0
-
-      if (paymentType === 'full') {
-        const planGST = Math.round(selectedPlanBase * GST_RATE)
-        paymentAmountTotal = onboardingFeeTotal + selectedPlanBase + planGST
-        subscriptionPaidAmountBase = selectedPlanBase
-      } else if (paymentType === 'later') {
-        paymentAmountTotal = onboardingFeeTotal
-        subscriptionPaidAmountBase = 0
-      } else if (paymentType === 'partial') {
-        const partialAmountBase = Number(step4State.customAmount || 0)
-        if (!Number.isFinite(partialAmountBase) || partialAmountBase <= 0) {
-          planErrors.push('Please enter a valid partial subscription amount')
-        }
-        if (partialAmountBase > selectedPlanBase) {
-          planErrors.push(`Partial payment cannot exceed the selected plan amount of ₹${selectedPlanBase}`)
-        }
-        const partialGST = Math.round(partialAmountBase * GST_RATE)
-        paymentAmountTotal = onboardingFeeTotal + partialAmountBase + partialGST
-        subscriptionPaidAmountBase = Math.max(0, partialAmountBase)
-      } else {
-        planErrors.push('Invalid payment type selected')
-      }
-
-      if (paymentAmountTotal <= 0) {
-        planErrors.push('Invalid payment amount')
-      }
-
-      const planGST = Math.round(selectedPlanBase * GST_RATE)
-      const subscriptionPlanTotal = selectedPlanBase + planGST
-      const subscriptionPaidNowGST = Math.round(subscriptionPaidAmountBase * GST_RATE)
-      const subscriptionPaidNowTotal = subscriptionPaidAmountBase + subscriptionPaidNowGST
-
-      if (planErrors.length === 0) {
-        if (!step4State.subscriptionPlan) {
-          planErrors.push('Please select a subscription plan')
-        }
-        if (!step1.ownerEmail?.trim()) {
-          planErrors.push('Owner email is missing. Please go back to Step 1 and provide an email.')
-        } else if (!EMAIL_REGEX.test(String(step1.ownerEmail).trim()) || String(step1.ownerEmail).includes('..') || hasSuspiciousEmailTld(step1.ownerEmail)) {
-          planErrors.push(`Email "${step1.ownerEmail}" is invalid. Please fix it in Step 1.`)
-        } else {
-          const emailParts = String(step1.ownerEmail).trim().toLowerCase().split('@')[1]?.split('.') || []
-          if (emailParts.length >= 2 && emailParts[emailParts.length - 1] === emailParts[emailParts.length - 2]) {
-            planErrors.push(`Email "${step1.ownerEmail}" has repeated domain parts. Please fix it in Step 1.`)
-          }
-        }
-      }
-
-      if (planErrors.length > 0) {
-        setStep4State(prev => ({ ...prev, errors: planErrors }))
-        setPaymentProcessing(false)
-        return
-      }
-
-      const orderRes = await restaurantAPI.createOnboardingPaymentOrder(paymentAmountTotal, step4State.subscriptionPlan, paymentType)
-      const orderData = orderRes?.data?.data
-
-      if (!orderData?.razorpay) {
-        throw new Error('Failed to create payment order')
-      }
-
-      const { loadRazorpayScript, initRazorpayPayment } = await import('@food/utils/razorpay')
-      await loadRazorpayScript()
-
-      const razorpayKey = orderData.razorpay.key
-      const razorpayOrderId = orderData.razorpay.orderId
-      const amount = orderData.razorpay.amount
-
-      await initRazorpayPayment({
-        key: razorpayKey,
-        amount,
-        currency: 'INR',
-        order_id: razorpayOrderId,
-        name: 'Restaurant Onboarding',
-        description: `Onboarding payment (${paymentType === 'later' ? 'onboarding only' : paymentType === 'full' ? 'full plan' : 'partial'})`,
-        prefill: {
-          name: step1.ownerName || '',
-          // Removed pre-filled email/contact to allow any value in Razorpay and avoid WebView focus issues
-        },
-        modal: {
-          handleback: false, // Fix for blank screen in some WebViews/Mobile apps
-        },
-        retry: {
-          enabled: false // Disable retry to prevent loops in WebViews
-        },
-        handler: async (response) => {
-          try {
-            console.log('✓ Payment handler called with response:', response)
-            
-            const formData = new FormData()
-            formData.append('restaurantName', step1.restaurantName || '')
-            formData.append('pureVegRestaurant', step1.pureVegRestaurant === true ? 'true' : 'false')
-            formData.append('ownerName', step1.ownerName || '')
-            formData.append('ownerEmail', (step1.ownerEmail || '').trim())
-            formData.append('ownerPhone', normalizePhoneDigits(step1.ownerPhone))
-            formData.append('primaryContactNumber', normalizePhoneDigits(step1.primaryContactNumber))
-            formData.append('zoneId', step1.zoneId || '')
-            formData.append('addressLine1', step1.location?.addressLine1 || '')
-            formData.append('addressLine2', step1.location?.addressLine2 || '')
-            formData.append('area', step1.location?.area || '')
-            formData.append('city', step1.location?.city || '')
-            formData.append('state', step1.location?.state || '')
-            formData.append('pincode', step1.location?.pincode || '')
-            formData.append('landmark', step1.location?.landmark || '')
-            formData.append('formattedAddress', step1.location?.formattedAddress || '')
-            formData.append('latitude', String(step1.location?.latitude || ''))
-            formData.append('longitude', String(step1.location?.longitude || ''))
-
-            formData.append('cuisines', (step2.cuisines || []).join(','))
-            formData.append('estimatedDeliveryTime', (step2.estimatedDeliveryTime || '').trim())
-            formData.append('openingTime', normalizeTimeValue(step2.openingTime) || '')
-            formData.append('closingTime', normalizeTimeValue(step2.closingTime) || '')
-            formData.append('openDays', (step2.openDays || []).join(','))
-
-            const menuImages = step2.menuImages || []
-            const menuFiles = menuImages.filter(f => isUploadableFile(f))
-            const menuUrls = menuImages.map(f => typeof f === 'string' ? f : (f?.url || null)).filter(Boolean)
-
-            if (menuFiles.length === 0 && menuUrls.length === 0) {
-              throw new Error('At least one menu image must be uploaded')
-            }
-            
-            menuFiles.forEach((file) => formData.append('menuImages', file))
-            if (menuUrls.length > 0) {
-              formData.append('menuImages', JSON.stringify(menuUrls))
-            }
-
-            if (!step2.profileImage) {
-              throw new Error('Restaurant profile image is required')
-            }
-            if (isUploadableFile(step2.profileImage)) {
-              formData.append('profileImage', step2.profileImage)
-            } else {
-              formData.append('profileImage', typeof step2.profileImage === 'string' ? step2.profileImage : step2.profileImage.url)
-            }
-
-            formData.append('panNumber', step3.panNumber || '')
-            formData.append('nameOnPan', step3.nameOnPan || '')
-            if (!step3.panImage) {
-              throw new Error('PAN image is required')
-            }
-            if (isUploadableFile(step3.panImage)) {
-              formData.append('panImage', step3.panImage)
-            } else {
-              formData.append('panImage', typeof step3.panImage === 'string' ? step3.panImage : step3.panImage.url)
-            }
-
-            formData.append('gstRegistered', step3.gstRegistered ? 'true' : 'false')
-            if (step3.gstRegistered) {
-              formData.append('gstNumber', step3.gstNumber || '')
-              formData.append('gstLegalName', step3.gstLegalName || '')
-              formData.append('gstAddress', step3.gstAddress || '')
-              if (!step3.gstImage) {
-                throw new Error('GST image is required when GST registered')
-              }
-              if (isUploadableFile(step3.gstImage)) {
-                formData.append('gstImage', step3.gstImage)
-              } else {
-                formData.append('gstImage', typeof step3.gstImage === 'string' ? step3.gstImage : step3.gstImage.url)
-              }
-            }
-
-            formData.append('fssaiNumber', step3.fssaiNumber || '')
-            formData.append('fssaiExpiry', step3.fssaiExpiry || '')
-            if (!step3.fssaiImage) {
-              throw new Error('FSSAI image is required')
-            }
-            if (isUploadableFile(step3.fssaiImage)) {
-              formData.append('fssaiImage', step3.fssaiImage)
-            } else {
-              formData.append('fssaiImage', typeof step3.fssaiImage === 'string' ? step3.fssaiImage : step3.fssaiImage.url)
-            }
-
-            formData.append('accountNumber', step3.accountNumber || '')
-            formData.append('ifscCode', (step3.ifscCode || '').toUpperCase())
-            formData.append('accountHolderName', step3.accountHolderName || '')
-            formData.append('accountType', step3.accountType || '')
-
-            // Payment & Subscription fields
-            formData.append('onboardingFeePaid', 'true')
-            formData.append('onboardingFeeAmount', String(onboardingFeeTotal))
-            formData.append('subscriptionPlan', step4State.subscriptionPlan || 'starter')
-            formData.append('subscriptionAmount', String(subscriptionPlanTotal))
-            formData.append('subscriptionPaidAmount', String(subscriptionPaidNowTotal))
-            formData.append('subscriptionDueAmount', String(Math.max(0, subscriptionPlanTotal - subscriptionPaidNowTotal)))
-            formData.append('paymentType', paymentType)
-            formData.append('razorpayOrderId', razorpayOrderId)
-            formData.append('razorpayPaymentId', response.razorpay_payment_id)
-            formData.append('razorpaySignature', response.razorpay_signature)
-
-            console.log('Payment handler called, opening registration...')
-            setRegistrationProcessing(true)
-            
-            const loadingToast = toast.loading('Uploading documents & registering your restaurant...', {
-              description: 'This might take a minute for high-resolution images.',
-            })
-
-            try {
-              console.log('Calling restaurantAPI.register...')
-              const registerPromise = restaurantAPI.register(formData)
-              
-              // Add a 60 second timeout (image uploads can take time)
-              const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Registration request timeout after 60s')), 60000)
-              )
-              
-              const registerRes = await Promise.race([registerPromise, timeoutPromise])
-              toast.dismiss(loadingToast)
-              setRegistrationProcessing(false)
-              console.log('✓ Registration API returned:', registerRes)
-              
-              if (registerRes?.status >= 200 && registerRes?.status < 300) {
-                console.log('✓ Registration successful with status:', registerRes.status)
-              } else {
-                console.warn('⚠ Registration returned status:', registerRes?.status)
-              }
-            } catch (registrationError) {
-              toast.dismiss(loadingToast)
-              setRegistrationProcessing(false)
-              console.error('✗ Registration failed:', {
-                message: registrationError?.message,
-                response: registrationError?.response?.data,
-                status: registrationError?.response?.status,
-                stack: registrationError?.stack
-              })
-              throw registrationError
-            }
-            
-            console.log('✓ Registration completed, proceeding to redirect...')
-
-            const ownerPhoneForRedirect = normalizePhoneDigits(step1.ownerPhone)
-            console.log('Clearing stored data and redirecting to pending-verification...')
-
-            clearOnboardingFromLocalStorage()
-            clearOnboardingFileCache()
-            try {
-              localStorage.setItem('restaurant_pendingPhone', ownerPhoneForRedirect)
-            } catch (e) {
-              console.error('Error saving phone to localStorage:', e)
-            }
-
-            console.log('Showing success toast...')
-            toast.success('Payment successful! Registration submitted for approval.', { duration: 4000 })
-            
-            console.log('About to navigate to pending-verification with phone:', ownerPhoneForRedirect)
-            setPaymentProcessing(false)
-            console.log('Payment processing set to false')
-            
-            console.log('Calling navigate()...')
-            navigate('/food/restaurant/pending-verification', {
-              replace: true,
-              state: {
-                phone: ownerPhoneForRedirect,
-              },
-            })
-            console.log('✓ Navigate called successfully')
-          } catch (err) {
-            console.error('Handler caught error:', err)
-            const errMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Payment verification failed'
-            console.error('Error message:', errMsg)
-            toast.error(errMsg)
-            setError(errMsg)
-            setPaymentProcessing(false)
-          }
-        },
-        onError: (error) => {
-          toast.error(error?.description || 'Payment failed')
-          setError(error?.description || 'Payment failed')
-          setRegistrationProcessing(false)
-          setPaymentProcessing(false)
-        },
-        onClose: () => {
-          setRegistrationProcessing(false)
-          setPaymentProcessing(false)
-        }
-      })
-    } catch (err) {
-      toast.dismiss()
-      setRegistrationProcessing(false)
-      setPaymentProcessing(false)
-      toast.error(err?.message || 'Failed to initiate payment')
-      setError(err?.message || 'Failed to initiate payment')
-    }
-  }
-
   const renderStep = () => {
     if (step === 1) return renderStep1()
     if (step === 2) return renderStep2()
@@ -4076,8 +3432,8 @@ export default function RestaurantOnboarding() {
             </Button>
             <Button
               onClick={handleNext}
-              disabled={saving || paymentProcessing || (step === 3 && !isEditing) || Object.values(uploadingAttachments).some(Boolean)}
-              className={`text-sm bg-black text-white px-6 ${(saving || paymentProcessing || (step === 3 && !isEditing) || Object.values(uploadingAttachments).some(Boolean)) ? "opacity-50 cursor-not-allowed" : ""}`}
+              disabled={saving || (step === 3 && !isEditing) || Object.values(uploadingAttachments).some(Boolean)}
+              className={`text-sm bg-black text-white px-6 ${(saving || (step === 3 && !isEditing) || Object.values(uploadingAttachments).some(Boolean)) ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               {Object.values(uploadingAttachments).some(Boolean) 
                 ? "Uploading..." 

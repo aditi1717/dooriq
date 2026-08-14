@@ -10,17 +10,6 @@ export const processMaintenanceJob = async (job) => {
 
     logger.info(`[BullMQ:maintenance] type=${type} jobId=${job.id}`);
 
-    if (type === 'SUBSCRIPTION_EXPIRY_CHECK') {
-        try {
-            const { processSubscriptionExpiries } = await import('../../../modules/food/restaurant/services/subscriptionExpiry.service.js');
-            const results = await processSubscriptionExpiries();
-            logger.info(`[BullMQ:maintenance] SUBSCRIPTION_EXPIRY_CHECK complete. Processed: ${results.processed}, Errors: ${results.errors}`);
-        } catch (err) {
-            logger.error(`[BullMQ:maintenance] SUBSCRIPTION_EXPIRY_CHECK failed: ${err.message}`);
-            throw err;
-        }
-    }
-
     if (type === 'FSSAI_EXPIRY_CHECK') {
         try {
             const { syncExpiredFssaiNotifications } = await import('../../../modules/food/restaurant/services/fssaiExpiry.service.js');

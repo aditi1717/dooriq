@@ -30,17 +30,7 @@ const startMaintenanceWorker = async () => {
     // Setup repeatable jobs
     const maintenanceQueue = new Queue(MAINTENANCE_QUEUE, { connection });
     
-    // 1. Subscription Expiry Check (Every day at 3 AM)
-    await maintenanceQueue.add(
-        'SUBSCRIPTION_EXPIRY_CHECK',
-        { type: 'SUBSCRIPTION_EXPIRY_CHECK' },
-        {
-            repeat: { pattern: '0 3 * * *' }, // 3:00 AM daily
-            jobId: 'subscription_expiry_job'
-        }
-    );
-
-    // 2. FSSAI Expiry Check (Every day at 4 AM)
+    // FSSAI Expiry Check (Every day at 4 AM)
     await maintenanceQueue.add(
         'FSSAI_EXPIRY_CHECK',
         { type: 'FSSAI_EXPIRY_CHECK' },
@@ -54,7 +44,7 @@ const startMaintenanceWorker = async () => {
     worker.on('failed', (job, err) => logger.error(`Maintenance job ${job?.id} failed: ${err.message}`));
     worker.on('error', (err) => logger.error(`Maintenance worker error: ${err.message}`));
 
-    logger.info('Maintenance worker started with repeatable jobs (Subscription & FSSAI)');
+    logger.info('Maintenance worker started with repeatable jobs (FSSAI)');
     return worker;
 };
 

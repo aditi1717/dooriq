@@ -252,6 +252,30 @@ const readTokensFromDoc = (doc, platform) => {
     ]);
 };
 
+const removeTokenFromAllOwners = async ({ token, exceptOwnerType, exceptOwnerId } = {}) => {
+    const normalizedToken = sanitizeString(token);
+    if (!normalizedToken) return;
+
+    const exclusionOwnerType = String(exceptOwnerType || '').toUpperCase();
+    const exclusionOwnerId = sanitizeString(exceptOwnerId);
+
+    await Promise.all(
+        Object.entries(OWNER_MODELS).map(async ([ownerType, model]) => {
+            const query = {
+                $or: [{ fcmTokens: normalizedToken }, { fcmTokenMobile: normalizedToken }]
+            };
+
+            if (ownerType === exclusionOwnerType && exclusionOwnerId) {
+                query._id = { $ne: exclusionOwnerId };
+            }
+
+            await model.updateMany(query, {
+                $pull: { fcmTokens: normalizedToken, fcmTokenMobile: normalizedToken }
+            });
+        })
+    );
+};
+
 export const listOwnerTokens = async ({ ownerType, ownerId, platform }) => {
     if (!ownerType || !ownerId) return [];
     const model = getOwnerModel(ownerType);
@@ -283,6 +307,12 @@ export const upsertFirebaseDeviceToken = async ({ ownerType, ownerId, token, pla
         console.error(`[FCM-DEBUG] upsert - Owner profile not found for id ${ownerId}`);
         throw new Error('Owner profile not found.');
     }
+
+    await removeTokenFromAllOwners({
+        token: normalizedToken,
+        exceptOwnerType: ownerType,
+        exceptOwnerId: ownerId
+    });
 
     const field = getTokenFieldForPlatform(normalizedPlatform);
     const existingTokens = Array.isArray(doc[field]) ? doc[field] : [];

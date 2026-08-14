@@ -54,29 +54,6 @@ export default function OutletInfo() {
   
   // State management
   const [restaurantData, setRestaurantData] = useState(null)
-  const [isSubscriptionEnabled, setIsSubscriptionEnabled] = useState(() => {
-    if (typeof window !== "undefined") {
-      const val = localStorage.getItem("restaurant_subscription_feature_enabled")
-      return val !== "false"
-    }
-    return true
-  })
-
-  useEffect(() => {
-    const checkSubscriptionFeature = async () => {
-      try {
-        const res = await restaurantAPI.getFeatureSettingsPublic()
-        const rows = Array.isArray(res?.data?.data) ? res.data.data : []
-        const feature = rows.find((row) => row.key === "restaurant_subscription")
-        const enabled = feature ? Boolean(feature.isEnabled) : true
-        setIsSubscriptionEnabled(enabled)
-        localStorage.setItem("restaurant_subscription_feature_enabled", String(enabled))
-      } catch {
-        // Safe fallback
-      }
-    }
-    checkSubscriptionFeature()
-  }, [])
   const [loading, setLoading] = useState(true)
   const [restaurantName, setRestaurantName] = useState("")
   const [cuisineTags, setCuisineTags] = useState("")
@@ -1399,17 +1376,6 @@ export default function OutletInfo() {
     }
   }
 
-  const currentPlanLabel = String(restaurantData?.subscriptionPlan || "").trim()
-    ? String(restaurantData?.subscriptionPlan || "").trim().toUpperCase()
-    : "N/A"
-  const subscriptionValidTillLabel = restaurantData?.subscriptionValidTill
-    ? new Date(restaurantData.subscriptionValidTill).toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-    : "N/A"
-
   const direct = (value) => (value === null || value === undefined ? "" : String(value))
 
   const maskAccountNumber = (value) => {
@@ -1893,15 +1859,6 @@ export default function OutletInfo() {
             </div>
           </div>
 
-          {isSubscriptionEnabled && (
-            <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-4 border border-amber-200 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900 mb-3">Subscription</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div><p className="text-xs text-slate-500">Current plan</p><p className="text-sm font-semibold text-slate-900">{loading ? "Loading..." : currentPlanLabel}</p></div>
-                <div><p className="text-xs text-slate-500">Valid till</p><p className="text-sm font-semibold text-slate-900">{loading ? "Loading..." : subscriptionValidTillLabel}</p></div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

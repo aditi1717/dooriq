@@ -184,35 +184,12 @@ export default function RestaurantOTP() {
       const accessToken = data?.accessToken
       const refreshToken = data?.refreshToken ?? null
       const restaurant = data?.user ?? data?.restaurant
-      const paymentRequired = data?.paymentRequired === true
 
       if (accessToken && restaurant) {
-        let shouldGoToOnboardingPayment = paymentRequired
-
-        if (paymentRequired) {
-          let isSubscriptionEnabled = true
-          try {
-            const featureRes = await restaurantAPI.getFeatureSettingsPublic()
-            const rows = Array.isArray(featureRes?.data?.data) ? featureRes.data.data : []
-            const feature = rows.find((row) => row.key === "restaurant_subscription")
-            isSubscriptionEnabled = feature ? Boolean(feature.isEnabled) : true
-            localStorage.setItem("restaurant_subscription_feature_enabled", String(isSubscriptionEnabled))
-          } catch (_error) {
-            isSubscriptionEnabled = false
-            localStorage.setItem("restaurant_subscription_feature_enabled", "false")
-          }
-          shouldGoToOnboardingPayment = isSubscriptionEnabled
-        }
-
         setRestaurantAuthData("restaurant", accessToken, restaurant, refreshToken)
         window.dispatchEvent(new Event("restaurantAuthChanged"))
         sessionStorage.removeItem("restaurantAuthData")
         sessionStorage.removeItem("restaurantLoginPhone")
-
-        if (shouldGoToOnboardingPayment) {
-          navigate("/food/restaurant/onboarding-payment", { replace: true })
-          return
-        }
 
         if (authData?.isSignUp) {
           navigate("/food/restaurant", { replace: true })

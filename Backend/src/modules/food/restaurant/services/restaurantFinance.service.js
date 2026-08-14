@@ -3,8 +3,6 @@ import { FoodOrder } from '../../orders/models/order.model.js';
 import { FoodRestaurant } from '../models/restaurant.model.js';
 import { FoodRestaurantWithdrawal } from '../models/foodRestaurantWithdrawal.model.js';
 import { FoodOffer } from '../../admin/models/offer.model.js';
-import { FEATURE_KEYS, isFeatureEnabled } from '../../admin/services/featureSettings.service.js';
-import { attemptAutoSettleSubscriptionDue } from './subscriptionPlan.service.js';
 import { FoodBusinessSettings } from '../../admin/models/businessSettings.model.js';
 
 function toTwoDigitYearString(dateObj) {
@@ -135,17 +133,28 @@ function isEarnedOrder(order) {
     );
 }
 
+function calculateItemsAmount(items = []) {
+    if (!Array.isArray(items)) return 0;
+    return items.reduce((sum, item) => {
+        const quantity = Math.max(1, Number(item?.quantity || item?.qty || 1) || 1);
+        const unitPrice = Number(
+            item?.price ??
+            item?.unitPrice ??
+            item?.foodPrice ??
+            item?.itemPrice ??
+            0
+        ) || 0;
+        return sum + (unitPrice * quantity);
+    }, 0);
+}
+
 export async function getRestaurantFinance(restaurantId, query = {}) {
     if (!restaurantId || !mongoose.Types.ObjectId.isValid(restaurantId)) return null;
     const rid = new mongoose.Types.ObjectId(restaurantId);
-    const isRestaurantSubscriptionEnabled = await isFeatureEnabled(FEATURE_KEYS.RESTAURANT_SUBSCRIPTION, true);
-    if (isRestaurantSubscriptionEnabled) {
-        await attemptAutoSettleSubscriptionDue(restaurantId).catch(() => null);
-    }
 
     // Fetch restaurant profile for header display.
     const restaurant = await FoodRestaurant.findById(rid)
-        .select('restaurantName addressLine1 addressLine2 area city state pincode location subscriptionDueAmount subscriptionStatus subscriptionAutoDeductedAmount')
+        .select('restaurantName addressLine1 addressLine2 area city state pincode location')
         .lean();
 
     const address =
@@ -185,7 +194,8 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
         const pricing = tx.pricing || order.pricing || {};
         const amounts = tx.amounts || {};
         
-        const subtotal = Number(pricing.subtotal) || 0;
+        const itemAmount = Number(pricing.subtotal) || calculateItemsAmount(items);
+        const subtotal = itemAmount;
         const packagingFee = Number(pricing.packagingFee) || 0;
         const commission = Number(amounts.restaurantCommission) || Number(pricing.restaurantCommission) || 0;
         const discount = Number(pricing.discount) || 0;
@@ -202,6 +212,8 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
             createdAt: order.createdAt,
             items,
             foodNames,
+            itemAmount: Math.max(0, itemAmount),
+            subtotal: Math.max(0, itemAmount),
             orderTotal: Math.max(0, (Number(pricing.total) || 0) - (Number(pricing.tax) || 0)),
             totalAmount: Number(pricing.total) || 0,
             payout: Math.max(0, payout),
@@ -238,14 +250,7 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
         { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
     const totalPendingWithdrawals = Number(pendingWithdrawalsAgg?.[0]?.total || 0);
-    const subscriptionDue = isRestaurantSubscriptionEnabled
-        ? Math.max(0, Number(restaurant?.subscriptionDueAmount || 0))
-        : 0;
-    // Calculate final balance for withdrawal.
-    // NOTE: We no longer automatically deduct subscriptionDue here per user request ("direct deduct na ho").
-    // We will instead block the withdrawal in the controller if subscriptionDue > 0.
-    const subscriptionReserved = Math.max(0, Number(restaurant?.subscriptionAutoDeductedAmount || 0));
-    const availableBalance = Math.max(0, currentCycleEstimatedPayout - totalPendingWithdrawals - subscriptionReserved);
+    const availableBalance = Math.max(0, currentCycleEstimatedPayout - totalPendingWithdrawals);
 
     const currentCycle = {
         start: { ...nowWindow.startMeta },
@@ -254,7 +259,7 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
         totalWithdrawn: totalPendingWithdrawals,
         estimatedPayout: currentCycleEstimatedPayout,
         withdrawableBalance: availableBalance,
-        netAvailable: Math.max(0, availableBalance - subscriptionDue), // Net amount that is ACTUALLY withdrawable
+        netAvailable: availableBalance,
         totalOrders: currentCycleOrders.length,
         payoutDate: null,
         orders: currentCycleOrders
@@ -263,9 +268,9 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
     // Invoice Summary (derived from current cycle or broader if needed)
     const invoiceSummary = {
         count: currentCycleOrders.length,
-        subtotal: currentCycleOrders.reduce((sum, o) => sum + (Number(o.orderTotal) || 0), 0),
-        taxes: currentCycleOrders.reduce((sum, o) => sum + Math.max(0, (Number(o.totalAmount) || 0) - (Number(o.orderTotal) || 0)), 0),
-        gross: currentCycleOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0)
+        subtotal: currentCycleOrders.reduce((sum, o) => sum + (Number(o.itemAmount) || 0), 0),
+        taxes: 0,
+        gross: currentCycleOrders.reduce((sum, o) => sum + (Number(o.itemAmount) || 0), 0)
     };
 
     // Past cycles: build from provided startDate/endDate query.
@@ -299,12 +304,10 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
             name: restaurant?.restaurantName || '',
             restaurantId: restaurant?._id ? `REST${restaurant._id.toString().slice(-6).padStart(6, '0')}` : 'N/A',
             address,
-            subscriptionDueAmount: Number(restaurant?.subscriptionDueAmount || 0),
-            subscriptionStatus: restaurant?.subscriptionStatus || 'paid',
             restaurantTdsPercentage
         },
         features: {
-            restaurantSubscriptionEnabled: isRestaurantSubscriptionEnabled
+            restaurantSubscriptionEnabled: false
         },
         currentCycle,
         invoiceSummary,

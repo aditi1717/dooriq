@@ -1,6 +1,5 @@
 import {
     registerRestaurant,
-    createRestaurantOnboardingOrder,
     listApprovedRestaurants,
     getApprovedRestaurantByIdOrSlug,
     getCurrentRestaurantProfile,
@@ -14,48 +13,12 @@ import {
     uploadRestaurantAttachment,
     listPublicOffers,
     getRestaurantComplaints,
-    deleteCurrentRestaurantAccount,
-    payRestaurantDues,
-    createDuesPaymentOrder,
-    verifyDuesPayment,
-    createPostApprovalOnboardingPaymentOrder,
-    verifyPostApprovalOnboardingPayment
+    deleteCurrentRestaurantAccount
 } from '../services/restaurant.service.js';
-import { getRestaurantSubscriptionHistory } from '../services/subscriptionHistory.service.js';
 import { validateRestaurantRegisterDto } from '../validators/restaurant.validator.js';
 import { sendResponse, sendError } from '../../../../utils/response.js';
 import { FoodUnregisteredRestaurant } from '../models/unregisteredRestaurant.model.js';
 
-
-export const createDuesOrderController = async (req, res, next) => {
-    try {
-        const restaurantId = req.user?.userId;
-        const data = await createDuesPaymentOrder(restaurantId);
-        return sendResponse(res, 200, 'Payment order created', data);
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const verifyDuesPaymentController = async (req, res, next) => {
-    try {
-        const restaurantId = req.user?.userId;
-        const restaurant = await verifyDuesPayment(restaurantId, req.body || {});
-        return sendResponse(res, 200, 'Dues paid and verified successfully', { restaurant });
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const payRestaurantDuesController = async (req, res, next) => {
-    try {
-        const restaurantId = req.user?.userId;
-        const restaurant = await payRestaurantDues(restaurantId, req.body || {});
-        return sendResponse(res, 200, 'Dues paid successfully', { restaurant });
-    } catch (error) {
-        next(error);
-    }
-};
 
 export const uploadRestaurantAttachmentController = async (req, res, next) => {
     try {
@@ -72,35 +35,6 @@ export const registerRestaurantController = async (req, res, next) => {
         const validated = validateRestaurantRegisterDto(req.body);
         const restaurant = await registerRestaurant(validated, req.files);
         return sendResponse(res, 201, 'Restaurant registered successfully', restaurant);
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const createRestaurantOnboardingOrderController = async (req, res, next) => {
-    try {
-        const restaurantOrder = await createRestaurantOnboardingOrder(req.body || {});
-        return sendResponse(res, 200, 'Onboarding order created successfully', restaurantOrder);
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const createPostApprovalOnboardingOrderController = async (req, res, next) => {
-    try {
-        const restaurantId = req.user?.userId;
-        const data = await createPostApprovalOnboardingPaymentOrder(restaurantId, req.body || {});
-        return sendResponse(res, 200, 'Onboarding payment order created successfully', data);
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const verifyPostApprovalOnboardingPaymentController = async (req, res, next) => {
-    try {
-        const restaurantId = req.user?.userId;
-        const restaurant = await verifyPostApprovalOnboardingPayment(restaurantId, req.body || {});
-        return sendResponse(res, 200, 'Onboarding payment verified successfully', { restaurant });
     } catch (error) {
         next(error);
     }
@@ -230,16 +164,6 @@ export const deleteCurrentRestaurantAccountController = async (req, res, next) =
         const restaurantId = req.user?.userId;
         const result = await deleteCurrentRestaurantAccount(restaurantId);
         return sendResponse(res, 200, 'Restaurant account deleted successfully', result);
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const getRestaurantSubscriptionHistoryController = async (req, res, next) => {
-    try {
-        const restaurantId = req.user?.userId;
-        const data = await getRestaurantSubscriptionHistory(restaurantId, req.query || {});
-        return sendResponse(res, 200, 'Subscription history fetched successfully', data);
     } catch (error) {
         next(error);
     }

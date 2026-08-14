@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useNavigate } from "react-router-dom"
 import { clearModuleAuth } from "@food/utils/auth"
+import { cleanupPushForModule } from "@food/utils/firebaseMessaging"
 import { 
   User,
   Utensils,
@@ -145,11 +146,12 @@ export default function MenuOverlay({ showMenu, setShowMenu }) {
                       }}
                       whileHover={{ scale: 1.03, y: -2 }}
                       whileTap={{ scale: 0.97 }}
-                      onClick={() => {
+                      onClick={async () => {
                         setShowMenu(false)
                         if (option.isLogout) {
                           // Handle logout
                           if (window.confirm("Are you sure you want to logout?")) {
+                            await cleanupPushForModule("restaurant")
                             // Clear authentication state
                             clearModuleAuth("restaurant")
                             setIsAuthenticated(false)
