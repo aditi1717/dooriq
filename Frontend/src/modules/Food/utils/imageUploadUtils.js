@@ -1,5 +1,7 @@
 import { toast } from "sonner"
 
+const GALLERY_IMAGE_ACCEPT = ".jpg,.jpeg,.png,.webp"
+
 const openTransientImageInput = ({
   onSelectFile,
   accept = "image/*",
@@ -178,11 +180,16 @@ export const openCamera = async ({ onSelectFile, fileNamePrefix = "camera-photo"
 export const openGallery = async ({ onSelectFile, fileNamePrefix = "gallery-photo" }) => {
   try {
     if (isFlutterBridgeAvailable()) {
-      const result = await window.flutter_inappwebview.callHandler("openGallery", {
-        source: "gallery",
-        accept: "image/*",
-        multiple: false,
-      })
+      let result = null
+      try {
+        result = await window.flutter_inappwebview.callHandler("openGallery", {
+          source: "gallery",
+          accept: GALLERY_IMAGE_ACCEPT,
+          multiple: false,
+        })
+      } catch (bridgeError) {
+        console.error("Gallery bridge handler failed:", bridgeError)
+      }
 
       const isSuccess =
         result?.success === true ||
@@ -214,18 +221,29 @@ export const openGallery = async ({ onSelectFile, fileNamePrefix = "gallery-phot
         return
       }
 
-      // Handler responded but no valid image selected (cancel/fail).
-      // Keep strict gallery-only behavior by not opening browser chooser.
+      // If the bridge exists but did not return a valid file, fall back to the browser picker.
+      // This makes the uploader work on phones even when the webview handler is misconfigured.
+      openTransientImageInput({
+        onSelectFile,
+        accept: GALLERY_IMAGE_ACCEPT,
+      })
       return
     }
 
     // Fallback: browser picker is generally reliable across Android/iOS/Web.
     openTransientImageInput({
       onSelectFile,
-      accept: "image/*",
+      accept: GALLERY_IMAGE_ACCEPT,
     })
   } catch (error) {
     console.error("Gallery pick failed:", error)
-    toast.error("Failed to open gallery")
+    try {
+      openTransientImageInput({
+        onSelectFile,
+        accept: GALLERY_IMAGE_ACCEPT,
+      })
+    } catch {
+      toast.error("Failed to open gallery")
+    }
   }
 }

@@ -332,7 +332,17 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
     deliveryPartner: apiOrder?.deliveryPartnerId ? {
       name: apiOrder.deliveryPartnerId.name || apiOrder.deliveryPartnerId.fullName || 'Delivery Partner',
       phone: apiOrder.deliveryPartnerId.phone || apiOrder.deliveryPartnerId.phoneNumber || '',
-      avatar: apiOrder.deliveryPartnerId.avatar || apiOrder.deliveryPartnerId.profilePicture || null
+      avatar:
+        apiOrder.deliveryPartnerId.avatar ||
+        apiOrder.deliveryPartnerId.profilePicture ||
+        apiOrder.deliveryPartnerId.profileImage ||
+        null,
+      rating: Number.isFinite(Number(apiOrder.deliveryPartnerId.rating))
+        ? Number(apiOrder.deliveryPartnerId.rating)
+        : null,
+      totalRatings: Number.isFinite(Number(apiOrder.deliveryPartnerId.totalRatings))
+        ? Number(apiOrder.deliveryPartnerId.totalRatings)
+        : 0,
     } : (previousOrder?.deliveryPartner || null),
     deliveryPartnerId: apiOrder?.deliveryPartnerId?._id || apiOrder?.deliveryPartnerId || apiOrder?.dispatch?.deliveryPartnerId?._id || apiOrder?.dispatch?.deliveryPartnerId || apiOrder?.assignmentInfo?.deliveryPartnerId || null,
     dispatch: apiOrder?.dispatch || previousOrder?.dispatch || null,
@@ -1412,6 +1422,9 @@ export default function OrderTracking() {
   const isCancelledOrder =
     orderStatus === "cancelled" ||
     isFoodOrderCancelledStatus(order?.status)
+  const deliveryPartnerRatingValue = Number(order?.deliveryPartner?.rating)
+  const hasDeliveryPartnerRating = Number.isFinite(deliveryPartnerRatingValue) && deliveryPartnerRatingValue > 0
+  const deliveryPartnerRatingCount = Number(order?.deliveryPartner?.totalRatings || 0)
 
   const restaurantNameCandidates = [
     order?.restaurantName,
@@ -1636,10 +1649,23 @@ export default function OrderTracking() {
                 </div>
                 <div>
                   <h3 className="font-bold text-gray-900 dark:text-white">{order.deliveryPartner?.name || 'Delivery Partner'}</h3>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                    <span className="text-xs font-bold text-gray-700 dark:text-gray-300">4.9</span>
-                  </div>
+                  {hasDeliveryPartnerRating ? (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                      <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                        {deliveryPartnerRatingValue.toFixed(1)}
+                      </span>
+                      {deliveryPartnerRatingCount > 0 && (
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                          ({deliveryPartnerRatingCount})
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      Rating not available yet
+                    </p>
+                  )}
                 </div>
               </div>
               {!isDeliveredOrder && !isCancelledOrder && (

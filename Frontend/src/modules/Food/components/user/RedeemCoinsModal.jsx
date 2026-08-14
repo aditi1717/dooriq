@@ -248,7 +248,8 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
             <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
               Upload Screenshot
             </label>
-            <div
+            <button
+              type="button"
               onClick={triggerFileInput}
               onDragEnter={handleDrag}
               onDragOver={handleDrag}
@@ -262,7 +263,7 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
                 type="file"
                 ref={fileInputRef}
                 onChange={handleFileChange}
-                accept="image/*"
+                accept=".jpg,.jpeg,.png,.webp"
                 className="hidden"
               />
               {screenshotFile ? (
@@ -286,7 +287,7 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
                   <p className="text-[11px] text-gray-500 mt-0.5">PNG, JPG up to 5MB</p>
                 </div>
               )}
-            </div>
+            </button>
           </div>
 
           <Button

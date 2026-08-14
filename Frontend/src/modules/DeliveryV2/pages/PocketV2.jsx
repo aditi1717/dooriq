@@ -119,16 +119,13 @@ export const PocketV2 = () => {
         const totalWithdrawn = toNum(wallet.totalWithdrawn ?? wallet.total_withdrawn);
         const pendingWithdrawals = toNum(wallet.pendingWithdrawals ?? wallet.pending_withdrawals);
         const lockedAmount = toNum(wallet.lockedAmount ?? wallet.locked_amount);
+        const hasBackendPocketBalance = wallet.pocketBalance !== undefined || wallet.pocket_balance !== undefined;
         const computedPocketBalance = Math.max(0, (totalEarned + totalBonus) - (totalWithdrawn + pendingWithdrawals));
         const transactionDerivedBalance = Math.max(0, derivePocketBalanceFromTransactions(wallet.transactions));
         const availableWalletBalance = Math.max(0, toNum(wallet.balance) - Math.max(lockedAmount, pendingWithdrawals));
-        const pocketBalance = Math.max(
-          0,
-          toNum(wallet.pocketBalance ?? wallet.pocket_balance),
-          availableWalletBalance,
-          computedPocketBalance,
-          transactionDerivedBalance
-        );
+        const pocketBalance = hasBackendPocketBalance
+          ? Math.max(0, toNum(wallet.pocketBalance ?? wallet.pocket_balance))
+          : Math.max(0, availableWalletBalance, computedPocketBalance, transactionDerivedBalance);
 
         setWalletState({
           totalBalance: pocketBalance,
@@ -304,7 +301,7 @@ export const PocketV2 = () => {
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            onClick={() => navigate('/food/delivery/earnings')}
+            onClick={() => navigate('/food/delivery/pocket/details')}
             className="relative bg-white rounded-[32px] p-8 border border-gray-100 shadow-[0_8px_30px_rgba(0,0,0,0.03)] text-center transition-all active:scale-[0.98] overflow-hidden"
           >
              <p className="relative text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-3">Earnings • {getCurrentWeekRange()}</p>
@@ -439,6 +436,26 @@ export const PocketV2 = () => {
                      <ChevronRight className="w-5 h-5 text-gray-300" />
                   </div>
                </button>
+             )}
+
+             {codControlEnabled && (
+               <div className="p-5 border-t border-gray-50 bg-gradient-to-r from-emerald-50/80 to-white">
+                  <button
+                    onClick={() => setShowDepositPopup(true)}
+                    className="w-full py-4 text-white rounded-[20px] font-black text-sm uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:bg-gray-300 disabled:text-gray-400 disabled:shadow-none"
+                    disabled={walletState.cashInHand <= 0}
+                    style={walletState.cashInHand > 0 ? {
+                      background: "linear-gradient(135deg, rgba(var(--module-theme-rgb, 0,183,97), 0.88), var(--module-theme-color, #00B761))",
+                      boxShadow: "0 8px 20px rgba(var(--module-theme-rgb, 0,183,97), 0.28)",
+                    } : undefined}
+                  >
+                    <ShieldCheck className="w-5 h-5" />
+                    {walletState.cashInHand > 0 ? "Settle Cash Limit" : "No Cash To Settle"}
+                  </button>
+                  <p className="text-[10px] text-gray-500 font-bold text-center uppercase tracking-widest mt-3">
+                    Deposit cash in hand to restore available limit
+                  </p>
+               </div>
              )}
           </div>
 

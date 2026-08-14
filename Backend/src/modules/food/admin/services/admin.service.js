@@ -5583,6 +5583,7 @@ export async function getCashLimitSettlements(query = {}) {
         deliveryIdString: d.deliveryPartnerId?.phone || 'N/A',
         amount: Number(d.amount || 0),
         status: d.status,
+        razorpayOrderId: d.razorpayOrderId || '-',
         razorpayPaymentId: d.razorpayPaymentId || '-'
     }));
 

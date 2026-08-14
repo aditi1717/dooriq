@@ -34,6 +34,61 @@ const derivePocketBalanceFromTransactions = (transactions = []) => {
   }, 0);
 };
 
+const derivePendingWithdrawalSummary = (transactions = []) => {
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    return {
+      pendingRequestAmount: 0,
+      pendingTdsAmount: 0,
+      pendingNetAmount: 0,
+      latestPendingRequestedAt: null
+    };
+  }
+
+  return transactions.reduce(
+    (summary, tx) => {
+      const type = String(tx?.type || "").trim().toLowerCase();
+      const status = String(tx?.status || "").trim().toLowerCase();
+      if (type !== "withdrawal" || status !== "pending") return summary;
+
+      const amount = toNum(tx?.amount);
+      const tdsAmount = toNum(tx?.tdsAmount);
+      const netAmount = tx?.netAmount !== undefined
+        ? toNum(tx?.netAmount)
+        : Math.max(0, amount - tdsAmount);
+
+      summary.pendingRequestAmount += amount;
+      summary.pendingTdsAmount += tdsAmount;
+      summary.pendingNetAmount += netAmount;
+      if (!summary.latestPendingRequestedAt || new Date(tx?.date || 0) > new Date(summary.latestPendingRequestedAt)) {
+        summary.latestPendingRequestedAt = tx?.date || null;
+      }
+      return summary;
+    },
+    {
+      pendingRequestAmount: 0,
+      pendingTdsAmount: 0,
+      pendingNetAmount: 0,
+      latestPendingRequestedAt: null
+    }
+  );
+};
+
+const formatRequestedAt = (value) => {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true
+    }).toUpperCase();
+  } catch {
+    return String(value).toUpperCase();
+  }
+};
+
 /**
  * PocketBalanceV2 - 1:1 Match with Old PocketBalance Page.
  * Features: Big Withdraw amount display, Withdraw button, and Detail rows.
@@ -49,6 +104,10 @@ export const PocketBalanceV2 = () => {
      weeklyEarnings: 0,
      totalBonus: 0,
      totalWithdrawn: 0,
+     pendingRequestAmount: 0,
+     pendingTdsAmount: 0,
+     pendingNetAmount: 0,
+     latestPendingRequestedAt: null,
      cashCollected: 0,
      deductions: 0,
      withdrawalLimit: 100,
@@ -106,16 +165,14 @@ export const PocketBalanceV2 = () => {
         const totalWithdrawn = toNum(wallet.totalWithdrawn ?? wallet.total_withdrawn);
         const pendingWithdrawals = toNum(wallet.pendingWithdrawals ?? wallet.pending_withdrawals);
         const lockedAmount = toNum(wallet.lockedAmount ?? wallet.locked_amount);
+        const hasBackendPocketBalance = wallet.pocketBalance !== undefined || wallet.pocket_balance !== undefined;
         const computedPocketBalance = Math.max(0, (totalEarned + totalBonus) - (totalWithdrawn + pendingWithdrawals));
         const transactionDerivedBalance = Math.max(0, derivePocketBalanceFromTransactions(wallet.transactions));
+        const pendingSummary = derivePendingWithdrawalSummary(wallet.transactions);
         const availableWalletBalance = Math.max(0, toNum(wallet.balance) - Math.max(lockedAmount, pendingWithdrawals));
-        const pocketBalance = Math.max(
-          0,
-          toNum(wallet.pocketBalance ?? wallet.pocket_balance),
-          availableWalletBalance,
-          computedPocketBalance,
-          transactionDerivedBalance
-        );
+        const pocketBalance = hasBackendPocketBalance
+          ? Math.max(0, toNum(wallet.pocketBalance ?? wallet.pocket_balance))
+          : Math.max(0, availableWalletBalance, computedPocketBalance, transactionDerivedBalance);
         const withdrawalLimit = toNum(wallet.deliveryWithdrawalLimit ?? wallet.delivery_withdrawal_limit) || 100;
         const withdrawableAmount = Math.max(0, pocketBalance);
         const earningsToShow = totalEarned || toNum(summary.totalEarnings) || 0;
@@ -126,6 +183,13 @@ export const PocketBalanceV2 = () => {
            referralEarnings: referralEarnings,
            totalBonus: totalBonus,
            totalWithdrawn: totalWithdrawn,
+           pendingRequestAmount: pendingSummary.pendingRequestAmount || pendingWithdrawals,
+           pendingTdsAmount: pendingSummary.pendingTdsAmount,
+           pendingNetAmount:
+             pendingSummary.pendingRequestAmount > 0
+               ? pendingSummary.pendingNetAmount
+               : Math.max(0, pendingWithdrawals),
+           latestPendingRequestedAt: pendingSummary.latestPendingRequestedAt,
            cashCollected: Number(wallet.cashInHand ?? wallet.cash_in_hand ?? wallet.cashCollected) || 0,
            deductions: 0, // Mocked
            withdrawalLimit,
@@ -181,10 +245,17 @@ export const PocketBalanceV2 = () => {
            setShowWithdrawModal(false);
            setWithdrawAmount("");
            setWalletState((prev) => {
+             const tdsPct = toNum(prev.deliveryBoyTdsPercentage);
+             const tdsAmount = Number((amount * (tdsPct / 100)).toFixed(2));
+             const netAmount = Number((amount - tdsAmount).toFixed(2));
              const nextWithdrawable = Math.max(0, prev.withdrawableAmount - amount);
              return {
                ...prev,
                pocketBalance: Math.max(0, prev.pocketBalance - amount),
+               pendingRequestAmount: prev.pendingRequestAmount + amount,
+               pendingTdsAmount: Number((prev.pendingTdsAmount + tdsAmount).toFixed(2)),
+               pendingNetAmount: Number((prev.pendingNetAmount + netAmount).toFixed(2)),
+               latestPendingRequestedAt: new Date().toISOString(),
                withdrawableAmount: nextWithdrawable,
                canWithdraw: nextWithdrawable >= prev.withdrawalLimit
              };
@@ -286,8 +357,34 @@ export const PocketBalanceV2 = () => {
                            value={formatCurrency(walletState.referralEarnings || 0)} 
                            subLabel="Rewards earned by referring new delivery partners"
                          />
-                       </div>
+                      </div>
                       <DetailRow label="Amount withdrawn" value={formatCurrency(walletState.totalWithdrawn)} />
+                      {walletState.pendingRequestAmount > 0 && (
+                        <div className="py-4 border-b border-gray-100/60">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-black text-gray-800 tracking-tight">Pending withdrawal</p>
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed mt-1">
+                                {walletState.latestPendingRequestedAt
+                                  ? `Requested: ${formatRequestedAt(walletState.latestPendingRequestedAt)}`
+                                  : "Awaiting payout"}
+                              </p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-base font-black text-gray-900">Gross: {formatCurrency(walletState.pendingRequestAmount)}</p>
+                              <p className="text-[11px] font-black text-gray-500 mt-1">
+                                TDS ({walletState.deliveryBoyTdsPercentage || 0}%): -{formatCurrency(walletState.pendingTdsAmount)}
+                              </p>
+                              <p className="text-sm font-black text-emerald-600 mt-1">
+                                Net Pay: {formatCurrency(walletState.pendingNetAmount)}
+                              </p>
+                            </div>
+                          </div>
+                          {walletState.latestPendingRequestedAt && (
+                            <p className="sr-only">Requested: {formatRequestedAt(walletState.latestPendingRequestedAt)}</p>
+                          )}
+                        </div>
+                      )}
                       <DetailRow label="Cash collected" value={formatCurrency(walletState.cashCollected)} />
                       <DetailRow label="Pocket balance" value={formatCurrency(walletState.pocketBalance)} />
                       <DetailRow 
