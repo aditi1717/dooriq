@@ -149,14 +149,10 @@ export const registerDeliveryPartner = async (payload, files) => {
                 ]
             };
 
-        let referrer = await FoodDeliveryPartner.findOne(query).select('_id').lean();
-        if (!referrer) {
-            const { FoodUser } = await import('../../../../core/users/user.model.js');
-            referrer = await FoodUser.findOne(query).select('_id').lean();
-        }
+        const referrer = await FoodDeliveryPartner.findOne(query).select('_id').lean();
 
         if (!referrer) {
-            throw new ValidationError('Invalid referral code');
+            throw new ValidationError('Invalid referral code. Please enter a delivery captain referral code.');
         }
         if (String(referrer._id) !== String(partner._id)) {
             partner.referredBy = referrer._id;

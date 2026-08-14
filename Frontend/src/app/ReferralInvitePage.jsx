@@ -113,12 +113,14 @@ export default function ReferralInvitePage() {
             ) : null}
 
             <div className="mt-6 flex flex-col gap-3">
-              <Link
-                to={`/food/user/auth/login${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#FA0272] px-5 py-4 text-sm font-black text-white hover:bg-[#D40261] transition shadow-lg shadow-[#FA0272]/20"
-              >
-                Continue on Web & Sign Up
-              </Link>
+              {!hasAppStore && !hasPlayStore && (
+                <Link
+                  to={`/food/user/auth/login${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#FA0272] px-5 py-4 text-sm font-black text-white hover:bg-[#D40261] transition shadow-lg shadow-[#FA0272]/20"
+                >
+                  Continue on Web & Sign Up
+                </Link>
+              )}
 
               {(hasAppStore || hasPlayStore) && (
                 <div className={`grid gap-3 ${hasAppStore && hasPlayStore ? "sm:grid-cols-2" : "grid-cols-1"}`}>

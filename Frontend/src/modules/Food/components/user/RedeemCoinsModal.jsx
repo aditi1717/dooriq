@@ -108,17 +108,18 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
     }
   };
 
-  const triggerFileInput = () => {
-    if (isFlutterBridgeAvailable()) {
-      openGallery({
-        onSelectFile: (file) => {
-          setScreenshotFile(file);
-        },
-        fileNamePrefix: "review-screenshot",
-      });
-    } else {
+  const triggerFileInput = async () => {
+    if (!isFlutterBridgeAvailable()) {
       fileInputRef.current?.click();
+      return;
     }
+
+    await openGallery({
+      onSelectFile: (file) => {
+        setScreenshotFile(file);
+      },
+      fileNamePrefix: "review-screenshot",
+    });
   };
 
   const handleGoToStore = (e) => {
@@ -171,12 +172,17 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[450px] max-h-[90vh] p-0 overflow-hidden bg-white dark:bg-[#1a1a1a] flex flex-col">
-        <div className="bg-amber-500 p-4 text-white text-center flex-shrink-0">
+        <div 
+          className="p-4 text-white text-center flex-shrink-0"
+          style={{
+            background: "linear-gradient(135deg, rgba(var(--module-theme-rgb, 250, 2, 114), 0.94), var(--module-theme-color))",
+          }}
+        >
           <div className="w-12 h-12 bg-white/20 rounded-full mx-auto flex items-center justify-center mb-2">
             <span className="text-2xl">🪙</span>
           </div>
           <DialogTitle className="text-lg font-bold">Redeem Reward Coins</DialogTitle>
-          <DialogDescription className="text-amber-100 text-xs mt-0.5">
+          <DialogDescription className="text-white/80 text-xs mt-0.5">
             Exchange your valid coins for wallet balance
           </DialogDescription>
         </div>
@@ -191,13 +197,6 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
                 <li>Take a screenshot of your review.</li>
                 <li>Upload it below to get wallet money!</li>
               </ol>
-              <button
-                type="button"
-                onClick={handleGoToStore}
-                className="inline-flex items-center gap-1 mt-2 bg-blue-600 text-white px-2.5 py-1 rounded-md font-medium text-xs hover:bg-blue-700 transition-colors"
-              >
-                Go to Store <ExternalLink className="h-3 w-3" />
-              </button>
             </div>
           </div>
 
@@ -219,24 +218,34 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
               onBlur={() => {
                 if (!coinsToRedeem || Number(coinsToRedeem) < 1) setCoinsToRedeem(1)
               }}
-              className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#0a0a0a] px-3 font-semibold text-base text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none"
+              className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#0a0a0a] px-3 font-semibold text-base text-gray-900 dark:text-white focus:ring-2 focus:ring-[color:var(--module-theme-color)] focus:border-transparent outline-none"
             />
             <p className="text-xs text-gray-500">
               You will get <strong className="text-green-600">₹{(Number(coinsToRedeem) || 0) * (coinsInfo?.settings?.coinToWalletValue || 10)}</strong> in your wallet upon approval.
             </p>
             {activeCoinBatches.length > 0 && (
-              <div className="mt-2.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/30 p-2.5 rounded-lg flex flex-col gap-1">
-                <p className="text-[10px] font-bold text-amber-850 dark:text-amber-300/90 uppercase tracking-wider mb-1 flex items-center gap-1">
+              <div 
+                className="mt-2.5 p-2.5 rounded-lg flex flex-col gap-1 border"
+                style={{
+                  backgroundColor: "rgba(var(--module-theme-rgb, 250, 2, 114), 0.05)",
+                  borderColor: "rgba(var(--module-theme-rgb, 250, 2, 114), 0.2)",
+                }}
+              >
+                <p 
+                  className="text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1"
+                  style={{ color: "var(--module-theme-color)" }}
+                >
                   <span>⏳</span> Coins Expiry Schedule (Oldest redeemed first)
                 </p>
                 <div className="flex flex-col gap-1 max-h-[80px] overflow-y-auto pr-1">
                   {activeCoinBatches.map((batch, index) => (
                     <div
                       key={index}
-                      className="flex items-center justify-between text-[11px] text-amber-800 dark:text-amber-300 py-0.5 border-b border-amber-200/20 dark:border-amber-900/10 last:border-b-0"
+                      className="flex items-center justify-between text-[11px] py-0.5 border-b last:border-b-0"
+                      style={{ borderColor: "rgba(var(--module-theme-rgb, 250, 2, 114), 0.12)" }}
                     >
-                      <span className="truncate max-w-[220px]">🪙 <strong>{batch.amount}</strong> ({batch.description})</span>
-                      <span className="font-semibold text-amber-700 dark:text-amber-400">Exp: {formatExpiryDate(batch.expiresAt)}</span>
+                      <span className="truncate max-w-[220px] text-gray-800 dark:text-gray-200">🪙 <strong>{batch.amount}</strong> ({batch.description})</span>
+                      <span className="font-semibold" style={{ color: "var(--module-theme-color)" }}>Exp: {formatExpiryDate(batch.expiresAt)}</span>
                     </div>
                   ))}
                 </div>
@@ -255,9 +264,15 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
               onDragOver={handleDrag}
               onDragLeave={handleDrag}
               onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors
-                ${isDragActive ? "border-amber-500 bg-amber-50 dark:bg-amber-900/10" : "border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-[#0a0a0a]"}
+              className={`w-full border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors
+                ${isDragActive 
+                  ? "bg-pink-50 dark:bg-pink-950/30 border-[color:var(--module-theme-color,#FA0272)]" 
+                  : "border-gray-300 dark:border-slate-700 bg-gray-50/60 dark:bg-slate-900/70 hover:bg-gray-100 dark:hover:bg-slate-800/90"}
               `}
+              style={isDragActive ? {
+                borderColor: "var(--module-theme-color)",
+                backgroundColor: "rgba(var(--module-theme-rgb, 250, 2, 114), 0.08)",
+              } : undefined}
             >
               <input
                 type="file"
@@ -268,23 +283,23 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
               />
               {screenshotFile ? (
                 <div className="flex flex-col items-center">
-                  <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center mb-1.5">
+                  <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-950/40 text-green-600 dark:text-green-400 flex items-center justify-center mb-1.5 border border-green-200 dark:border-green-800/40">
                     <ImageIcon className="h-5 w-5" />
                   </div>
                   <p className="text-xs font-medium text-gray-900 dark:text-white truncate max-w-full">
                     {screenshotFile.name}
                   </p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">Click or drag to replace</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Click or drag to replace</p>
                 </div>
               ) : (
                 <div className="flex flex-col items-center">
-                  <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 flex items-center justify-center mb-1.5">
+                  <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-300 flex items-center justify-center mb-1.5 border border-gray-200 dark:border-slate-700 shadow-sm">
                     <Upload className="h-5 w-5" />
                   </div>
-                  <p className="text-xs font-medium text-gray-900 dark:text-white">
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">
                     Click to upload or drag and drop
                   </p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">PNG, JPG up to 5MB</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">PNG, JPG up to 5MB</p>
                 </div>
               )}
             </button>
@@ -293,7 +308,13 @@ export default function RedeemCoinsModal({ open, onOpenChange, coinsInfo, onSucc
           <Button
             onClick={handleSubmit}
             disabled={loading || !screenshotFile || coinsToRedeem <= 0}
-            className="w-full h-10 bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm rounded-lg transition-colors border-0 mt-2"
+            className="w-full h-10 text-white font-semibold text-sm rounded-lg transition-all border-0 mt-2 disabled:opacity-50"
+            style={{
+              background:
+                "linear-gradient(135deg, rgba(var(--module-theme-rgb, 250, 2, 114), 0.94), var(--module-theme-color))",
+              boxShadow:
+                "0 8px 16px rgba(var(--module-theme-rgb, 250, 2, 114), 0.25)",
+            }}
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             Submit Request

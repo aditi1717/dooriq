@@ -45,8 +45,9 @@ export const requestUserOtpController = async (req, res, next) => {
 export const validateReferralCodeController = async (req, res, next) => {
   try {
     const code = req.body?.code || req.body?.referralCode || req.query?.code;
+    const role = req.body?.role || req.body?.module || req.query?.role || req.query?.module || "any";
     const { validateReferralCode } = await import("./auth.service.js");
-    const result = await validateReferralCode(code);
+    const result = await validateReferralCode(code, role);
     return sendResponse(res, 200, "Referral code is valid", result);
   } catch (error) {
     next(error);

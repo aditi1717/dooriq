@@ -1031,11 +1031,13 @@ export async function processReferralForUser(userDoc, refCode) {
   }
 }
 
-export async function validateReferralCode(codeRaw) {
+export async function validateReferralCode(codeRaw, roleRaw = "any") {
   const code = typeof codeRaw === "string" ? codeRaw.trim() : "";
   if (!code) {
     throw new ValidationError("Referral code is required");
   }
+
+  const role = String(roleRaw || "any").trim().toLowerCase();
 
   const codeLower = code.toLowerCase();
   const isValidOid = mongoose.Types.ObjectId.isValid(code);
@@ -1053,9 +1055,17 @@ export async function validateReferralCode(codeRaw) {
 
   const query = { $or: queryConditions };
 
-  let referrer = await FoodDeliveryPartner.findOne(query).select("_id name referralCode").lean();
-  if (!referrer) {
+  let referrer = null;
+
+  if (role === "delivery" || role === "captain") {
+    referrer = await FoodDeliveryPartner.findOne(query).select("_id name referralCode").lean();
+  } else if (role === "user") {
     referrer = await FoodUser.findOne(query).select("_id name referralCode").lean();
+  } else {
+    referrer = await FoodDeliveryPartner.findOne(query).select("_id name referralCode").lean();
+    if (!referrer) {
+      referrer = await FoodUser.findOne(query).select("_id name referralCode").lean();
+    }
   }
 
   if (!referrer) {

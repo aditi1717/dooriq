@@ -113,12 +113,14 @@ export default function DeliveryReferralInvitePage() {
             ) : null}
 
             <div className="mt-6 flex flex-col gap-3">
-              <Link
-                to={`/food/delivery/login${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-sm font-black text-white hover:bg-emerald-700 transition shadow-lg shadow-emerald-200"
-              >
-                Open App & Join as Captain
-              </Link>
+              {!hasAppStore && !hasPlayStore && (
+                <Link
+                  to={`/food/delivery/login${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-sm font-black text-white hover:bg-emerald-700 transition shadow-lg shadow-emerald-200"
+                >
+                  Open App & Join as Captain
+                </Link>
+              )}
 
               {(hasAppStore || hasPlayStore) && (
                 <div className={`grid gap-3 ${hasAppStore && hasPlayStore ? "sm:grid-cols-2" : "grid-cols-1"}`}>

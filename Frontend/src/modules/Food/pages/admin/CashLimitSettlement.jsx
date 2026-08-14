@@ -1,11 +1,10 @@
-﻿import { useState, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { Search, Receipt, Loader2, Package } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
-
 
 const formatCurrency = (amount) => {
   if (amount == null) return "\u20B90.00"
@@ -97,7 +96,7 @@ export default function CashLimitSettlement() {
                 {total}
               </span>
             </div>
-            <div className="relative flex-1 sm:flex-initial min-w-[200px] max-w-xs">
+            <div className="relative flex-1 sm:flex-initial min-w-[280px] sm:min-w-[340px]">
               <input
                 type="text"
                 placeholder="Search by name, ID, phone"
@@ -168,8 +167,15 @@ export default function CashLimitSettlement() {
                             {tx.status || "—"}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-mono">
-                          {tx.razorpayPaymentId ? tx.razorpayPaymentId.slice(0, 12) + "…" : "—"}
+                        <td className="px-6 py-4 text-xs text-slate-500 font-mono">
+                          <div className="max-w-[240px] break-all space-y-1">
+                            <p title={tx.razorpayOrderId || "—"}>
+                              {tx.razorpayOrderId && tx.razorpayOrderId !== "-" ? tx.razorpayOrderId : "—"}
+                            </p>
+                            <p title={tx.razorpayPaymentId || "—"}>
+                              {tx.razorpayPaymentId && tx.razorpayPaymentId !== "-" ? tx.razorpayPaymentId : "—"}
+                            </p>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -209,4 +215,3 @@ export default function CashLimitSettlement() {
     </div>
   )
 }
-

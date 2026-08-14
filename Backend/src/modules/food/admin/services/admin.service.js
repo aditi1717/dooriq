@@ -2014,6 +2014,10 @@ export async function upsertReferralSettings(body = {}) {
         if (body.referredRewardDelivery !== undefined) $set.referredRewardDelivery = Math.max(0, Number(body.referredRewardDelivery) || 0);
         if (body.referralLimitUser !== undefined) $set.referralLimitUser = Math.max(0, Number(body.referralLimitUser) || 0);
         if (body.referralLimitDelivery !== undefined) $set.referralLimitDelivery = Math.max(0, Number(body.referralLimitDelivery) || 0);
+        if (body.userAppStoreUrl !== undefined) $set.userAppStoreUrl = String(body.userAppStoreUrl || '').trim();
+        if (body.userPlayStoreUrl !== undefined) $set.userPlayStoreUrl = String(body.userPlayStoreUrl || '').trim();
+        if (body.deliveryAppStoreUrl !== undefined) $set.deliveryAppStoreUrl = String(body.deliveryAppStoreUrl || '').trim();
+        if (body.deliveryPlayStoreUrl !== undefined) $set.deliveryPlayStoreUrl = String(body.deliveryPlayStoreUrl || '').trim();
         if (body.isActive !== undefined) $set.isActive = Boolean(body.isActive);
 
         if (!Object.keys($set).length) return existing.toObject();
@@ -2028,6 +2032,10 @@ export async function upsertReferralSettings(body = {}) {
         referredRewardDelivery: Math.max(0, Number(body.referredRewardDelivery) || 0),
         referralLimitUser: Math.max(0, Number(body.referralLimitUser) || 0),
         referralLimitDelivery: Math.max(0, Number(body.referralLimitDelivery) || 0),
+        userAppStoreUrl: String(body.userAppStoreUrl || '').trim(),
+        userPlayStoreUrl: String(body.userPlayStoreUrl || '').trim(),
+        deliveryAppStoreUrl: String(body.deliveryAppStoreUrl || '').trim(),
+        deliveryPlayStoreUrl: String(body.deliveryPlayStoreUrl || '').trim(),
         isActive: body.isActive !== false
     });
     return created.toObject();

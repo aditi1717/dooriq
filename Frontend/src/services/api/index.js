@@ -1893,7 +1893,7 @@ const getDeliveryMeOnce = () => {
 
 /** Delivery API - OTP login + registration via new backend. */
 export const deliveryAPI = {
-  validateReferralCode: (code) => apiClient.post('/food/auth/validate-referral', { code }),
+  validateReferralCode: (code) => apiClient.post('/food/auth/validate-referral', { code, role: 'delivery' }),
   deleteAccount: () => apiClient.delete('/food/delivery/profile/account', { contextModule: 'delivery' }),
   getWallet: (params = {}) => apiClient.get('/food/delivery/wallet', { params, contextModule: 'delivery' }),
   sendOTP: (phone, _purpose = "login") => {
