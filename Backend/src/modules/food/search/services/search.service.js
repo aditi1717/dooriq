@@ -2,196 +2,270 @@ import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodCategory } from '../../admin/models/category.model.js';
 import mongoose from 'mongoose';
+import { createTtlCache } from '../../../../utils/cache.js';
+
+/**
+ * Upper bound on restaurants gathered before pagination. Keeps a broad search
+ * ("a") from pulling an unbounded working set into memory while still leaving
+ * enough rows for distance sorting and deep pages.
+ */
+const MAX_CANDIDATE_RESTAURANTS = 200;
+const MAX_MATCHED_FOODS = 500;
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Search-as-you-type means a handful of prefixes ("pi", "piz", "bur") account
+ * for most traffic, and every user in a zone types the same popular ones. The
+ * unanchored regex scans behind each query are the expensive part, so identical
+ * queries are answered from a short-lived cache and concurrent duplicates share
+ * one execution via the cache's single-flight behaviour.
+ *
+ * Coordinates are deliberately excluded from the cache key - they only affect
+ * the final distance sort, which is applied per request after the lookup.
+ */
+const searchCache = createTtlCache({ ttlMs: 60_000, maxEntries: 500, name: 'search' });
+
+export const invalidateSearchCache = () => searchCache.clear();
+
+// Page and coordinates are excluded: the cached value is the full ordered-by-
+// relevance match set, so every page and every location reuses one entry.
+const cacheKey = ({ q, categoryId, minRating, maxDeliveryTime, isVeg, zoneId }) =>
+    JSON.stringify({
+        q: String(q || '').trim().toLowerCase(),
+        categoryId: categoryId || null,
+        minRating: minRating || null,
+        maxDeliveryTime: maxDeliveryTime || null,
+        isVeg: isVeg === 'true',
+        zoneId: zoneId || null,
+    });
 
 /**
  * Unified Search Service
- * Searches for restaurants by name and also searches for food items, 
- * returning matched restaurants with potential dish highlights.
+ * Searches for restaurants by name/cuisine and by dish name, returning matched
+ * restaurants with dish highlights for food matches.
  */
 export const searchUnified = async (query = {}, options = {}) => {
-    const { 
-        q, 
-        lat, 
-        lng, 
-        radiusKm = 20, 
-        categoryId, 
-        minRating, 
-        maxDeliveryTime, 
+    const { lat, lng, page = 1, limit = 20 } = query;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+    const skip = (pageNum - 1) * limitNum;
+
+    // Cache the zone-level match set, then order and paginate per request so two
+    // users in different parts of the same zone each get nearest-first results.
+    const matched = await searchCache.get(cacheKey(query), () => searchUnifiedUncached(query));
+
+    const all = matched?.restaurants || [];
+    const userLat = Number(lat);
+    const userLng = Number(lng);
+    const ordered =
+        Number.isFinite(userLat) && Number.isFinite(userLng)
+            ? sortByDistance(all, userLat, userLng)
+            : all;
+
+    return {
+        success: true,
+        data: {
+            restaurants: ordered.slice(skip, skip + limitNum),
+            total: ordered.length,
+            page: pageNum,
+            limit: limitNum,
+            zoneFiltered: Boolean(matched?.zoneFiltered)
+        }
+    };
+};
+
+/** Haversine distance sort, applied outside the cache. */
+const sortByDistance = (restaurants, userLat, userLng) => {
+    const scored = restaurants.map((res) => {
+        const rLat = Number(res.location?.latitude);
+        const rLng = Number(res.location?.longitude);
+        if (!Number.isFinite(rLat) || !Number.isFinite(rLng)) return { ...res, distanceScore: 999 };
+        const dLat = ((rLat - userLat) * Math.PI) / 180;
+        const dLon = ((rLng - userLng) * Math.PI) / 180;
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((userLat * Math.PI) / 180) * Math.cos((rLat * Math.PI) / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return { ...res, distanceScore: 6371 * c };
+    });
+    scored.sort((a, b) => (a.distanceScore ?? 999) - (b.distanceScore ?? 999));
+    return scored;
+};
+
+const searchUnifiedUncached = async (query = {}, options = {}) => {
+    const {
+        q,
+        categoryId,
+        minRating,
+        maxDeliveryTime,
         isVeg,
-        page = 1,
-        limit = 20,
         zoneId
     } = query;
 
-    const skip = (page - 1) * limit;
     const term = String(q || '').trim();
-    const regex = term ? new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : null;
+    const regex = term ? new RegExp(escapeRegex(term), 'i') : null;
+    const vegOnly = isVeg === 'true';
 
-    // Only return restaurants that have at least one approved food item (and veg food if veg filter is active)
-    let activeRestaurantIds;
-    if (isVeg === 'true') {
-        activeRestaurantIds = await FoodItem.distinct('restaurantId', { 
-            approvalStatus: 'approved',
-            foodType: 'Veg',
-            isAvailable: true
-        });
-    } else {
-        activeRestaurantIds = await FoodItem.distinct('restaurantId', { 
-            approvalStatus: 'approved',
-            isAvailable: true
-        });
-    }
-    const activeIdsSet = new Set(activeRestaurantIds.map(id => id.toString()));
-    const activeObjIds = Array.from(activeIdsSet).map(id => new mongoose.Types.ObjectId(id));
-
-    // 1. Initial Filter (approved status and basic conditions)
-    const restaurantFilter = { 
-        status: 'approved',
-        _id: { $in: activeObjIds }
+    // The uncached layer returns the FULL match set. Distance sorting and
+    // pagination are applied by `searchUnified` afterwards, so the cached value
+    // stays independent of the caller's position and page.
+    const emptyResult = {
+        restaurants: [],
+        zoneFiltered: !!(zoneId && mongoose.Types.ObjectId.isValid(zoneId))
     };
-    
-    console.log(`[Search-Service] Querying with term: "${term}", categoryId: "${categoryId}", zoneId: "${zoneId}"`);
+
+    // 1. Structural filter (zone / rating / delivery time). These are indexed
+    //    fields, so this is the cheap way to narrow the candidate set first.
+    //    The old code instead loaded every active restaurant id in the database
+    //    via a `distinct` scan on every keystroke and passed them all as a giant
+    //    `$in` array - slow, and it grew without bound as restaurants were added.
+    const restaurantFilter = { status: 'approved' };
 
     if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
         restaurantFilter.zoneId = new mongoose.Types.ObjectId(zoneId);
     }
 
-    if (isVeg === 'true') {
+    if (vegOnly) {
         restaurantFilter.pureVegRestaurant = true;
     }
 
     if (minRating) {
-        restaurantFilter.rating = { $gte: parseFloat(minRating) };
+        const parsed = parseFloat(minRating);
+        if (Number.isFinite(parsed)) restaurantFilter.rating = { $gte: parsed };
     }
 
     if (maxDeliveryTime) {
-        restaurantFilter.estimatedDeliveryTimeMinutes = { $lte: parseInt(maxDeliveryTime) };
+        const parsed = parseInt(maxDeliveryTime, 10);
+        if (Number.isFinite(parsed)) restaurantFilter.estimatedDeliveryTimeMinutes = { $lte: parsed };
     }
-    
-    console.log(`[Search-Service] Final Restaurant Filter:`, JSON.stringify(restaurantFilter));
 
-    let restaurantIds = new Set();
-    let restaurantDetailsMap = new Map();
-
-    // 2. Handle Category Filtering (Restaurants don't have categoryId, FoodItems do)
+    // 2. Category filter: categories live on food items, not restaurants.
     if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
         const catFoodFilters = {
             categoryId: new mongoose.Types.ObjectId(categoryId),
-            approvalStatus: 'approved' 
+            approvalStatus: 'approved',
+            isAvailable: true
         };
-        if (isVeg === 'true') {
-            catFoodFilters.foodType = 'Veg';
-        }
-        const catFoodItems = await FoodItem.find(catFoodFilters).select('restaurantId').lean();
-        
-        const catRestaurantIds = [...new Set(catFoodItems.map(f => f.restaurantId.toString()))];
-        const intersected = catRestaurantIds.filter(id => activeIdsSet.has(id));
-        
-        if (intersected.length > 0) {
-            restaurantFilter._id = { $in: intersected.map(id => new mongoose.Types.ObjectId(id)) };
-        } else {
-            // No food items in this category -> No restaurants
-            return {
-                success: true,
-                data: { restaurants: [], total: 0, page: parseInt(page), limit: parseInt(limit) }
-            };
-        }
+        if (vegOnly) catFoodFilters.foodType = 'Veg';
+
+        const catRestaurantIds = await FoodItem.distinct('restaurantId', catFoodFilters);
+        if (catRestaurantIds.length === 0) return emptyResult;
+        restaurantFilter._id = { $in: catRestaurantIds };
     }
 
-    // 3. Search Matching
+    const restaurantDetailsMap = new Map();
+
+    // 3. Search matching
     if (regex) {
-        // A. Search by Restaurant Name / Cuisine
+        // A. Restaurant name / cuisine matches.
         const matchedRestaurants = await FoodRestaurant.find({
             ...restaurantFilter,
             $or: [
                 { restaurantName: { $regex: regex } },
                 { cuisines: { $regex: regex } }
             ]
-        }).limit(limit * 2).lean();
+        }).limit(MAX_CANDIDATE_RESTAURANTS).lean();
 
-        matchedRestaurants.forEach(r => {
-            restaurantIds.add(r._id.toString());
+        matchedRestaurants.forEach((r) => {
             restaurantDetailsMap.set(r._id.toString(), { ...r, matchType: 'restaurant' });
         });
 
-        // B. Search by Food Item Name
-        const foodFilters = { approvalStatus: 'approved', isAvailable: true };
-        if (isVeg === 'true') foodFilters.foodType = 'Veg';
-        
-        const matchedFoods = await FoodItem.find({
-            ...foodFilters,
-            name: { $regex: regex }
-        }).limit(limit * 2).lean();
+        // B. Dish-name matches.
+        //
+        //    The dish query is scoped to the restaurants that already passed the
+        //    zone/category filter. Previously it took the first N dishes matching
+        //    the term *anywhere in the country* and only then intersected them
+        //    with the current zone - so if the global top matches happened to sit
+        //    outside the user's zone, the search returned nothing. That is the
+        //    cause of the empty (140-byte) search responses in production.
+        const zoneRestaurantIds = await FoodRestaurant.distinct('_id', restaurantFilter);
 
-        const foodRestaurantIds = matchedFoods.map(f => f.restaurantId.toString());
-        
-        if (foodRestaurantIds.length > 0) {
-            const unmatchedIds = foodRestaurantIds.filter(id => !restaurantIds.has(id));
-            if (unmatchedIds.length > 0) {
+        if (zoneRestaurantIds.length > 0) {
+            const foodFilters = {
+                approvalStatus: 'approved',
+                isAvailable: true,
+                restaurantId: { $in: zoneRestaurantIds },
+                name: { $regex: regex }
+            };
+            if (vegOnly) foodFilters.foodType = 'Veg';
+
+            const matchedFoods = await FoodItem.find(foodFilters)
+                .select('restaurantId name image')
+                .limit(MAX_MATCHED_FOODS)
+                .lean();
+
+            // Keep the first dish hit per restaurant.
+            const dishByRestaurant = new Map();
+            for (const food of matchedFoods) {
+                const key = food.restaurantId.toString();
+                if (!dishByRestaurant.has(key)) dishByRestaurant.set(key, food);
+            }
+
+            const newRestaurantIds = [...dishByRestaurant.keys()]
+                .filter((id) => !restaurantDetailsMap.has(id))
+                .slice(0, MAX_CANDIDATE_RESTAURANTS);
+
+            if (newRestaurantIds.length > 0) {
                 const rsForFoods = await FoodRestaurant.find({
                     ...restaurantFilter,
-                    _id: { $in: unmatchedIds.map(id => new mongoose.Types.ObjectId(id)) }
+                    _id: { $in: newRestaurantIds.map((id) => new mongoose.Types.ObjectId(id)) }
                 }).lean();
 
-                rsForFoods.forEach(r => {
-                    restaurantIds.add(r._id.toString());
-                    restaurantDetailsMap.set(r._id.toString(), { 
-                        ...r, 
+                rsForFoods.forEach((r) => {
+                    const key = r._id.toString();
+                    const dish = dishByRestaurant.get(key);
+                    restaurantDetailsMap.set(key, {
+                        ...r,
                         matchType: 'food',
-                        matchedDish: matchedFoods.find(f => f.restaurantId.toString() === r._id.toString())?.name,
-                        matchedDishImage: matchedFoods.find(f => f.restaurantId.toString() === r._id.toString())?.image,
-                        matchedDishId: matchedFoods.find(f => f.restaurantId.toString() === r._id.toString())?._id
+                        matchedDish: dish?.name,
+                        matchedDishImage: dish?.image,
+                        matchedDishId: dish?._id
                     });
                 });
             }
         }
     } else {
-        // No search text -> List all restaurants matching filters (category/zone)
+        // No search text -> list restaurants matching the structural filters.
         const allMatching = await FoodRestaurant.find(restaurantFilter)
             .sort({ rating: -1, createdAt: -1 })
-            .limit(limit * 2)
+            .limit(MAX_CANDIDATE_RESTAURANTS)
             .lean();
-            
-        allMatching.forEach(r => {
-            restaurantIds.add(r._id.toString());
+
+        allMatching.forEach((r) => {
             restaurantDetailsMap.set(r._id.toString(), r);
         });
     }
 
-    // 4. Final Result Formatting
-    let results = Array.from(restaurantDetailsMap.values());
+    if (restaurantDetailsMap.size === 0) return emptyResult;
 
-    // Simple distance sorting if lat/lng are provided
-    if (lat && lng && results.length > 0) {
-        results.forEach(res => {
-            if (res.location && res.location.latitude && res.location.longitude) {
-                const dLat = (res.location.latitude - lat) * Math.PI / 180;
-                const dLon = (res.location.longitude - lng) * Math.PI / 180;
-                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                          Math.cos(lat * Math.PI / 180) * Math.cos(res.location.latitude * Math.PI / 180) *
-                          Math.sin(dLon/2) * Math.sin(dLon/2);
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                res.distanceScore = 6371 * c; // Km
-            } else {
-                res.distanceScore = 999;
-            }
-        });
-        results.sort((a, b) => (a.distanceScore || 999) - (b.distanceScore || 999));
-    }
-
-    // ... (rest of logic up to result formation)
-    const finalResult = {
-        success: true,
-        data: {
-            restaurants: results.slice(skip, skip + limit),
-            total: results.length,
-            page: parseInt(page),
-            limit: parseInt(limit),
-            zoneFiltered: !!(zoneId && mongoose.Types.ObjectId.isValid(zoneId))
-        }
+    // 4. Drop restaurants with nothing orderable right now. Scoped to the
+    //    candidates we actually matched instead of scanning the whole menu
+    //    collection up front.
+    const candidateIds = [...restaurantDetailsMap.keys()].map((id) => new mongoose.Types.ObjectId(id));
+    const stockFilter = {
+        restaurantId: { $in: candidateIds },
+        approvalStatus: 'approved',
+        isAvailable: true
     };
+    if (vegOnly) stockFilter.foodType = 'Veg';
 
-    return finalResult;
+    const stockedIds = await FoodItem.distinct('restaurantId', stockFilter);
+    const stockedSet = new Set(stockedIds.map((id) => id.toString()));
+
+    let results = [...restaurantDetailsMap.entries()]
+        .filter(([id]) => stockedSet.has(id))
+        .map(([, value]) => value);
+
+    // Distance sorting is intentionally NOT done here: this result set is cached
+    // and shared across users in the zone, so it must stay position-independent.
+    // `searchUnified` applies the per-request distance ordering on the way out.
+
+    return {
+        restaurants: results,
+        zoneFiltered: !!(zoneId && mongoose.Types.ObjectId.isValid(zoneId))
+    };
 };
 
 /**

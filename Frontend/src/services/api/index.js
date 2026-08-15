@@ -17,10 +17,12 @@ const stub = () =>
 
 /** Search API - unified search for user app */
 export const searchAPI = {
-  unifiedSearch: (params = {}) =>
-    apiClient.get("/food/search/unified", { params }),
-  getAdminCategories: (params = {}) =>
-    apiClient.get("/food/search/categories/admin", { params }),
+  // `config` carries the AbortSignal from search-as-you-type so superseded
+  // requests are cancelled instead of racing each other to setState.
+  unifiedSearch: (params = {}, config = {}) =>
+    apiClient.get("/food/search/unified", { params, ...config }),
+  getAdminCategories: (params = {}, config = {}) =>
+    apiClient.get("/food/search/categories/admin", { params, ...config }),
 };
 
 const createStubAPI = () =>
@@ -715,6 +717,15 @@ export const adminAPI = {
     }),
   rejectOrder: (orderId, reason) =>
     apiClient.patch(`/food/admin/orders/${String(orderId)}/reject`, { reason }, {
+      contextModule: "admin",
+    }),
+  /**
+   * Forward-only status override from the admin orders screen.
+   * The server rejects any backward transition, so the UI list of choices is a
+   * convenience - not the security boundary.
+   */
+  updateOrderStatus: (orderId, orderStatus, note = "") =>
+    apiClient.patch(`/food/admin/orders/${String(orderId)}/status`, { orderStatus, note }, {
       contextModule: "admin",
     }),
   deassignAndResendOrder: (orderId) =>
@@ -1615,9 +1626,15 @@ export const restaurantAPI = {
     apiClient.post("/food/restaurant/payment/post-approval-verify", body ?? {}, {
       contextModule: "restaurant",
     }),
-  /** Public: list approved restaurants for user app */
+  /** Public: list approved restaurants for user app (one page) */
   getRestaurants: (params = {}, config = {}) =>
     getPublicRestaurantsOnce(params, config),
+  /**
+   * Public: every restaurant matching the filters, fetched page by page.
+   * Use on screens that must show a complete zone rather than a feed.
+   */
+  getAllRestaurants: (params = {}, config = {}) =>
+    getAllPublicRestaurants(params, config),
   /** Public: get single approved restaurant by id or slug */
   getRestaurantById: (id, config = {}) =>
     apiClient.get(`/food/restaurant/restaurants/${String(id)}`, { ...config }),
@@ -1728,15 +1745,75 @@ export const publicGetOnce = (url, config = {}) => {
   );
 };
 
+/**
+ * Default page size for the public restaurant feed.
+ *
+ * This used to be `limit: 1000` - every caller pulled a whole zone's catalogue
+ * (each row carrying menus, offers, recommended items and timings) to render
+ * about ten cards. The server now caps the page anyway; callers that want more
+ * should paginate with `page`.
+ */
+export const RESTAURANTS_PAGE_SIZE = 20;
+
+/** Server-side cap; asking for more than this returns this many. */
+const RESTAURANTS_MAX_PAGE_SIZE = 50;
+/** Hard stop so a misconfigured zone can never spin forever. */
+const RESTAURANTS_MAX_PAGES = 10;
+
+/**
+ * Fetch every restaurant matching `params`, one bounded page at a time.
+ *
+ * Some screens genuinely need the whole zone (the all-restaurants list, the
+ * under-250 aggregation, category pages). They used to get it with a single
+ * `limit=1000` request, which made the server build an unbounded result set.
+ * Paging keeps each query small and index-friendly; for a typical zone this is
+ * still just one round-trip.
+ */
+const getAllPublicRestaurants = async (params = {}, config = {}) => {
+  const collected = [];
+  let page = 1;
+  let last = null;
+
+  while (page <= RESTAURANTS_MAX_PAGES) {
+    const response = await getPublicRestaurantsOnce(
+      { ...params, page, limit: RESTAURANTS_MAX_PAGE_SIZE },
+      config,
+    );
+    last = response;
+    const data = response?.data?.data;
+    const batch = Array.isArray(data?.restaurants) ? data.restaurants : [];
+    collected.push(...batch);
+    if (!data?.hasMore || batch.length === 0) break;
+    page += 1;
+  }
+
+  // Preserve the response envelope so call sites keep working unchanged.
+  return {
+    ...last,
+    data: {
+      ...last?.data,
+      data: {
+        ...last?.data?.data,
+        restaurants: collected,
+        total: collected.length,
+        page: 1,
+        limit: collected.length,
+        hasMore: false,
+      },
+    },
+  };
+};
+
 const getPublicRestaurantsOnce = (params = {}, config = {}) => {
   const { noCache, ...axiosConfig } = config || {};
+  const withDefaults = { limit: RESTAURANTS_PAGE_SIZE, ...params };
   if (noCache) {
     return apiClient.get("/food/restaurant/restaurants", {
-      params: { limit: 1000, ...params },
+      params: withDefaults,
       ...axiosConfig,
     });
   }
-  const keyParams = { limit: 1000, ...params };
+  const keyParams = { ...withDefaults };
   // `_ts` is an explicit cache-buster in many call sites; ignore it for dedupe purposes.
   if (keyParams && typeof keyParams === "object") {
     delete keyParams._ts;
@@ -1744,7 +1821,7 @@ const getPublicRestaurantsOnce = (params = {}, config = {}) => {
   const key = `restaurants:${stableStringify(keyParams)}`;
   return publicRestaurantsCache.getOrCreate(key, () =>
     apiClient.get("/food/restaurant/restaurants", {
-      params: { limit: 1000, ...params },
+      params: withDefaults,
       ...axiosConfig,
     }),
   );

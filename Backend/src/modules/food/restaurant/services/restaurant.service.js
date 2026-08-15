@@ -9,6 +9,9 @@ import { FoodRestaurantMenu } from '../models/restaurantMenu.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodOrder } from '../../orders/models/order.model.js';
 import { FoodRestaurantOutletTimings } from '../models/outletTimings.model.js';
+import { toOutletTimingsClientShape } from './outletTimings.service.js';
+import { resolveRestaurantOpenStatus } from '../../orders/services/order.helpers.js';
+import { createTtlCache } from '../../../../utils/cache.js';
 
 const normalizeName = (value) =>
     String(value || '')
@@ -259,6 +262,112 @@ const formatRestaurantOfferSummary = (offer) => {
     }
 
     return summary.trim();
+};
+
+/**
+ * Restaurants that currently have at least one approved, in-stock item.
+ *
+ * Cached per veg/non-veg variant with a short TTL. A newly published dish
+ * becomes visible within one TTL window, which is the right trade for removing
+ * a full menu-collection scan from every restaurant listing request.
+ */
+const orderableRestaurantsCache = createTtlCache({
+    ttlMs: 60_000,
+    maxEntries: 4,
+    name: 'orderable-restaurants'
+});
+
+export const invalidateOrderableRestaurantsCache = () => orderableRestaurantsCache.clear();
+
+const getOrderableRestaurantIds = async (vegOnly = false) => {
+    const key = vegOnly ? 'veg' : 'all';
+    return orderableRestaurantsCache.get(key, async () => {
+        const itemFilter = { approvalStatus: 'approved', isAvailable: true };
+        if (vegOnly) itemFilter.foodType = 'Veg';
+        const ids = await FoodItem.distinct('restaurantId', itemFilter);
+        return ids.map((id) => new mongoose.Types.ObjectId(String(id)));
+    });
+};
+
+/**
+ * Attach per-day outlet timings and a computed open/closed flag to a page of
+ * restaurants using a single query for the whole page.
+ *
+ * The user app previously fetched `/restaurants/:id/outlet-timings` once per
+ * restaurant, sequentially, after loading the list - so rendering a 30-outlet
+ * home feed cost 31 round-trips. Timings are small and always needed for the
+ * open/closed badge, so they belong in the list payload.
+ */
+/**
+ * Normalize a listing document into the shape the user app consumes.
+ *
+ * The geo and non-geo branches of `listApprovedRestaurants` previously returned
+ * different shapes - only the non-geo branch added `name`, `id` and the
+ * `profileImage.url` wrapper. That was survivable while the geo branch almost
+ * never ran; now that coordinates always take the geo path, both must agree.
+ */
+const toRestaurantListItem = (r) => ({
+    ...r,
+    restaurantId: r._id,
+    id: r._id,
+    name: r.restaurantName || '',
+    rating: normalizeRatingValue(r.rating),
+    totalRatings: normalizeTotalRatingsValue(r.totalRatings),
+    profileImage: r.profileImage ? { url: r.profileImage } : null,
+    coverImages: Array.isArray(r.coverImages) ? r.coverImages : [],
+    openingTime: r.openingTime || null,
+    closingTime: r.closingTime || null,
+    openDays: Array.isArray(r.openDays) ? r.openDays : [],
+    // Keep menuImages as an array for fallbacks; allow both string and {url} on client.
+    menuImages: Array.isArray(r.menuImages) ? r.menuImages : []
+});
+
+const attachOutletTimingsToRestaurants = async (restaurants = []) => {
+    if (!Array.isArray(restaurants) || restaurants.length === 0) return restaurants;
+
+    const restaurantIds = restaurants
+        .map((restaurant) => String(restaurant?._id || restaurant?.id || restaurant?.restaurantId || ''))
+        .filter((id) => mongoose.Types.ObjectId.isValid(id));
+
+    if (!restaurantIds.length) return restaurants;
+
+    const timingDocs = await FoodRestaurantOutletTimings.find({
+        restaurantId: { $in: restaurantIds.map((id) => new mongoose.Types.ObjectId(id)) }
+    })
+        .select('restaurantId timings')
+        .lean();
+
+    const timingsMap = new Map(
+        (timingDocs || []).map((doc) => [String(doc.restaurantId), doc.timings || []])
+    );
+
+    const now = new Date();
+
+    return restaurants.map((restaurant) => {
+        const key = String(restaurant?._id || restaurant?.id || restaurant?.restaurantId || '');
+        const timings = timingsMap.get(key) || null;
+
+        // Reuse the same rules the checkout uses, so the badge on the card and
+        // the order-time validation can never disagree.
+        const openStatus = resolveRestaurantOpenStatus(
+            {
+                status: restaurant.status || 'approved',
+                isAcceptingOrders: restaurant.isAcceptingOrders,
+                openingTime: restaurant.openingTime,
+                closingTime: restaurant.closingTime,
+                openDays: restaurant.openDays
+            },
+            timings ? { timings } : null,
+            now
+        );
+
+        return {
+            ...restaurant,
+            outletTimings: timings ? toOutletTimingsClientShape(timings) : null,
+            isOpenNow: openStatus.isOpen,
+            closedReason: openStatus.isOpen ? null : openStatus.reason || null
+        };
+    });
 };
 
 const attachPublicOffersToRestaurants = async (restaurants = []) => {
@@ -630,11 +739,9 @@ export const registerRestaurant = async (payload, files) => {
 
     // Wait for all uploads to complete in parallel
     if (uploadTasks.length > 0) {
-        console.log(`[ONBOARDING] Starting upload of ${uploadTasks.length} image tasks...`);
         console.time('ImageUploadTotal');
         await Promise.all(uploadTasks);
         console.timeEnd('ImageUploadTotal');
-        console.log('[ONBOARDING] All image uploads completed.');
     }
 
     Object.assign(images, imageMap);
@@ -1618,31 +1725,48 @@ export const uploadRestaurantMenuImages = async (restaurantId, files = []) => {
     };
 };
 
+/**
+ * Page size for the public restaurant feed.
+ *
+ * The user app used to request `limit=1000`, downloading an entire zone's
+ * catalogue (with menus, offers and timings attached) just to render the first
+ * ten cards. The cap is now a real page size: clients paginate instead of
+ * pulling the whole collection, and a caller asking for more than MAX gets MAX
+ * rather than an unbounded scan.
+ */
+const RESTAURANT_PAGE_SIZE_DEFAULT = 20;
+const RESTAURANT_PAGE_SIZE_MAX = 50;
+
 export const listApprovedRestaurants = async (query = {}) => {
-    const limit = Math.min(Math.max(parseInt(query.limit, 10) || 100, 1), 1000);
+    const requestedLimit = parseInt(query.limit, 10);
+    const limit = Math.min(
+        Math.max(Number.isFinite(requestedLimit) ? requestedLimit : RESTAURANT_PAGE_SIZE_DEFAULT, 1),
+        RESTAURANT_PAGE_SIZE_MAX
+    );
     const page = Math.max(parseInt(query.page, 10) || 1, 1);
     const skip = (page - 1) * limit;
 
-    // Only return restaurants that have at least one approved food item (and veg food if veg filter is active)
-    let activeRestaurantIds;
-    if (query.isVeg === 'true' || query.vegMode === 'true' || query.veg === 'true') {
-        activeRestaurantIds = await FoodItem.distinct('restaurantId', { 
-            approvalStatus: 'approved',
-            foodType: 'Veg',
-            isAvailable: true
-        });
-    } else {
-        activeRestaurantIds = await FoodItem.distinct('restaurantId', { 
-            approvalStatus: 'approved',
-            isAvailable: true
-        });
-    }
-    const activeObjIds = activeRestaurantIds.map(id => new mongoose.Types.ObjectId(id));
+    // Only surface restaurants that have at least one orderable item.
+    //
+    // This used to run an unbounded `FoodItem.distinct('restaurantId')` over the
+    // entire menu collection on every list request and pass the result back as a
+    // giant `$in`. The set is now cached for a short window: menu availability
+    // changes are frequent enough to matter but not second-to-second, and the
+    // scan cost was being paid by every user on every home-screen load.
+    const vegOnly = query.isVeg === 'true' || query.vegMode === 'true' || query.veg === 'true';
+    const activeObjIds = await getOrderableRestaurantIds(vegOnly);
 
-    const filter = { 
+    const filter = {
         status: 'approved',
         _id: { $in: activeObjIds }
     };
+
+    // Pure-veg mode was applied on the client over the full downloaded list.
+    // With paged results that would silently shrink each page, so the filter has
+    // to run in the query.
+    if (query.pureVeg === 'true') {
+        filter.pureVegRestaurant = true;
+    }
 
     if (query.city && String(query.city).trim()) {
         const city = String(query.city).trim().slice(0, 80);
@@ -1771,10 +1895,20 @@ export const listApprovedRestaurants = async (query = {}) => {
         openDays: 1
     };
 
-    // Use $geoNear only when geo is explicitly needed (radius filter or nearest sorting).
-    // This avoids accidentally hiding restaurants that do not have coordinates yet.
-    const wantsGeo = (radiusKm !== null) || sortBy === 'nearest';
-    if (lat !== null && lng !== null && wantsGeo) {
+    // Use the index-backed geo pipeline whenever the caller sent coordinates.
+    //
+    // Previously this only ran for an explicit radius filter or `sortBy=nearest`,
+    // so the common case - the home feed, which always sends lat/lng but no sort -
+    // fell through to the non-geo branch. The coordinates were effectively
+    // ignored: the server returned the zone ordered by createdAt with no
+    // distance, and the client downloaded everything to sort it by distance
+    // itself. That is why the feed needed `limit=1000` to feel correct.
+    //
+    // $geoNear only matches documents that have the indexed location field, so
+    // restaurants without coordinates are collected separately and appended
+    // after the located ones rather than silently disappearing.
+    const wantsGeo = lat !== null && lng !== null;
+    if (wantsGeo) {
         const geoNear = {
             $geoNear: {
                 near: { type: 'Point', coordinates: [lng, lat] },
@@ -1808,18 +1942,60 @@ export const listApprovedRestaurants = async (query = {}) => {
             sortStage
         ];
 
-        const [pageDocs, totalDocs] = await Promise.all([
-            FoodRestaurant.aggregate([
-                ...basePipeline,
-                { $project: projection },
-                { $skip: skip },
-                { $limit: limit }
-            ]),
-            FoodRestaurant.aggregate([...basePipeline, { $count: 'count' }])
+        // Restaurants with no usable coordinates cannot appear in a $geoNear
+        // result. Keep them visible by treating the feed as two ordered
+        // segments: located (nearest first), then unlocated.
+        const unlocatedFilter = {
+            ...filter,
+            $and: [
+                ...(filter.$and || []),
+                { $or: [{ location: null }, { 'location.coordinates': { $exists: false } }, { 'location.coordinates': { $size: 0 } }] }
+            ]
+        };
+
+        const [locatedTotalDocs, unlocatedTotal] = await Promise.all([
+            FoodRestaurant.aggregate([...basePipeline, { $count: 'count' }]),
+            radiusKm !== null ? Promise.resolve(0) : FoodRestaurant.countDocuments(unlocatedFilter)
         ]);
 
-        const total = totalDocs?.[0]?.count || 0;
-        const restaurants = pageDocs || [];
+        const locatedTotal = locatedTotalDocs?.[0]?.count || 0;
+        const total = locatedTotal + unlocatedTotal;
+
+        // Work out how much of this page comes from each segment.
+        const locatedSkip = Math.min(skip, locatedTotal);
+        const locatedTake = Math.max(0, Math.min(limit, locatedTotal - locatedSkip));
+        const unlocatedSkip = Math.max(0, skip - locatedTotal);
+        const unlocatedTake = Math.max(0, limit - locatedTake);
+
+        // `projection` is an inclusion projection, so it drops anything not named
+        // in it - including the distanceInKm that $addFields just computed. Carry
+        // it through explicitly, otherwise the geo path returns no distance and
+        // the client silently falls back to recomputing it.
+        const geoProjection = { ...projection, distanceInKm: 1 };
+
+        const [locatedDocs, unlocatedDocs] = await Promise.all([
+            locatedTake > 0
+                ? FoodRestaurant.aggregate([
+                    ...basePipeline,
+                    { $project: geoProjection },
+                    { $skip: locatedSkip },
+                    { $limit: locatedTake }
+                ])
+                : Promise.resolve([]),
+            unlocatedTake > 0
+                ? FoodRestaurant.find(unlocatedFilter)
+                    .select(Object.keys(projection).join(' '))
+                    .sort({ createdAt: -1 })
+                    .skip(unlocatedSkip)
+                    .limit(unlocatedTake)
+                    .lean()
+                : Promise.resolve([])
+        ]);
+
+        const restaurants = [
+            ...(locatedDocs || []),
+            ...(unlocatedDocs || []).map((r) => ({ ...r, distanceInKm: null }))
+        ].map(toRestaurantListItem);
 
         // Fetch recommended items for each restaurant from FoodItem model
         const restaurantIds = restaurants.map(r => r._id);
@@ -1853,8 +2029,18 @@ export const listApprovedRestaurants = async (query = {}) => {
             };
         });
         const restaurantsWithOffers = await attachPublicOffersToRestaurants(restaurantsWithRecommended);
+        const restaurantsWithTimings = await attachOutletTimingsToRestaurants(restaurantsWithOffers);
 
-        return { restaurants: restaurantsWithOffers, total, page, limit };
+        return {
+            restaurants: restaurantsWithTimings,
+            total,
+            page,
+            limit,
+            // Pagination metadata so clients can drive infinite scroll without
+            // over-fetching. `hasMore` is derived here so every caller agrees.
+            totalPages: Math.max(1, Math.ceil(total / limit)),
+            hasMore: skip + restaurantsWithTimings.length < total
+        };
     }
 
     // Non-geo path: normal query + sort.
@@ -1877,22 +2063,7 @@ export const listApprovedRestaurants = async (query = {}) => {
         FoodRestaurant.countDocuments(filter)
     ]);
 
-    const restaurants = (restaurantsRaw || []).map((r) => ({
-        ...r,
-        // Frontend user app expects `name` and often checks `profileImage.url`
-        restaurantId: r._id,
-        id: r._id,
-        name: r.restaurantName || '',
-        rating: normalizeRatingValue(r.rating),
-        totalRatings: normalizeTotalRatingsValue(r.totalRatings),
-        profileImage: r.profileImage ? { url: r.profileImage } : null,
-        coverImages: Array.isArray(r.coverImages) ? r.coverImages : [],
-        openingTime: r.openingTime || null,
-        closingTime: r.closingTime || null,
-        openDays: Array.isArray(r.openDays) ? r.openDays : [],
-        // Keep menuImages as an array for fallbacks; allow both string and {url} on client.
-        menuImages: Array.isArray(r.menuImages) ? r.menuImages : []
-    }));
+    const restaurants = (restaurantsRaw || []).map(toRestaurantListItem);
 
     // Fetch recommended items for each restaurant from FoodItem model
     const restaurantIds = restaurants.map(r => r._id);
@@ -1926,8 +2097,18 @@ export const listApprovedRestaurants = async (query = {}) => {
         };
     });
     const restaurantsWithOffers = await attachPublicOffersToRestaurants(restaurantsWithRecommended);
+    const restaurantsWithTimings = await attachOutletTimingsToRestaurants(restaurantsWithOffers);
 
-    return { restaurants: restaurantsWithOffers, total, page, limit };
+    return {
+        restaurants: restaurantsWithTimings,
+        total,
+        page,
+        limit,
+        // Pagination metadata so clients can drive infinite scroll without
+        // over-fetching. `hasMore` is derived here so every caller agrees.
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+        hasMore: skip + restaurantsWithTimings.length < total
+    };
 };
 
 export const getApprovedRestaurantByIdOrSlug = async (idOrSlug) => {

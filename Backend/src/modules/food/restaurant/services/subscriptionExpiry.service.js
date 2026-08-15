@@ -18,7 +18,7 @@ export const processSubscriptionExpiries = async () => {
         subscriptionValidTill: { $lt: now }
     });
 
-    console.log(`[SUBSCRIPTION] Found ${expiredRestaurants.length} expired subscriptions to process.`);
+    logger.info(`[SUBSCRIPTION] Found ${expiredRestaurants.length} expired subscriptions to process.`);
 
     const results = {
         processed: 0,

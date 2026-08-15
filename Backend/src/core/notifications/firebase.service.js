@@ -287,42 +287,44 @@ export const listOwnerTokens = async ({ ownerType, ownerId, platform }) => {
 export const upsertFirebaseDeviceToken = async ({ ownerType, ownerId, token, platform = 'web' }) => {
     const normalizedToken = sanitizeString(token);
     const normalizedPlatform = normalizePlatform(platform);
-    console.log(
-        `[FCM-DEBUG] upsertFirebaseDeviceToken: ownerType=${ownerType}, ownerId=${ownerId}, platform=${normalizedPlatform}, tokenPreview=${normalizedToken?.slice(0, 10)}...`
-    );
-    
+
     if (!ownerType || !ownerId || !normalizedToken) {
-        console.error('[FCM-DEBUG] upsert - Missing required fields');
         throw new Error('ownerType, ownerId, and token are required.');
     }
 
     const model = getOwnerModel(ownerType);
     if (!model) {
-        console.error(`[FCM-DEBUG] upsert - Unsupported owner type: ${ownerType}`);
         throw new Error(`Unsupported owner type: ${ownerType}`);
     }
 
     const doc = await model.findById(ownerId);
     if (!doc) {
-        console.error(`[FCM-DEBUG] upsert - Owner profile not found for id ${ownerId}`);
         throw new Error('Owner profile not found.');
     }
 
+    const field = getTokenFieldForPlatform(normalizedPlatform);
+    const existingTokens = Array.isArray(doc[field]) ? doc[field] : [];
+    const tokens = normalizeTokenList([...existingTokens, normalizedToken]);
+
+    // Fast path: the token is already registered to this owner on this platform.
+    // Clients re-send the same token on every app foreground, and the work below
+    // (a scan of every owner collection plus a full document save) was being paid
+    // on each of those no-op calls.
+    const isUnchanged =
+        tokens.length === existingTokens.length &&
+        tokens.every((value, index) => value === existingTokens[index]);
+    if (isUnchanged) return { success: true, unchanged: true };
+
+    // The token is new to this owner, so it may still be attached to whoever
+    // used this device before. Detach it there before claiming it here.
     await removeTokenFromAllOwners({
         token: normalizedToken,
         exceptOwnerType: ownerType,
         exceptOwnerId: ownerId
     });
 
-    const field = getTokenFieldForPlatform(normalizedPlatform);
-    const existingTokens = Array.isArray(doc[field]) ? doc[field] : [];
-    console.log(`[FCM-DEBUG] upsert - Current tokens in DB count: ${existingTokens.length}`);
-    
-    const tokens = normalizeTokenList([...existingTokens, normalizedToken]);
     doc[field] = tokens;
-    
     await doc.save();
-    console.log(`[FCM-DEBUG] upsert - Token list updated. New count: ${tokens.length}`);
     return { success: true };
 };
 
@@ -416,7 +418,6 @@ export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, pla
         return { successCount: 0, failureCount: 0, results: [] };
     }
     try {
-        console.log(`[FCM] Sending to ${ownerType}:${ownerId}. Title: "${enrichedPayload.title || 'Data Only'}"`);
         const response = await sendPushNotification(tokens, enrichedPayload);
         const invalidTokens = (response.results || [])
 

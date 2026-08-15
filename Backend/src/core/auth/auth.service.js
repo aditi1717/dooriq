@@ -65,9 +65,6 @@ export const verifyUserOtpAndLogin = async (
   platform,
   name,
 ) => {
-  console.log(
-    `[FCM-LOGIN] User login platform received: rawPlatform=${String(platform ?? "") || "<empty>"}, hasToken=${Boolean(fcmToken)}`,
-  );
   const result = await verifyOtp(phone, otp);
 
   if (!result.valid) {
@@ -226,9 +223,6 @@ export const requestRestaurantOtp = async (phone) => {
 };
 
 export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform) => {
-  console.log(
-    `[FCM-LOGIN] Restaurant login platform received: rawPlatform=${String(platform ?? "") || "<empty>"}, hasToken=${Boolean(fcmToken)}`,
-  );
   const result = await verifyOtp(phone, otp);
   if (!result.valid) {
     throw new AuthError(result.reason || "OTP verification failed");
@@ -244,7 +238,6 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
     ...(last10 ? [{ [field]: { $regex: new RegExp(last10 + "$") } }] : []),
   ];
 
-  console.log(`[AUTH] Verifying OTP for restaurant phone: ${phone}`);
   const restaurant = await FoodRestaurant.findOne({
     $or: [
       ...phoneOrFields("ownerPhone"),
@@ -252,10 +245,7 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
     ],
   });
 
-  console.log(`[AUTH] Restaurant lookup result:`, restaurant ? { id: restaurant._id, status: restaurant.status, name: restaurant.restaurantName } : "NOT FOUND");
-
   if (!restaurant) {
-    console.log(`[AUTH] No restaurant found. Returning needsRegistration: true`);
     // Phone has been successfully verified, but no restaurant exists yet.
     // Frontend will use this to redirect into registration/onboarding.
     return {
@@ -351,9 +341,6 @@ const normalizePhoneForDelivery = (phone) => {
 };
 
 export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) => {
-  console.log(
-    `[FCM-LOGIN] Delivery login platform received: rawPlatform=${String(platform ?? "") || "<empty>"}, hasToken=${Boolean(fcmToken)}`,
-  );
   const result = await verifyOtp(phone, otp);
   if (!result.valid) {
     throw new AuthError(result.reason || "OTP verification failed");
@@ -432,8 +419,6 @@ export const logout = async (refreshToken, fcmToken, platform) => {
 
   // 1. Remove specific FCM token from ALL collections if provided
   if (fcmToken) {
-    console.log(`[FCM-Logout] Starting logout-driven token removal: platform=${platform}, tokenPreview=${fcmToken?.slice(0, 10)}...`);
-    
     const models = [FoodUser, FoodRestaurant, FoodDeliveryPartner, FoodAdmin];
     
     try {
@@ -445,7 +430,6 @@ export const logout = async (refreshToken, fcmToken, platform) => {
           ),
         ),
       );
-      console.log("[FCM-Logout] Token removed from all collections (web & mobile) successfully");
     } catch (err) {
       logger.warn({ err }, "Failed to remove FCM token from all collections during logout");
     }

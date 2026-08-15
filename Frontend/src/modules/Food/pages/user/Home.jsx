@@ -862,6 +862,12 @@ export default function Home() {
   const [loadingLandingConfig, setLoadingLandingConfig] = useState(true);
   const [restaurantsData, setRestaurantsData] = useState([]);
   const [loadingRestaurants, setLoadingRestaurants] = useState(true);
+  // Server-side paging state for the restaurant feed. The list endpoint returns
+  // one page at a time now, so the infinite scroll below pulls the next page
+  // instead of slicing a fully-downloaded catalogue.
+  const [restaurantsPage, setRestaurantsPage] = useState(1);
+  const [restaurantsHasMore, setRestaurantsHasMore] = useState(false);
+  const [loadingMoreRestaurants, setLoadingMoreRestaurants] = useState(false);
   const [realCategories, setRealCategories] = useState([]);
   const [loadingRealCategories, setLoadingRealCategories] = useState(true);
   const [menuCategories, setMenuCategories] = useState([]);
@@ -1905,15 +1911,16 @@ export default function Home() {
 
   // Fetch restaurants from API with filters
   const fetchRestaurants = useCallback(
-    async (filters = {}) => {
+    async (filters = {}, { page = 1, append = false } = {}) => {
       const requestSeq = ++restaurantsRequestSeqRef.current;
       try {
-        setLoadingRestaurants(true);
+        if (append) setLoadingMoreRestaurants(true);
+        else setLoadingRestaurants(true);
 
         // Backend disconnected - new backend in progress. Skip health check.
 
         // Build query parameters from filters
-        const params = {};
+        const params = { page };
 
         // Always send user coordinates when available so backend can compute distance/sort.
         if (
@@ -1976,6 +1983,13 @@ export default function Home() {
           params.trusted = "true";
         }
 
+        // Veg preferences must be applied server-side now that results are
+        // paged - filtering a page on the client would shrink it unevenly.
+        if (vegMode) {
+          params.isVeg = "true";
+          if (vegModeOption === "pure-veg") params.pureVeg = "true";
+        }
+
         // Strict zone-only listing for user home.
         // If zone is not detected yet, don't fetch global restaurants.
         if (!zoneId) {
@@ -2000,9 +2014,13 @@ export default function Home() {
           const restaurantsArray = response.data.data.restaurants;
           debugLog(`Fetched ${restaurantsArray.length} restaurants from API`);
 
+          // Track whether the server has further pages for this filter set.
+          setRestaurantsPage(page);
+          setRestaurantsHasMore(Boolean(response.data.data.hasMore));
+
           if (restaurantsArray.length === 0) {
             debugWarn("No restaurants found in API response");
-            setRestaurantsData([]);
+            if (!append) setRestaurantsData([]);
             return;
           }
 
@@ -2054,9 +2072,16 @@ export default function Home() {
                   ? restaurantLocation.coordinates[0]
                   : null);
 
-              // Calculate distance if both user and restaurant coordinates are available
-              let distanceInKm = null;
-              if (
+              // Prefer the distance the server already computed with $geoNear -
+              // it is the same value the results were ordered by, so the number
+              // on the card always matches the sort. Fall back to a local
+              // calculation for rows the geo pipeline could not measure.
+              let distanceInKm = Number.isFinite(Number(restaurant.distanceInKm))
+                ? Number(restaurant.distanceInKm)
+                : null;
+              if (distanceInKm !== null) {
+                distance = formatCardDistance(distanceInKm);
+              } else if (
                 userLat &&
                 userLng &&
                 restaurantLat &&
@@ -2159,6 +2184,11 @@ export default function Home() {
                   : [],
                 deliveryTimings: restaurant.deliveryTimings || null,
                 outletTimings: restaurant.outletTimings || null,
+                // Server-computed open/closed, using the same rules checkout
+                // applies - so a card can never say "Open" for a restaurant that
+                // would reject the order.
+                isOpenNow: restaurant.isOpenNow,
+                closedReason: restaurant.closedReason || null,
                 openingTime: restaurant.openingTime || restaurant?.deliveryTimings?.openingTime || null,
                 closingTime: restaurant.closingTime || restaurant?.deliveryTimings?.closingTime || null,
                 recommendedItems: Array.isArray(restaurant.recommendedItems) ? restaurant.recommendedItems : [],
@@ -2213,77 +2243,40 @@ export default function Home() {
             transformedRestaurants,
           );
           startTransition(() => {
-            setRestaurantsData(sortRestaurantsForDisplay(transformedRestaurants));
+            setRestaurantsData((previous) => {
+              if (!append) return sortRestaurantsForDisplay(transformedRestaurants);
+              // Append the next page, guarding against duplicates if a page
+              // boundary shifts between requests.
+              const seen = new Set(previous.map((r) => String(r.mongoId || r.id)));
+              const additions = transformedRestaurants.filter(
+                (r) => !seen.has(String(r.mongoId || r.id)),
+              );
+              return sortRestaurantsForDisplay([...previous, ...additions]);
+            });
           });
 
-          const restaurantsNeedingOutletTimings = transformedRestaurants.filter(
-            (restaurant) => restaurant.mongoId && !restaurant.outletTimings,
-          );
-
-          if (restaurantsNeedingOutletTimings.length > 0) {
-            void (async () => {
-              const resolvedOutletTimings = new Map();
-
-              for (const restaurant of restaurantsNeedingOutletTimings) {
-                try {
-                  const outletResponse =
-                    await restaurantAPI.getOutletTimingsByRestaurantId(
-                      restaurant.mongoId,
-                      { noCache: true },
-                    );
-                  const outletTimings =
-                    outletResponse?.data?.data?.outletTimings ||
-                    outletResponse?.data?.outletTimings ||
-                    null;
-
-                  if (outletTimings) {
-                    resolvedOutletTimings.set(restaurant.mongoId, outletTimings);
-                  }
-                } catch (_) {
-                  // Keep the existing restaurant data if enrichment fails.
-                }
-              }
-
-              if (
-                requestSeq !== restaurantsRequestSeqRef.current ||
-                resolvedOutletTimings.size === 0
-              ) {
-                return;
-              }
-
-              startTransition(() => {
-                setRestaurantsData((currentRestaurants) => {
-                  let hasChanges = false;
-                  const nextRestaurants = currentRestaurants.map((restaurant) => {
-                    if (!restaurant.mongoId) return restaurant;
-                    const outletTimings = resolvedOutletTimings.get(
-                      restaurant.mongoId,
-                    );
-                    if (!outletTimings) return restaurant;
-                    hasChanges = true;
-                    return { ...restaurant, outletTimings };
-                  });
-
-                  return hasChanges
-                    ? sortRestaurantsForDisplay(nextRestaurants)
-                    : currentRestaurants;
-                });
-              });
-            })();
-          }
+          // Outlet timings now arrive embedded in the restaurants list response.
+          //
+          // This used to fan out one `/restaurants/:id/outlet-timings` request
+          // per restaurant, sequentially and with `noCache: true`, so a 30-outlet
+          // feed cost 30 extra serial round-trips before the open/closed badges
+          // settled. The list endpoint returns `outletTimings` (and a computed
+          // `isOpenNow`) for the whole page in a single query instead.
         } else {
           debugWarn("Invalid API response structure:", response.data);
-          setRestaurantsData([]);
+          if (!append) setRestaurantsData([]);
+          setRestaurantsHasMore(false);
         }
       } catch (error) {
         debugError("Error fetching restaurants:", error);
         debugError("Error details:", error.response?.data || error.message);
-        // Don't set hardcoded data here - let the useMemo fallback handle it
-        // This way, if API succeeds later, it will show the real data
-        setRestaurantsData([]);
+        // A failed "load more" must not wipe the pages already on screen.
+        if (!append) setRestaurantsData([]);
+        setRestaurantsHasMore(false);
       } finally {
         if (requestSeq === restaurantsRequestSeqRef.current) {
           setLoadingRestaurants(false);
+          setLoadingMoreRestaurants(false);
         }
       }
     },
@@ -2293,6 +2286,8 @@ export default function Home() {
       effectiveLocation?.latitude,
       effectiveLocation?.longitude,
       zoneId,
+      vegMode,
+      vegModeOption,
     ],
   );
 
@@ -2663,35 +2658,63 @@ export default function Home() {
     return (restaurantsData || []).filter(matchesVegMode);
   }, [restaurantsData, matchesVegMode]);
 
+  // Reset the reveal window when the *query* changes, not when the dataset grows.
+  // `restaurantsData.length` used to be part of this key, which was fine while
+  // the whole catalogue arrived in one response - but with paged fetching every
+  // appended page would have collapsed the list back to the first batch.
   const restaurantLazyLoadResetKey = useMemo(() => {
     const activeFilterKey = Array.from(activeFilters).sort().join("|");
-    return `${restaurantsData.length}:${activeFilterKey}:${selectedCuisine || ""}:${sortBy || ""}:${vegMode ? "1" : "0"}:${vegModeOption}`;
-  }, [activeFilters, restaurantsData.length, selectedCuisine, sortBy, vegMode, vegModeOption]);
+    return `${activeFilterKey}:${selectedCuisine || ""}:${sortBy || ""}:${vegMode ? "1" : "0"}:${vegModeOption}`;
+  }, [activeFilters, selectedCuisine, sortBy, vegMode, vegModeOption]);
 
   const visibleRestaurants = useMemo(
     () => filteredRestaurants.slice(0, visibleRestaurantCount),
     [filteredRestaurants, visibleRestaurantCount],
   );
 
+  // More to show if there are loaded-but-unrevealed rows, or further server pages.
   const hasMoreRestaurants =
-    visibleRestaurantCount < filteredRestaurants.length;
+    visibleRestaurantCount < filteredRestaurants.length || restaurantsHasMore;
 
   const loadMoreRestaurants = useCallback(() => {
-    setVisibleRestaurantCount((previous) =>
-      Math.min(previous + RESTAURANTS_BATCH_SIZE, filteredRestaurants.length),
-    );
-  }, [filteredRestaurants.length, RESTAURANTS_BATCH_SIZE]);
+    // Reveal what is already loaded first; only hit the network once the
+    // current page is exhausted.
+    if (visibleRestaurantCount < filteredRestaurants.length) {
+      setVisibleRestaurantCount((previous) =>
+        Math.min(previous + RESTAURANTS_BATCH_SIZE, filteredRestaurants.length),
+      );
+      return;
+    }
 
-  useEffect(() => {
-    setVisibleRestaurantCount(
-      Math.min(RESTAURANTS_BATCH_SIZE, filteredRestaurants.length),
-    );
-  }, [restaurantLazyLoadResetKey, filteredRestaurants.length, RESTAURANTS_BATCH_SIZE]);
+    if (!restaurantsHasMore || loadingMoreRestaurants) return;
+    void fetchRestaurants(appliedFilters, {
+      page: restaurantsPage + 1,
+      append: true,
+    });
+  }, [
+    visibleRestaurantCount,
+    filteredRestaurants.length,
+    RESTAURANTS_BATCH_SIZE,
+    restaurantsHasMore,
+    loadingMoreRestaurants,
+    fetchRestaurants,
+    appliedFilters,
+    restaurantsPage,
+  ]);
 
+  // Collapse back to the first batch only when the query itself changes.
   useEffect(() => {
-    if (visibleRestaurantCount <= filteredRestaurants.length) return;
+    setVisibleRestaurantCount(RESTAURANTS_BATCH_SIZE);
+  }, [restaurantLazyLoadResetKey, RESTAURANTS_BATCH_SIZE]);
+
+  // Once the user has pulled a second page, reveal everything that is loaded.
+  // A server page is only ~20 rows, so it is already the right batch size;
+  // holding some of it back would leave the scroll sentinel parked with nothing
+  // new rendered and the feed would appear stuck.
+  useEffect(() => {
+    if (restaurantsPage <= 1) return;
     setVisibleRestaurantCount(filteredRestaurants.length);
-  }, [filteredRestaurants.length, visibleRestaurantCount]);
+  }, [restaurantsPage, filteredRestaurants.length]);
 
   useEffect(() => {
     if (!hasMoreRestaurants) return;

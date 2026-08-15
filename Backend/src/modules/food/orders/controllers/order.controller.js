@@ -440,6 +440,63 @@ export async function rejectOrderAdminController(req, res, next) {
     }
 }
 
+/**
+ * Statuses an admin may set from the orders screen.
+ *
+ * Deliberately excludes `created` (the initial state, never a destination) and
+ * the user/restaurant cancellation variants - an admin cancelling an order is
+ * `cancelled_by_admin`, so attribution in statusHistory stays truthful.
+ */
+const ADMIN_SETTABLE_ORDER_STATUSES = [
+    'confirmed',
+    'preparing',
+    'ready_for_pickup',
+    'reached_pickup',
+    'picked_up',
+    'reached_drop',
+    'delivered',
+    'cancelled_by_admin',
+];
+
+/**
+ * PATCH /admin/orders/:orderId/status
+ *
+ * Generic admin status override. The forward-only rule and every downstream
+ * side effect (refunds, coupon reversal, COD settlement, transaction ledger,
+ * notifications, sockets, auto-assign) are handled by updateOrderStatusAdmin -
+ * this controller only validates the requested target.
+ */
+export async function updateOrderStatusAdminController(req, res, next) {
+    try {
+        const adminId = req.user?.userId;
+        const orderId = req.params.orderId;
+        const requested = String(req.body?.orderStatus || req.body?.status || '').trim();
+
+        if (!requested) {
+            return sendResponse(res, 400, 'orderStatus is required', null);
+        }
+        if (!ADMIN_SETTABLE_ORDER_STATUSES.includes(requested)) {
+            return sendResponse(
+                res,
+                400,
+                `Invalid order status. Allowed: ${ADMIN_SETTABLE_ORDER_STATUSES.join(', ')}`,
+                null,
+            );
+        }
+
+        const note = String(req.body?.note || '').trim();
+        const order = await orderService.updateOrderStatusAdmin(
+            orderId,
+            requested,
+            note || `Status changed to ${requested.replace(/_/g, ' ')} by admin`,
+            adminId,
+        );
+        return sendResponse(res, 200, 'Order status updated', { order });
+    } catch (err) {
+        next(err);
+    }
+}
+
 export async function processRefundAdminController(req, res, next) {
     try {
         const adminId = req.user?.userId;

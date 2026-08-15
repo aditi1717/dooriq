@@ -67,6 +67,7 @@ import { sendError } from '../../../../utils/response.js';
 import { getRestaurantFinanceController } from '../controllers/restaurantFinance.controller.js';
 
 import { cacheResponse, invalidateCache } from '../../../../middleware/cache.js';
+import { CACHE_PRESETS } from '../../../../middleware/httpCache.js';
 
 const router = express.Router();
 
@@ -90,13 +91,13 @@ router.post('/unregistered', registerUnregisteredRestaurantController);
 router.post('/upload-attachment', upload.single('file'), uploadRestaurantAttachmentController);
 
 // Public: approved restaurants list (for user app)
-router.get('/restaurants', cacheResponse(300, 'restaurants'), listApprovedRestaurantsController);
-router.get('/restaurants/:id', cacheResponse(600, 'restaurant_detail'), getApprovedRestaurantController);
-router.get('/restaurants/:id/menu', cacheResponse(600, 'restaurant_menu'), getPublicRestaurantMenuController);
-router.get('/restaurants/:id/outlet-timings', cacheResponse(600, 'restaurant_timings'), getOutletTimingsByRestaurantIdController);
+router.get('/restaurants', CACHE_PRESETS.catalog(), cacheResponse(300, 'restaurants'), listApprovedRestaurantsController);
+router.get('/restaurants/:id', CACHE_PRESETS.catalog(), cacheResponse(600, 'restaurant_detail'), getApprovedRestaurantController);
+router.get('/restaurants/:id/menu', CACHE_PRESETS.catalog(), cacheResponse(600, 'restaurant_menu'), getPublicRestaurantMenuController);
+router.get('/restaurants/:id/outlet-timings', CACHE_PRESETS.catalog(), cacheResponse(600, 'restaurant_timings'), getOutletTimingsByRestaurantIdController);
 router.get('/offers', optionalAuth, listPublicOffersController);
 // Public: categories list (zone-aware; returns zone categories + global)
-router.get('/categories/public', cacheResponse(600, 'categories'), listCategoriesController);
+router.get('/categories/public', CACHE_PRESETS.config(), cacheResponse(600, 'categories'), listCategoriesController);
 
 // Restaurant dashboard/profile (Bearer token + RESTAURANT role)
 router.get('/current', authMiddleware, requireRestaurant, getCurrentRestaurantController);
@@ -186,7 +187,7 @@ router.patch('/menu', authMiddleware, requireRestaurant, async (req, res, next) 
 router.post('/feedback-experience', authMiddleware, requireRestaurant, feedbackExperienceController.createFeedbackExperience);
 
 // Public: restaurant add-ons (user app)
-router.get('/restaurants/:id/addons', cacheResponse(600, 'restaurant_addons'), getPublicRestaurantAddonsController);
+router.get('/restaurants/:id/addons', CACHE_PRESETS.catalog(), cacheResponse(600, 'restaurant_addons'), getPublicRestaurantAddonsController);
 
 // Foods (restaurant creates/updates items -> stored in food_items collection)
 router.post('/foods', authMiddleware, requireRestaurant, async (req, res, next) => {

@@ -19,6 +19,7 @@ import { requireRoles } from '../core/roles/role.middleware.js';
 import { getQueuesController } from '../controllers/admin.controller.js';
 import webhookRoutes from '../core/payments/routes/webhook.routes.js'; // ✅ NEW
 import searchRoutes from '../modules/food/search/routes/search.routes.js';
+import { CACHE_PRESETS } from '../middleware/httpCache.js';
 
 const router = express.Router();
 
@@ -40,12 +41,16 @@ router.get('/v1/food/dining/categories/public', getPublicDiningCategories);
 router.get('/v1/food/dining/restaurants/public', getPublicDiningRestaurants);
 router.use('/v1/uploads', uploadRoutes);
 
-// Mark business-settings/public as truly public (must be before protected admin block)
-router.get('/v1/food/admin/business-settings/public', businessSettingsController.getBusinessSettings);
-router.get('/v1/food/admin/power-scanning/public', businessSettingsController.getPowerScanningSettings);
-router.get('/v1/food/admin/restaurant-subscription-settings/public', adminController.getRestaurantSubscriptionSettings);
-router.get('/v1/food/admin/feature-settings/public', adminController.getFeatureSettings);
-router.get('/v1/food/admin/fee-settings/public', adminController.getFeeSettings);
+// Mark business-settings/public as truly public (must be before protected admin block).
+//
+// NOTE: these registrations - not the ones inside admin.routes.js - are what
+// clients actually reach, because the router below mounts the same paths behind
+// admin auth. Any middleware for the public endpoints must be applied HERE.
+router.get('/v1/food/admin/business-settings/public', CACHE_PRESETS.config(), businessSettingsController.getBusinessSettings);
+router.get('/v1/food/admin/power-scanning/public', CACHE_PRESETS.config(), businessSettingsController.getPowerScanningSettings);
+router.get('/v1/food/admin/restaurant-subscription-settings/public', CACHE_PRESETS.config(), adminController.getRestaurantSubscriptionSettings);
+router.get('/v1/food/admin/feature-settings/public', CACHE_PRESETS.config(), adminController.getFeatureSettings);
+router.get('/v1/food/admin/fee-settings/public', CACHE_PRESETS.config(), adminController.getFeeSettings);
 
 router.use('/v1/food/admin', authMiddleware, privateRateLimiter, requireRoles('ADMIN'), restaurantAdminRoutes);
 router.use('/v1/food/user', authMiddleware, privateRateLimiter, requireRoles('USER'), userRoutes);

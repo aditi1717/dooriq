@@ -48,7 +48,15 @@ const handleHotSync = async ({ userId, orderId }) => {
                         lastLocation: {
                             type: 'Point',
                             coordinates: [riderData.lng, riderData.lat]
-                        }
+                        },
+                        // Order dispatch scores riders on lastLat/lastLng and
+                        // treats a stale lastLocationAt as "no GPS". Syncing only
+                        // the GeoJSON field left dispatch reading an old position.
+                        lastLat: riderData.lat,
+                        lastLng: riderData.lng,
+                        lastLocationAt: riderData.timestamp
+                            ? new Date(riderData.timestamp)
+                            : new Date()
                     }
                 })
             );

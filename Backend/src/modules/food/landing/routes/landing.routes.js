@@ -68,6 +68,7 @@ import {
 } from '../controllers/top10GourmetAdmin.controller.js';
 import { getPublicPageController } from '../../admin/controllers/pageContent.controller.js';
 import { getPublicReferralSettingsController } from '../controllers/publicReferralSettings.controller.js';
+import { CACHE_PRESETS } from '../../../../middleware/httpCache.js';
 
 const router = express.Router();
 
@@ -164,9 +165,9 @@ router.get('/explore-icons/public', getPublicExploreIconsController);
 router.get('/hero-banners/home-promotion/public', getPublicHomePromotionBannersController);
 router.get('/hero-banners/gourmet/public', getPublicGourmetController);
 router.get('/landing/settings/public', getPublicLandingSettingsController);
-router.get('/zones/detect', detectZonePublicController);
-router.get('/zones/nearby', listZonesNearbyPublicController);
-router.get('/zones/public', listZonesPublicController);
+router.get('/zones/detect', CACHE_PRESETS.geo(), detectZonePublicController);
+router.get('/zones/nearby', CACHE_PRESETS.geo(), listZonesNearbyPublicController);
+router.get('/zones/public', CACHE_PRESETS.geo(), listZonesPublicController);
 // Admin landing settings
 router.get('/hero-banners/landing/settings', getAdminLandingSettingsController);
 router.patch('/hero-banners/landing/settings', updateAdminLandingSettingsController);

@@ -47,7 +47,7 @@ export const useCategoryData = (zoneId) => {
     try {
       setLoadingRestaurants(true);
       const params = zoneId ? { zoneId } : {};
-      const response = await restaurantAPI.getRestaurants(params);
+      const response = await restaurantAPI.getAllRestaurants(params);
       if (response.data?.success) {
         const raw = response.data.data.restaurants || [];
         const transformed = raw.map(r => ({

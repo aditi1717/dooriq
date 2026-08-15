@@ -449,6 +449,14 @@ restaurantSchema.index(
   },
 );
 restaurantSchema.index({ status: 1, createdAt: -1 });
+// Zone-scoped listing and search ("approved restaurants in this zone") is the
+// single most frequent query in the app; without the compound index Mongo has
+// to filter one of the two predicates in memory.
+restaurantSchema.index({ status: 1, zoneId: 1 });
+// FCM token reassignment looks a device token up across every owner collection.
+// Multikey indexes turn those scans into point lookups.
+restaurantSchema.index({ fcmTokens: 1 });
+restaurantSchema.index({ fcmTokenMobile: 1 });
 
 export const FoodRestaurant = mongoose.model(
   "FoodRestaurant",

@@ -9,9 +9,12 @@ import { getFirebaseDB } from './firebase.js';
 let io = null;
 let redisEmitter = null;
 
+// Connection-lifecycle tracing for the delivery app. Debug level so it stays
+// available for troubleshooting (LOG_LEVEL=debug) without emitting a line per
+// socket connect/reconnect in production.
 function logDeliverySocket(message, extra = {}) {
     const suffix = Object.keys(extra).length ? ` ${JSON.stringify(extra)}` : '';
-    logger.info(`[DeliverySocket] ${message}${suffix}`);
+    logger.debug(`[DeliverySocket] ${message}${suffix}`);
 }
 
 function getTokenFromHandshake(socket) {
@@ -42,13 +45,6 @@ const noopIO = {
     }
 };
 
-function maskToken(token) {
-    if (!token || typeof token !== 'string') return null;
-    const trimmed = token.trim();
-    if (!trimmed) return null;
-    return `${trimmed.slice(0, 12)}...${trimmed.slice(-6)}`;
-}
-
 
 /**
  * Initializes Socket.IO with the provided HTTP server.
@@ -65,46 +61,24 @@ export const initSocket = async (server) => {
     });
 
     // Socket auth middleware (Bearer token).
+    //
+    // Every client reconnect runs this. The previous version wrote 2-4 log lines
+    // per handshake (including a preview of the bearer token), which at a few
+    // thousand users buries the logs and leaks token material. Handshake detail
+    // is now debug-only; failures still log a single line.
     io.use((socket, next) => {
         try {
             const token = getTokenFromHandshake(socket);
             if (!token) {
                 logger.warn(`Socket auth failed: token missing for socket ${socket.id}`);
-                logger.warn(`[DeliverySocket] Handshake auth missing`, {
-                    socketId: socket.id,
-                    origin: socket?.handshake?.headers?.origin || null,
-                    host: socket?.handshake?.headers?.host || null,
-                    userAgent: socket?.handshake?.headers?.['user-agent'] || null,
-                    hasAuthToken: Boolean(socket?.handshake?.auth?.token),
-                    hasAuthorizationHeader: Boolean(
-                        socket?.handshake?.headers?.authorization || socket?.handshake?.headers?.Authorization
-                    ),
-                    hasQueryToken: Boolean(socket?.handshake?.query?.token),
-                });
                 return next(new Error('AUTH_MISSING'));
             }
-            logger.info(`[DeliverySocket] Handshake token received`, {
-                socketId: socket.id,
-                origin: socket?.handshake?.headers?.origin || null,
-                host: socket?.handshake?.headers?.host || null,
-                transport: socket?.handshake?.query?.transport || null,
-                tokenPreview: maskToken(token),
-            });
             const decoded = verifyAccessToken(token);
             socket.user = { userId: decoded.userId, role: decoded.role };
-            logger.info(`Socket auth success: ${decoded.role}:${decoded.userId} for socket ${socket.id}`);
+            logger.debug(`Socket auth success: ${decoded.role}:${decoded.userId} for socket ${socket.id}`);
             return next();
         } catch (err) {
-            logger.error(`Socket auth failed for socket ${socket.id}: ${err.message}`);
-            logger.error(`[DeliverySocket] Handshake auth invalid`, {
-                socketId: socket.id,
-                origin: socket?.handshake?.headers?.origin || null,
-                host: socket?.handshake?.headers?.host || null,
-                transport: socket?.handshake?.query?.transport || null,
-                tokenPreview: maskToken(getTokenFromHandshake(socket)),
-                errorMessage: err.message,
-                errorName: err.name || null,
-            });
+            logger.warn(`Socket auth failed for socket ${socket.id}: ${err.message}`);
             return next(new Error('AUTH_INVALID'));
         }
     });

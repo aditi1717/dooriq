@@ -13,9 +13,7 @@ export const getPublicPageController = async (req, res, next) => {
     try {
         const key = parseKeyFromParam(req);
         const module = req.query.module || 'ALL';
-        console.log(`[CMS] Public Request - Key: ${key}, Module: ${module}`);
         const result = await getPublicPageByKey(key, module);
-        console.log(`[CMS] Result found: ${!!result.data}`);
         return sendResponse(res, 200, 'Page fetched successfully', result.data);
     } catch (error) {
         console.error(`[CMS] Error:`, error);

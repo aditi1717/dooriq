@@ -7,8 +7,16 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 import { haversineKm, checkRestaurantOpenStatus } from './order.helpers.js';
 import { calculateCouponDiscount, getCouponIneligibilityReason } from './couponValidation.service.js';
 import { fetchDrivingRoute } from '../utils/googleMaps.js';
+import { createTtlCache } from '../../../../utils/cache.js';
 
 const round2 = (value) => Math.round((Number(value) || 0) * 100) / 100;
+
+const feeSettingsCache = createTtlCache({ ttlMs: 30_000, maxEntries: 4, name: 'fee-settings' });
+
+/** Called after an admin saves fee settings so the next request reloads them. */
+export function invalidateFeeSettingsCache() {
+  feeSettingsCache.clear();
+}
 
 function toPoint(entity) {
   if (!entity || typeof entity !== 'object') return null;
@@ -93,15 +101,17 @@ export async function getDeliveryDistanceDetails(restaurant, deliveryAddress) {
 }
 
 export async function calculateOrderPricing(userId, dto) {
+  // Select the operating-hours fields too so checkRestaurantOpenStatus can reuse
+  // this document instead of issuing a second query for the same restaurant.
   const restaurant = await FoodRestaurant.findById(dto.restaurantId)
-    .select("status location")
+    .select("status location isAcceptingOrders openingTime closingTime openDays")
     .lean();
   if (!restaurant) throw new ValidationError("Restaurant not found");
   if (restaurant.status !== "approved")
     throw new ValidationError("Restaurant not available");
 
   const checkTime = dto.scheduledAt ? new Date(dto.scheduledAt) : new Date();
-  const openStatus = await checkRestaurantOpenStatus(dto.restaurantId, checkTime);
+  const openStatus = await checkRestaurantOpenStatus(dto.restaurantId, checkTime, { restaurant });
   if (!openStatus.isOpen) {
     throw new ValidationError(openStatus.reason || "Restaurant is closed at the selected time");
   }
@@ -112,7 +122,11 @@ export async function calculateOrderPricing(userId, dto) {
     0,
   );
 
-  const feeDoc = await FoodFeeSettings.findOne().sort({ createdAt: -1 }).lean();
+  // Fee settings are a single admin-managed document read on every cart
+  // recalculation; a short TTL removes that query from the hot path.
+  const feeDoc = await feeSettingsCache.get('current', () =>
+    FoodFeeSettings.findOne().sort({ createdAt: -1 }).lean().then((doc) => doc ?? null),
+  );
   const feeSettings = feeDoc || {
     deliveryFee: 0,
     deliveryFeeRanges: [],

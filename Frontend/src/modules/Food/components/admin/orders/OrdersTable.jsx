@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react"
-import { Eye, Printer, ArrowUpDown, Loader2, Check, X, Trash2, Volume2 } from "lucide-react"
+import { Eye, Printer, ArrowUpDown, Loader2, Check, X, Trash2, Volume2, RefreshCw } from "lucide-react"
+import { getForwardStatuses } from "./orderStatusFlow"
 
 const getStatusColor = (orderStatus) => {
   const colors = {
@@ -37,8 +38,10 @@ export default function OrdersTable({
   onAcceptOrder,
   onRejectOrder,
   onCancelOrder,
+  onChangeStatus,
   onResendNotification,
   actionLoadingOrderId,
+  statusChangingOrderId,
   deletingOrderId,
   showAssignedDeliveryPartner = false,
 }) {
@@ -491,6 +494,25 @@ export default function OrdersTable({
                           <span>Reject</span>
                         </button>
                       )}
+                      {onChangeStatus && (() => {
+                        // Hidden once the order is delivered or cancelled -
+                        // those are terminal, so there is nothing to move to.
+                        const canAdvance = getForwardStatuses(order.backendStatus).length > 0
+                        if (!canAdvance) return null
+                        const busy = statusChangingOrderId === (order.id || order.orderId)
+                        return (
+                          <button
+                            onClick={() => onChangeStatus(order)}
+                            disabled={busy}
+                            className="p-1.5 rounded text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50"
+                            title="Change Order Status"
+                          >
+                            {busy
+                              ? <Loader2 className="w-4 h-4 animate-spin" />
+                              : <RefreshCw className="w-4 h-4" />}
+                          </button>
+                        )
+                      })()}
                       <button
                         onClick={() => onViewOrder(order)}
                         className="p-1.5 rounded text-orange-600 hover:bg-orange-50 transition-colors"

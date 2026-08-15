@@ -322,6 +322,21 @@ orderSchema.index({ 'dispatch.deliveryPartnerId': 1, 'dispatch.status': 1, updat
 orderSchema.index({ 'payment.status': 1, createdAt: -1 });
 orderSchema.index({ 'payment.method': 1, createdAt: -1 });
 
+// Acceptance-deadline sweep: { orderStatus IN [...], acceptanceDeadlineAt <= now }.
+// Equality-ish prefix then a range on the deadline, so it seeks straight to the
+// due orders instead of scanning every open one.
+orderSchema.index({ orderStatus: 1, acceptanceDeadlineAt: 1 });
+
+// Restaurant dashboard list: filters on restaurantId and sorts by createdAt but
+// does NOT filter on orderStatus, so the existing
+// { restaurantId, orderStatus, createdAt } index cannot serve the sort - Mongo
+// would match on the prefix and then sort in memory.
+orderSchema.index({ restaurantId: 1, createdAt: -1 });
+
+// Admin order list: no equality prefix, just a payment $or plus a createdAt
+// sort. This lets the sort walk the index instead of collecting and sorting.
+orderSchema.index({ createdAt: -1 });
+
 orderSchema.pre('save', async function (next) {
     if (!this.order_id) {
         const timestamp = Date.now().toString().slice(-4);

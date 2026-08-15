@@ -3,6 +3,7 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 import { invalidateCache } from '../../../../middleware/cache.js';
 import { FoodRestaurantOutletTimings } from '../models/outletTimings.model.js';
 import { FoodRestaurant } from '../models/restaurant.model.js';
+import { invalidateOutletTimingsCache } from '../../orders/services/order.helpers.js';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -35,6 +36,13 @@ const defaultTimings = () =>
         openingTime: '09:00',
         closingTime: '22:00'
     }));
+
+/**
+ * Normalize a raw timings array into the day-keyed map the clients consume.
+ * Exported so list endpoints can embed timings in the same shape the
+ * single-restaurant endpoint returns.
+ */
+export const toOutletTimingsClientShape = (timings) => toClientShape({ timings });
 
 const toClientShape = (doc) => {
     const timings = Array.isArray(doc?.timings) ? doc.timings : [];
@@ -103,6 +111,7 @@ export async function upsertOutletTimingsForRestaurant(restaurantId, outletTimin
     void invalidateCache('restaurants:*');
     void invalidateCache('restaurant_detail:*');
     void invalidateCache('restaurant_timings:*');
+    invalidateOutletTimingsCache(restaurantId);
 
     return { outletTimings: toClientShape(doc) };
 }

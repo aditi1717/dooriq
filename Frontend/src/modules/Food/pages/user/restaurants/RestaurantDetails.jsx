@@ -319,9 +319,15 @@ function RestaurantDetailsContent() {
               // Fallback without zoneId so missing live location never blocks this page.
               debugLog('? Direct lookup failed, trying search by name...')
 
+                // Push the name match to the server instead of scanning a
+                // downloaded page - the list endpoint is paginated now.
+                const slugAsName = slug.replace(/-/g, ' ')
                 const searchVariants = zoneId
-                  ? [{ limit: 100, zoneId: zoneId, _ts: Date.now() }, { limit: 100, _ts: Date.now() }]
-                  : [{ limit: 100, _ts: Date.now() }]
+                  ? [
+                      { limit: 50, search: slugAsName, zoneId: zoneId, _ts: Date.now() },
+                      { limit: 50, search: slugAsName, _ts: Date.now() },
+                    ]
+                  : [{ limit: 50, search: slugAsName, _ts: Date.now() }]
 
                 for (const searchParams of searchVariants) {
                   try {
@@ -669,9 +675,13 @@ function RestaurantDetailsContent() {
           if (!restaurantIdForMenu) {
             debugWarn('? No restaurant ID available, searching for restaurant by name...')
             try {
+              const nameToFind = transformedRestaurant.name || ''
               const searchVariants = zoneId
-                ? [{ limit: 100, zoneId: zoneId, _ts: Date.now() }, { limit: 100, _ts: Date.now() }]
-                : [{ limit: 100, _ts: Date.now() }]
+                ? [
+                    { limit: 50, search: nameToFind, zoneId: zoneId, _ts: Date.now() },
+                    { limit: 50, search: nameToFind, _ts: Date.now() },
+                  ]
+                : [{ limit: 50, search: nameToFind, _ts: Date.now() }]
 
               for (const searchParams of searchVariants) {
                 const searchResponse = await restaurantAPI.getRestaurants(searchParams, { noCache: true })

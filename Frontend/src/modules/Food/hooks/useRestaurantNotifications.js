@@ -280,17 +280,64 @@ export const useRestaurantNotifications = () => {
   // If Socket.IO fails (expired jwt / missing token / room join failed),
   // we still fetch restaurant orders from REST periodically and trigger the same
   // alert flow. This prevents "restaurant didn't receive the order" cases.
+  // Socket connectivity is read through a ref so the poll loop can change its
+  // own cadence without `isConnected` being an effect dependency. If it were a
+  // dependency, every socket reconnect would tear down and rebuild the loop -
+  // and each rebuild fires an immediate request, so a flapping connection would
+  // produce a burst of polls exactly when the backend is already struggling.
+  const isConnectedRef = useRef(isConnected);
+  useEffect(() => {
+    isConnectedRef.current = isConnected;
+  }, [isConnected]);
+
   useEffect(() => {
     if (!restaurantId || !isAuthenticated) return;
 
-    const ALERT_POLL_MS = 8000;
-    let isCancelled = false;
+    // Cadence: the socket is the primary channel, so when it is up this is only
+    // a safety net and can run slowly. Hidden tabs are skipped entirely.
+    const POLL_CONNECTED_MS = 30000;
+    const POLL_DISCONNECTED_MS = 8000;
+    const POLL_MAX_BACKOFF_MS = 120000;
 
-    const pollOrders = async () => {
+    let isCancelled = false;
+    let timer = null;
+    let inFlight = false;
+    let consecutiveErrors = 0;
+
+    const nextDelay = () => {
+      const base = isConnectedRef.current ? POLL_CONNECTED_MS : POLL_DISCONNECTED_MS;
+      if (consecutiveErrors === 0) return base;
+      // Back off when the API is failing rather than hammering it at a fixed
+      // rate; recovery resets to the normal cadence on the first success.
+      return Math.min(base * 2 ** consecutiveErrors, POLL_MAX_BACKOFF_MS);
+    };
+
+    const scheduleNext = () => {
+      if (isCancelled) return;
+      timer = setTimeout(runPoll, nextDelay());
+    };
+
+    async function runPoll() {
       if (isCancelled || !isAuthenticated) return;
 
+      // Skip hidden tabs, but keep the loop alive so it resumes on its own.
+      if (typeof document !== 'undefined' && document.hidden) {
+        scheduleNext();
+        return;
+      }
+
+      // Guard against overlap: setInterval would fire again while a slow request
+      // was still outstanding, stacking requests on an already-slow backend.
+      if (inFlight) {
+        scheduleNext();
+        return;
+      }
+
+      inFlight = true;
       try {
         const response = await restaurantAPI.getOrders({ page: 1, limit: 30 });
+        if (isCancelled) return;
+
         const rows =
           response?.data?.data?.orders ||
           response?.data?.data?.data?.orders ||
@@ -311,18 +358,32 @@ export const useRestaurantNotifications = () => {
           // Trigger alerts for newest confirmed orders (dedupe prevents spam).
           confirmed.slice(0, 5).forEach((o) => handleIncomingOrderAlert(o));
         }
+        consecutiveErrors = 0;
       } catch (error) {
-        // Non-blocking: keep polling.
+        // Non-blocking: keep polling, but more slowly each time it fails.
+        consecutiveErrors = Math.min(consecutiveErrors + 1, 5);
+      } finally {
+        inFlight = false;
+        scheduleNext();
       }
-    };
+    }
 
-    // Initial poll immediately.
-    pollOrders();
-    const intervalId = setInterval(pollOrders, ALERT_POLL_MS);
+    // Poll immediately on mount so a dashboard opened mid-order alerts at once.
+    void runPoll();
+
+    // Catch up as soon as the dashboard is looked at again, replacing the
+    // pending timer so we don't end up with two loops running.
+    const handleVisibilityChange = () => {
+      if (typeof document === 'undefined' || document.hidden) return;
+      if (timer) clearTimeout(timer);
+      void runPoll();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       isCancelled = true;
-      clearInterval(intervalId);
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [restaurantId, isAuthenticated]);
 

@@ -8,6 +8,7 @@ import { validateAddDeliveryBonusDto } from '../validators/deliveryBonus.validat
 import { validateCheckCompletionsDto, validateEarningAddonHistoryActionDto, validateEarningAddonUpsertDto, validateToggleEarningAddonStatusDto } from '../validators/earningAddon.validator.js';
 import { validateDeliveryCommissionRuleDto, validateOptionalStatusDto, validateRestaurantCommissionUpsertDto } from '../validators/commission.validator.js';
 import { validateFeeSettingsUpsertDto } from '../validators/feeSettings.validator.js';
+import { invalidateFeeSettingsCache } from '../../orders/services/order-pricing.service.js';
 import { validateDeliveryEmergencyHelpUpsertDto } from '../validators/deliveryEmergencyHelp.validator.js';
 import { validateReferralSettingsUpsertDto } from '../validators/referralSettings.validator.js';
 import { ADMIN_ACTIONS, ADMIN_PERMISSION_SECTIONS, sanitizeAdminPermissions } from '../../../../constants/permissions.js';
@@ -1220,9 +1221,9 @@ export async function getFeeSettings(req, res, next) {
 
 export async function createOrUpdateFeeSettings(req, res, next) {
     try {
-        console.log('[DEBUG] req.body:', JSON.stringify(req.body, null, 2));
         const body = validateFeeSettingsUpsertDto(req.body || {});
         const feeSettings = await adminService.upsertFeeSettings(body);
+        invalidateFeeSettingsCache();
         res.status(200).json({ success: true, message: 'Fee settings saved successfully', data: { feeSettings } });
     } catch (error) {
         next(error);

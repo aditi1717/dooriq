@@ -453,11 +453,16 @@ export const getSupportTicketByIdAndPartner = async (ticketId, deliveryPartnerId
     return ticket;
 };
 
+/**
+ * Availability + location heartbeat.
+ *
+ * The driver app calls this every ~10-15s for every online rider, so it is one
+ * of the highest-write endpoints in the system. It previously loaded the full
+ * partner document and called `save()`, which meant a read plus full-document
+ * validation per heartbeat. An atomic `findOneAndUpdate` touches only the five
+ * fields that change and needs a single round-trip.
+ */
 export const updateDeliveryAvailability = async (userId, payload) => {
-    const partner = await FoodDeliveryPartner.findById(userId);
-    if (!partner) {
-        throw new ValidationError('Delivery partner not found');
-    }
     const { status, latitude, longitude } = payload || {};
     let validStatus = 'offline';
     if (status === 'online' || status === true) validStatus = 'online';
@@ -476,18 +481,28 @@ export const updateDeliveryAvailability = async (userId, payload) => {
     if (validStatus === 'online' && !hasValidLocation) {
         throw new ValidationError('Please turn on location to go online');
     }
-    
-    partner.availabilityStatus = validStatus;
+
+    const $set = { availabilityStatus: validStatus };
     if (hasValidLocation) {
-        partner.lastLocation = {
-            type: 'Point',
-            coordinates: [lng, lat]
-        };
-        partner.lastLat = lat;
-        partner.lastLng = lng;
-        partner.lastLocationAt = new Date();
+        // Both shapes are kept in sync: `lastLocation` backs the 2dsphere index,
+        // while `lastLat`/`lastLng` are what order dispatch reads. Writing only
+        // one of them leaves dispatch scoring against a stale position.
+        $set.lastLocation = { type: 'Point', coordinates: [lng, lat] };
+        $set.lastLat = lat;
+        $set.lastLng = lng;
+        $set.lastLocationAt = new Date();
     }
-    await partner.save();
+
+    const partner = await FoodDeliveryPartner.findOneAndUpdate(
+        { _id: userId },
+        { $set },
+        { new: true, projection: 'availabilityStatus' },
+    ).lean();
+
+    if (!partner) {
+        throw new ValidationError('Delivery partner not found');
+    }
+
     return { availabilityStatus: partner.availabilityStatus };
 };
 

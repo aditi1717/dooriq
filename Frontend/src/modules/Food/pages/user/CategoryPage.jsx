@@ -891,7 +891,7 @@ export default function CategoryPage() {
         }
         
         const params = { zoneId }
-        const response = await restaurantAPI.getRestaurants(params)
+        const response = await restaurantAPI.getAllRestaurants(params)
 
         if (response.data && response.data.success && response.data.data && response.data.data.restaurants) {
           const restaurantsArray = response.data.data.restaurants

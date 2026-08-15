@@ -47,7 +47,7 @@ export const useHomeData = (location, zoneId) => {
         ...(filters.cuisine && { cuisine: filters.cuisine }),
         ...(zoneId && { zoneId })
       };
-      const res = await restaurantAPI.getRestaurants(params);
+      const res = await restaurantAPI.getAllRestaurants(params);
       if (res.data?.success) {
         const raw = res.data.data.restaurants || [];
         const userLat = location?.latitude;

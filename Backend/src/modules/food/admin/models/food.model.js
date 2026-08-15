@@ -38,5 +38,10 @@ foodSchema.index({ restaurantId: 1, createdAt: -1 });
 foodSchema.index({ approvalStatus: 1, createdAt: -1 });
 foodSchema.index({ approvalStatus: 1, requestedAt: -1 });
 foodSchema.index({ restaurantId: 1, approvalStatus: 1, createdAt: -1 });
+// Search and menu rendering repeatedly ask "which of these restaurants have an
+// approved, in-stock item?". This covers that predicate without a collection scan.
+foodSchema.index({ restaurantId: 1, approvalStatus: 1, isAvailable: 1 });
+// Category browsing ("show restaurants serving this category").
+foodSchema.index({ categoryId: 1, approvalStatus: 1, isAvailable: 1 });
 
 export const FoodItem = mongoose.model('FoodItem', foodSchema);

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { logger } from '../../../../utils/logger.js';
+import { createTtlCache } from '../../../../utils/cache.js';
 import {
   sendNotificationToOwner,
   sendNotificationToOwners,
@@ -255,10 +256,6 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
     .map((v) => String(v || '').trim())
     .filter(Boolean);
 
-  console.log(`[DEBUG] buildDeliverySocketPayload - Order: ${order?.orderId || order?._id}`);
-  console.log(`[DEBUG] buildDeliverySocketPayload - riderEarning in doc: ${order?.riderEarning}`);
-  console.log(`[DEBUG] buildDeliverySocketPayload - deliveryFee in doc: ${order?.pricing?.deliveryFee}`);
-
   const tripDistanceKmRaw =
     order?.tripDistanceKm ??
     order?.pricing?.roadDistanceKm ??
@@ -448,12 +445,75 @@ export function isStatusAdvance(current, next) {
   return nextPrio > currentPrio;
 }
 
-export async function checkRestaurantOpenStatus(restaurantId, checkDate = new Date()) {
-  const { FoodRestaurant } = await import('../../restaurant/models/restaurant.model.js');
-  const restaurant = await FoodRestaurant.findById(restaurantId)
-    .select('status isAcceptingOrders openingTime closingTime openDays')
-    .lean();
+const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+/**
+ * Outlet timings are edited rarely but read on every cart recalculation, so a
+ * short TTL keeps checkout fast without letting stale hours linger.
+ */
+const outletTimingsCache = createTtlCache({ ttlMs: 30_000, maxEntries: 2000, name: 'outlet-timings' });
+
+/**
+ * Resolve the wall-clock weekday/hour/minute in the business timezone.
+ *
+ * The previous implementation did `new Date(date.toLocaleString('en-US', { timeZone }))`,
+ * which round-trips through a locale string and silently degrades to the server
+ * timezone on Node builds without full ICU data - a 5.5h error that reads as
+ * "restaurant closed". `formatToParts` reads the fields directly instead.
+ */
+function getZonedTimeParts(date, timeZone = 'Asia/Kolkata') {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      weekday: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(date);
+
+    const lookup = {};
+    for (const part of parts) lookup[part.type] = part.value;
+
+    // hourCycle h23 still emits "24" for midnight in some ICU versions.
+    const hour = Number(lookup.hour) % 24;
+    const minute = Number(lookup.minute);
+    if (!Number.isFinite(hour) || !Number.isFinite(minute) || !lookup.weekday) {
+      throw new Error('Incomplete date parts');
+    }
+    return { dayName: lookup.weekday, minutesOfDay: hour * 60 + minute };
+  } catch (error) {
+    // Last-resort fallback: server local time. Logged because it means the
+    // deployment is missing ICU data and open/close checks may be off.
+    logger.warn(`Timezone resolution failed for ${timeZone}, using server time: ${error?.message || error}`);
+    return {
+      dayName: DAYS_OF_WEEK[date.getDay()],
+      minutesOfDay: date.getHours() * 60 + date.getMinutes(),
+    };
+  }
+}
+
+/** Parse "HH:mm" (also tolerates "H:mm" and "HH:mm:ss") into minutes since midnight. */
+function parseTimeToMinutes(timeStr) {
+  const raw = String(timeStr ?? '').trim();
+  if (!raw) return null;
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(raw);
+  if (!match) return null;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(m) || h > 24 || m > 59) return null;
+  return (h % 24) * 60 + m;
+}
+
+/**
+ * Pure open/closed decision, split out from the data loading so it can be
+ * exercised directly in tests.
+ *
+ * @param {object} restaurant Fields: status, isAcceptingOrders, openingTime, closingTime, openDays
+ * @param {object|null} timingDoc Outlet timings document, or null when none exists
+ * @param {Date} checkDate Instant to evaluate
+ * @returns {{ isOpen: boolean, reason?: string }}
+ */
+export function resolveRestaurantOpenStatus(restaurant, timingDoc, checkDate = new Date()) {
   if (!restaurant) {
     return { isOpen: false, reason: 'Restaurant not found' };
   }
@@ -466,27 +526,15 @@ export async function checkRestaurantOpenStatus(restaurantId, checkDate = new Da
     return { isOpen: false, reason: 'Restaurant is currently offline' };
   }
 
-  // Check outlet timings collection for granular day timing
-  const { FoodRestaurantOutletTimings } = await import('../../restaurant/models/outletTimings.model.js');
-  const timingDoc = await FoodRestaurantOutletTimings.findOne({ restaurantId }).lean();
-
-  // Standardize time check to IST timezone (Asia/Kolkata)
-  let istDate;
-  try {
-    const istString = checkDate.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
-    istDate = new Date(istString);
-  } catch (e) {
-    istDate = checkDate;
-  }
-
-  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const currentDayName = daysOfWeek[istDate.getDay()];
+  const { dayName: currentDayName, minutesOfDay: currentMin } = getZonedTimeParts(checkDate);
 
   let openingTime = restaurant.openingTime || null;
   let closingTime = restaurant.closingTime || null;
 
-  if (timingDoc && Array.isArray(timingDoc.timings)) {
-    const timing = timingDoc.timings.find((t) => t && String(t.day).toLowerCase() === currentDayName.toLowerCase());
+  if (timingDoc && Array.isArray(timingDoc.timings) && timingDoc.timings.length > 0) {
+    const timing = timingDoc.timings.find(
+      (t) => t && String(t.day).trim().toLowerCase() === currentDayName.toLowerCase(),
+    );
     if (timing) {
       if (timing.isOpen === false) {
         return { isOpen: false, reason: 'Restaurant is closed today' };
@@ -495,49 +543,93 @@ export async function checkRestaurantOpenStatus(restaurantId, checkDate = new Da
       closingTime = timing.closingTime || closingTime;
     }
   } else if (Array.isArray(restaurant.openDays) && restaurant.openDays.length > 0) {
-    const openDaysNormalized = restaurant.openDays.map(d => String(d).trim().toLowerCase());
+    const openDaysNormalized = restaurant.openDays.map((d) => String(d).trim().toLowerCase());
     if (!openDaysNormalized.includes(currentDayName.toLowerCase())) {
       return { isOpen: false, reason: 'Restaurant is closed today' };
     }
   }
 
   if (!openingTime || !closingTime) {
-    // Default to open if no timing set
+    // No hours configured -> treat as always open rather than blocking orders.
     return { isOpen: true };
   }
-
-  const parseTimeToMinutes = (timeStr) => {
-    const parts = String(timeStr || '').trim().split(':');
-    if (parts.length !== 2) return null;
-    const h = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10);
-    if (isNaN(h) || isNaN(m)) return null;
-    return h * 60 + m;
-  };
 
   const openMin = parseTimeToMinutes(openingTime);
   const closeMin = parseTimeToMinutes(closingTime);
 
   if (openMin === null || closeMin === null) {
+    // Unparseable hours must not block checkout; fail open and flag it.
+    logger.warn(
+      `Restaurant has unparseable hours ("${openingTime}" - "${closingTime}"); treating as open`,
+    );
     return { isOpen: true };
   }
 
-  const currentMin = istDate.getHours() * 60 + istDate.getMinutes();
-
-  let isWithin = false;
-  if (closeMin < openMin) {
-    // Overnight operational window (e.g., 18:00 to 02:00 next day)
+  let isWithin;
+  if (openMin === closeMin) {
+    // Identical open/close (e.g. "00:00" to "00:00", or "09:00" to "09:00")
+    // is the standard way to express a 24-hour outlet. The old code read this
+    // as a zero-length window and reported every such restaurant as closed,
+    // which rejected checkout with "Operational hours: 00:00 to 00:00".
+    isWithin = true;
+  } else if (closeMin < openMin) {
+    // Overnight window (e.g. 18:00 to 02:00 next day)
     isWithin = currentMin >= openMin || currentMin <= closeMin;
   } else {
-    // Normal same-day window (e.g., 09:00 to 22:00)
+    // Normal same-day window (e.g. 09:00 to 22:00)
     isWithin = currentMin >= openMin && currentMin <= closeMin;
   }
 
   if (!isWithin) {
-    return { isOpen: false, reason: `Restaurant is closed now. Operational hours: ${openingTime} to ${closingTime}` };
+    return {
+      isOpen: false,
+      reason: `Restaurant is closed now. Operational hours: ${openingTime} to ${closingTime}`,
+    };
   }
 
   return { isOpen: true };
+}
+
+/**
+ * @param {string|import('mongoose').Types.ObjectId} restaurantId
+ * @param {Date} [checkDate]
+ * @param {{ restaurant?: object }} [options] Pre-fetched restaurant doc to skip a redundant query.
+ */
+export async function checkRestaurantOpenStatus(restaurantId, checkDate = new Date(), options = {}) {
+  const { FoodRestaurant } = await import('../../restaurant/models/restaurant.model.js');
+
+  // Callers that already loaded the restaurant can hand it over instead of
+  // paying for a second point-query on the checkout hot path.
+  const preloaded = options.restaurant;
+  const hasRequiredFields =
+    preloaded &&
+    'status' in preloaded &&
+    'openingTime' in preloaded &&
+    'closingTime' in preloaded &&
+    'openDays' in preloaded;
+
+  const restaurant = hasRequiredFields
+    ? preloaded
+    : await FoodRestaurant.findById(restaurantId)
+        .select('status isAcceptingOrders openingTime closingTime openDays')
+        .lean();
+
+  if (!restaurant) {
+    return { isOpen: false, reason: 'Restaurant not found' };
+  }
+
+  const { FoodRestaurantOutletTimings } = await import('../../restaurant/models/outletTimings.model.js');
+  const timingDoc = await outletTimingsCache.get(String(restaurantId), () =>
+    // `null` is cached too, so restaurants without a timings doc do not re-query.
+    FoodRestaurantOutletTimings.findOne({ restaurantId }).lean().then((doc) => doc ?? null),
+  );
+
+  return resolveRestaurantOpenStatus(restaurant, timingDoc, checkDate);
+}
+
+/** Drop cached outlet timings for a restaurant after its schedule is edited. */
+export function invalidateOutletTimingsCache(restaurantId) {
+  if (restaurantId) outletTimingsCache.delete(String(restaurantId));
 }
 
 export function isCodOrder(order) {

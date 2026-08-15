@@ -34,11 +34,22 @@ export const useLocationSharing = (orderId, enabled = false) => {
     if (!API_BASE_URL || !backendUrl || !backendUrl.startsWith('http')) return;
 
     if (!socketRef.current) {
+      // The server rejects tokenless handshakes (AUTH_MISSING) and the
+      // update-location handler requires socket.user.role === 'DELIVERY_PARTNER'.
+      // Without this token the socket never connects, so every location emit was
+      // silently dropped by the `connected` guard below.
+      const token =
+        localStorage.getItem('delivery_accessToken') ||
+        localStorage.getItem('accessToken');
+      if (!token) return;
+
       socketRef.current = io(backendUrl, {
+        path: '/socket.io/',
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
-        reconnectionAttempts: 5
+        reconnectionAttempts: 5,
+        auth: { token }
       });
 
       socketRef.current.on('connect', () => {

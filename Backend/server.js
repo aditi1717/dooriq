@@ -13,12 +13,17 @@ import { expireExpiredOffers } from './src/modules/food/admin/services/admin.ser
 import { syncExpiredFssaiNotifications } from './src/modules/food/restaurant/services/fssaiExpiry.service.js';
 
 import { logger } from './src/utils/logger.js';
+import { scheduleRecurring } from './src/utils/distributedLock.js';
 import { initializeFirebaseRealtime } from './src/config/firebase.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10000;
+const ORDER_EXPIRY_SWEEP_MS = 30 * 1000;
+const OFFER_EXPIRY_SWEEP_MS = 5 * 60 * 1000;
+const FSSAI_SWEEP_MS = 60 * 60 * 1000;
+
 let server = null;
-let expireOffersInterval = null;
-let fssaiExpiryInterval = null;
+/** Stop functions for the recurring maintenance jobs. */
+const stopMaintenanceJobs = [];
 
 const gracefulShutdown = async (signal) => {
     logger.info(`${signal} received, starting graceful shutdown`);
@@ -31,8 +36,9 @@ const gracefulShutdown = async (signal) => {
             await disconnectDB();
             await closeRedis();
             await closeBullMQConnection();
-            if (expireOffersInterval) clearInterval(expireOffersInterval);
-            if (fssaiExpiryInterval) clearInterval(fssaiExpiryInterval);
+            stopMaintenanceJobs.forEach((stop) => {
+                try { stop(); } catch { /* already stopped */ }
+            });
             logger.info('Graceful shutdown complete');
             process.exit(0);
         } catch (err) {
@@ -115,25 +121,43 @@ const startServer = async () => {
             console.log(`🌐 [URL] http://localhost:${config.port}`);
         });
 
-        const runExpire = async () => {
-            try {
-                await expireExpiredOffers();
-            } catch (err) {
-                logger.error(`Expire offers error: ${err.message}`);
-            }
-        };
-        runExpire();
-        expireOffersInterval = setInterval(runExpire, 5 * 60 * 1000);
+        // ─── Maintenance sweeps ──────────────────────────────────────────────
+        //
+        // Each of these is a full-collection pass whose result is identical for
+        // every process, so they must run once per cycle across the whole fleet -
+        // not once per PM2 worker, and not once per server.
+        //
+        // `scheduleRecurring` handles all three hazards:
+        //   - a Mongo lease so exactly one process per cycle does the work, and
+        //     another takes over automatically if that process dies;
+        //   - the next run is scheduled after the previous one finishes, so a
+        //     slow sweep can never overlap itself;
+        //   - startup jitter so workers booting together don't all contend.
 
-        const runFssaiExpirySync = async () => {
-            try {
+        stopMaintenanceJobs.push(
+            scheduleRecurring('maintenance:expire-offers', OFFER_EXPIRY_SWEEP_MS, async () => {
+                await expireExpiredOffers();
+            }),
+        );
+
+        stopMaintenanceJobs.push(
+            scheduleRecurring('maintenance:fssai-expiry', FSSAI_SWEEP_MS, async () => {
                 await syncExpiredFssaiNotifications();
-            } catch (err) {
-                logger.error(`FSSAI expiry sync error: ${err.message}`);
-            }
-        };
-        runFssaiExpirySync();
-        fssaiExpiryInterval = setInterval(runFssaiExpirySync, 60 * 60 * 1000);
+            }),
+        );
+
+        // Auto-cancel orders the restaurant never accepted. This used to run
+        // inline on every order list/detail read, putting a platform-wide scan
+        // on the latency path of endpoints that clients poll every few seconds.
+        stopMaintenanceJobs.push(
+            scheduleRecurring('maintenance:order-expiry', ORDER_EXPIRY_SWEEP_MS, async () => {
+                const { runOrderExpirySweep } = await import('./src/modules/food/orders/services/order.service.js');
+                const expired = await runOrderExpirySweep();
+                if (expired > 0) {
+                    logger.info(`Order expiry sweep cancelled ${expired} unaccepted order(s)`);
+                }
+            }),
+        );
 
         process.on('SIGINT', () => gracefulShutdown('SIGINT'));
         process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

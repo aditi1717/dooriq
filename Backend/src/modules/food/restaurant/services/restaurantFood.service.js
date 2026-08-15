@@ -3,6 +3,17 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodCategory } from '../../admin/models/category.model.js';
 import { FoodRestaurant } from '../models/restaurant.model.js';
+import { invalidateOrderableRestaurantsCache } from './restaurant.service.js';
+import { invalidateSearchCache } from '../../search/services/search.service.js';
+
+/**
+ * Menu edits change which restaurants are listable and what search can match,
+ * so drop both derived caches immediately instead of waiting out their TTL.
+ */
+const invalidateCatalogCaches = () => {
+    invalidateOrderableRestaurantsCache();
+    invalidateSearchCache();
+};
 import {
     extractRawFoodVariants,
     getFoodDisplayPrice,
@@ -225,6 +236,7 @@ export async function createRestaurantFood(restaurantId, body = {}) {
         console.error('Failed to notify admins of new food approval request:', e);
     }
 
+    invalidateCatalogCaches();
     return doc.toObject();
 }
 
@@ -306,6 +318,7 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
         }
     }
 
+    invalidateCatalogCaches();
     return updated;
 }
 
@@ -314,5 +327,6 @@ export async function deleteRestaurantFood(restaurantId, foodId) {
         throw new ValidationError('Invalid food id');
     }
     const deleted = await FoodItem.findOneAndDelete({ _id: foodId, restaurantId }).lean();
+    invalidateCatalogCaches();
     return deleted ? { id: foodId } : null;
 }

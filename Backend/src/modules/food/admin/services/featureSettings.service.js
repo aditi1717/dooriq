@@ -1,4 +1,5 @@
 import { FoodFeatureSetting } from '../models/featureSetting.model.js';
+import { createTtlCache, once } from '../../../../utils/cache.js';
 
 export const FEATURE_KEYS = {
     RESTAURANT_SUBSCRIPTION: 'restaurant_subscription',
@@ -41,26 +42,54 @@ const DEFAULT_FEATURES = [
     }
 ];
 
+/**
+ * `/feature-settings/public` is fetched on nearly every page load. Reading it
+ * used to seed five default rows first - five sequential round-trips per
+ * request - which is what made the endpoint take 3-4 seconds under load.
+ *
+ * Seeding is idempotent bootstrap work, so it now runs once per process as a
+ * single bulk write, and the resulting list is served from a short-lived cache.
+ */
+const featureSettingsCache = createTtlCache({ ttlMs: 30_000, maxEntries: 4, name: 'feature-settings' });
+const LIST_CACHE_KEY = 'all';
+
+const seedDefaultFeatureSettings = once(async () => {
+    await FoodFeatureSetting.bulkWrite(
+        DEFAULT_FEATURES.map((feature) => ({
+            updateOne: {
+                filter: { key: feature.key },
+                update: { $setOnInsert: feature },
+                upsert: true
+            }
+        })),
+        { ordered: false }
+    );
+});
+
 export async function ensureDefaultFeatureSettings() {
-    for (const feature of DEFAULT_FEATURES) {
-        await FoodFeatureSetting.updateOne(
-            { key: feature.key },
-            { $setOnInsert: feature },
-            { upsert: true }
-        );
-    }
+    await seedDefaultFeatureSettings();
+}
+
+const toFeatureDto = (doc) => ({
+    key: doc.key,
+    name: doc.name,
+    description: doc.description || '',
+    isEnabled: Boolean(doc.isEnabled),
+    updatedAt: doc.updatedAt
+});
+
+async function loadFeatureSettings() {
+    await ensureDefaultFeatureSettings();
+    const docs = await FoodFeatureSetting.find({}).sort({ createdAt: 1 }).lean();
+    return docs.map(toFeatureDto);
 }
 
 export async function listFeatureSettings() {
-    await ensureDefaultFeatureSettings();
-    const docs = await FoodFeatureSetting.find({}).sort({ createdAt: 1 }).lean();
-    return docs.map((doc) => ({
-        key: doc.key,
-        name: doc.name,
-        description: doc.description || '',
-        isEnabled: Boolean(doc.isEnabled),
-        updatedAt: doc.updatedAt
-    }));
+    return featureSettingsCache.get(LIST_CACHE_KEY, loadFeatureSettings);
+}
+
+export function invalidateFeatureSettingsCache() {
+    featureSettingsCache.clear();
 }
 
 export async function updateFeatureSetting(key, payload = {}) {
@@ -72,21 +101,16 @@ export async function updateFeatureSetting(key, payload = {}) {
         { new: true }
     ).lean();
 
-    return updated
-        ? {
-            key: updated.key,
-            name: updated.name,
-            description: updated.description || '',
-            isEnabled: Boolean(updated.isEnabled),
-            updatedAt: updated.updatedAt
-        }
-        : null;
+    // Drop the cached list so this worker serves the new value immediately.
+    invalidateFeatureSettingsCache();
+
+    return updated ? toFeatureDto(updated) : null;
 }
 
 export async function isFeatureEnabled(key, fallback = true) {
     if (!key) return fallback;
-    await ensureDefaultFeatureSettings();
-    const doc = await FoodFeatureSetting.findOne({ key: String(key).trim() }).select('isEnabled').lean();
-    if (!doc) return fallback;
-    return Boolean(doc.isEnabled);
+    const features = await listFeatureSettings();
+    const match = features.find((feature) => feature.key === String(key).trim());
+    if (!match) return fallback;
+    return Boolean(match.isEnabled);
 }

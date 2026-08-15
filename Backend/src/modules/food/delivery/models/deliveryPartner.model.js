@@ -127,6 +127,17 @@ const deliveryPartnerSchema = new mongoose.Schema(
 
 // Indices
 deliveryPartnerSchema.index({ lastLocation: '2dsphere' });
+// Order dispatch runs `find({ status, availabilityStatus: 'online' })` for every
+// order placed. Without this compound index that is a full collection scan over
+// every delivery partner ever registered, on the critical path of each order.
+deliveryPartnerSchema.index({ availabilityStatus: 1, status: 1 });
+// Dispatch also filters riders whose GPS is older than the staleness window.
+deliveryPartnerSchema.index({ availabilityStatus: 1, lastLocationAt: -1 });
+
+// FCM token reassignment looks a device token up across every owner collection.
+// Multikey indexes turn those scans into point lookups.
+deliveryPartnerSchema.index({ fcmTokens: 1 });
+deliveryPartnerSchema.index({ fcmTokenMobile: 1 });
 
 export const FoodDeliveryPartner = mongoose.model('FoodDeliveryPartner', deliveryPartnerSchema);
 

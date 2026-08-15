@@ -8,6 +8,7 @@ import { FoodNotification } from '../../../../core/notifications/models/notifica
 import { sendNotificationToOwner } from '../../../../core/notifications/firebase.service.js';
 import { FoodRestaurantSubscriptionSettings } from '../models/restaurantSubscriptionSettings.model.js';
 import { FoodZone } from '../models/zone.model.js';
+import { invalidateZonesCache } from '../../landing/controllers/zonePublic.controller.js';
 import { FoodCategory } from '../models/category.model.js';
 import { FoodItem } from '../models/food.model.js';
 import { FoodOffer } from '../models/offer.model.js';
@@ -1953,7 +1954,6 @@ export async function getFeeSettings() {
 export async function upsertFeeSettings(body) {
     // Single active doc pattern: keep only one active record.
     const existing = await FoodFeeSettings.findOne().sort({ createdAt: -1 });
-    console.log('[DEBUG] upsertFeeSettings - existing:', existing ? 'Yes' : 'No');
     if (existing) {
         const $set = {};
         const $unset = {};
@@ -1992,7 +1992,6 @@ export async function upsertFeeSettings(body) {
     if (body.platformFee !== undefined && body.platformFee !== null) payload.platformFee = body.platformFee;
     if (body.gstRate !== undefined && body.gstRate !== null) payload.gstRate = body.gstRate;
 
-    console.log('[DEBUG] Creating NEW settings with payload:', JSON.stringify(payload, null, 2));
     const created = await FoodFeeSettings.create(payload);
     return created.toObject();
 }
@@ -5226,6 +5225,7 @@ export async function createZone(body) {
         isActive: body.isActive !== false
     });
     await zone.save();
+    invalidateZonesCache();
     return { zone: zone.toObject() };
 }
 
@@ -5248,11 +5248,13 @@ export async function updateZone(id, body) {
     if (zone.name) zone.serviceLocation = zone.serviceLocation || zone.name;
 
     await zone.save();
+    invalidateZonesCache();
     return { zone: zone.toObject() };
 }
 
 export async function deleteZone(id) {
     const zone = await FoodZone.findByIdAndDelete(id);
+    invalidateZonesCache();
     return zone ? { id } : null;
 }
 

@@ -15,15 +15,16 @@ import { getPublicReferralSettingsController } from '../../landing/controllers/p
 import { upload } from '../../../../middleware/upload.js';
 import { FoodAdmin } from '../../../../core/admin/admin.model.js';
 import { requireAdminPermission, requireAnyAdminPermission } from '../../../../core/roles/adminPermission.middleware.js';
+import { CACHE_PRESETS } from '../../../../middleware/httpCache.js';
 
 const router = express.Router();
 
 // ----- Public Business Settings (No Admin Required) -----
-router.get('/business-settings/public', businessSettingsController.getBusinessSettings);
-router.get('/power-scanning/public', businessSettingsController.getPowerScanningSettings);
-router.get('/fee-settings/public', adminController.getFeeSettings);
-router.get('/restaurant-subscription-settings/public', adminController.getRestaurantSubscriptionSettings);
-router.get('/feature-settings/public', adminController.getFeatureSettings);
+router.get('/business-settings/public', CACHE_PRESETS.config(), businessSettingsController.getBusinessSettings);
+router.get('/power-scanning/public', CACHE_PRESETS.config(), businessSettingsController.getPowerScanningSettings);
+router.get('/fee-settings/public', CACHE_PRESETS.config(), adminController.getFeeSettings);
+router.get('/restaurant-subscription-settings/public', CACHE_PRESETS.config(), adminController.getRestaurantSubscriptionSettings);
+router.get('/feature-settings/public', CACHE_PRESETS.config(), adminController.getFeatureSettings);
 
 
 const requireAdmin = (req, _res, next) => {
@@ -405,6 +406,8 @@ router.get(
 router.get('/orders/:orderId', orderController.getOrderByIdAdminController);
 router.patch('/orders/:orderId/accept', orderController.acceptOrderAdminController);
 router.patch('/orders/:orderId/reject', orderController.rejectOrderAdminController);
+// Generic forward-only status override from the admin orders screen.
+router.patch('/orders/:orderId/status', orderController.updateOrderStatusAdminController);
 router.patch(
     '/orders/:orderId/deassign-resend',
     requireAdminPermission('order_management', 'edit'),

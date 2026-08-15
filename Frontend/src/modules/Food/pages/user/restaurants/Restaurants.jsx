@@ -69,8 +69,8 @@ export default function Restaurants() {
           setRestaurants([])
           return
         }
-        const params = { limit: 300, zoneId, _ts: Date.now() }
-        const response = await restaurantAPI.getRestaurants(params, { noCache: true })
+        const params = { zoneId, _ts: Date.now() }
+        const response = await restaurantAPI.getAllRestaurants(params, { noCache: true })
         const list =
           response?.data?.data?.restaurants ||
           response?.data?.restaurants ||

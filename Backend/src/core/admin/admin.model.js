@@ -101,5 +101,10 @@ adminSchema.methods.comparePassword = function (candidatePassword) {
     return bcrypt.compare(candidatePassword, this.password);
 };
 
+// FCM token reassignment looks a device token up across every owner collection.
+// Multikey indexes turn those scans into point lookups.
+adminSchema.index({ fcmTokens: 1 });
+adminSchema.index({ fcmTokenMobile: 1 });
+
 export const FoodAdmin = mongoose.model('FoodAdmin', adminSchema);
 

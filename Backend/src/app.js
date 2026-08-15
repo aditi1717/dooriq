@@ -7,6 +7,7 @@ import xssClean from 'xss-clean';
 import routes from './routes/index.js';
 import errorHandler from './middleware/errorHandler.js';
 import { responseTimeLogger } from './middleware/responseTimeLogger.js';
+import { defaultPrivateCache } from './middleware/httpCache.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { healthCheck } from './config/health.js';
 import { config } from './config/env.js';
@@ -43,7 +44,12 @@ app.use(helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 app.use(cors());
-app.use(morgan('dev'));
+// responseTimeLogger already records method/path/status/duration for every API
+// request. Running morgan alongside it in production doubled the log volume
+// (and the synchronous stdout writes) for no extra information.
+if (config.nodeEnv !== 'production') {
+    app.use(morgan('dev'));
+}
 app.use(express.json({
     verify: (req, res, buf) => {
         // ✅ Store rawBody for signature verification (Razorpay Webhooks)
@@ -71,6 +77,12 @@ app.use('/uploads', express.static(getUploadStorageDir(), {
 
 // Optional: log API response time (method, path, status, duration) - no sensitive data
 app.use('/api', responseTimeLogger);
+
+// Default every API response to `private, no-cache`: storable but always
+// revalidated, so polled endpoints keep answering 304 while authenticated data
+// is never served stale. Public catalog/config routes opt into real caching via
+// `httpCache`/`CACHE_PRESETS`, which take precedence.
+app.use('/api', defaultPrivateCache);
 
 // API Routes
 app.use('/api', routes);

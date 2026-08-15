@@ -254,7 +254,7 @@ export default function SearchResults() {
           return
         }
         const params = { zoneId }
-        const response = await restaurantAPI.getRestaurants(params)
+        const response = await restaurantAPI.getAllRestaurants(params)
 
         debugLog('?? Full API Response:', response)
         debugLog('?? Response Data:', response?.data)

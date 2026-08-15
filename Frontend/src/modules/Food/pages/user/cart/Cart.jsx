@@ -866,7 +866,13 @@ export default function Cart() {
       if (cart[0]?.restaurant && !restaurantData) {
         try {
           debugLog("?? Searching restaurant by name:", cart[0].restaurant)
-          const searchResponse = await restaurantAPI.getRestaurants({ limit: 100 })
+          // Ask the server to find it by name. This used to download a page of
+          // restaurants and scan it locally, which silently failed for anything
+          // outside that page once the list endpoint became properly paginated.
+          const searchResponse = await restaurantAPI.getRestaurants({
+            search: cart[0].restaurant,
+            limit: 50,
+          })
           const restaurants = searchResponse?.data?.data?.restaurants || searchResponse?.data?.data || []
           debugLog("?? Fetched", restaurants.length, "restaurants for name search")
 

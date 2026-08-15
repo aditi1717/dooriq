@@ -148,5 +148,10 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ phone: 1 }, { unique: true });
 userSchema.index({ 'addresses.location': '2dsphere' });
 
+// FCM token reassignment looks a device token up across every owner collection.
+// Multikey indexes turn those scans into point lookups.
+userSchema.index({ fcmTokens: 1 });
+userSchema.index({ fcmTokenMobile: 1 });
+
 export const FoodUser = mongoose.model('FoodUser', userSchema);
 

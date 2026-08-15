@@ -40,6 +40,36 @@ function useDebounce(value, delay) {
 
 const SEARCH_HISTORY_KEY = "professional_search_history_v1"
 
+// A single character matches almost every dish in the catalogue, so the server
+// does its most expensive work to return a result nobody scrolls. Wait for a
+// meaningful prefix before querying - standard behaviour for search-as-you-type.
+const MIN_QUERY_LENGTH = 2
+
+// Short-lived result cache. Typing then backspacing ("piz" -> "pi" -> "piz")
+// otherwise re-queries terms answered moments ago.
+const SEARCH_CACHE_TTL_MS = 2 * 60 * 1000
+const SEARCH_CACHE_MAX_ENTRIES = 50
+const searchCache = new Map()
+
+const readSearchCache = (key) => {
+  const hit = searchCache.get(key)
+  if (!hit) return null
+  if (Date.now() - hit.ts > SEARCH_CACHE_TTL_MS) {
+    searchCache.delete(key)
+    return null
+  }
+  return hit.value
+}
+
+const writeSearchCache = (key, value) => {
+  searchCache.set(key, { ts: Date.now(), value })
+  while (searchCache.size > SEARCH_CACHE_MAX_ENTRIES) {
+    const oldest = searchCache.keys().next().value
+    if (oldest === undefined) break
+    searchCache.delete(oldest)
+  }
+}
+
 export default function ProfessionalSearch() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { vegMode } = useProfile()
@@ -54,6 +84,8 @@ export default function ProfessionalSearch() {
   
   const [results, setResults] = useState({ restaurants: [], dishes: [] })
   const [loading, setLoading] = useState(false)
+  // In-flight search, so a newer keystroke can cancel an older request.
+  const searchAbortRef = useRef(null)
   const [isListening, setIsListening] = useState(false)
   const [categories, setCategories] = useState([])
   const [selectedCategoryId, setSelectedCategoryId] = useState(searchParams.get("cat") || null)
@@ -104,34 +136,73 @@ export default function ProfessionalSearch() {
 
   const performSearch = useCallback(async (searchTerm, catId) => {
     const trimmed = String(searchTerm || "").trim()
+
+    // Abort whatever is still in flight. Without this, responses can land out of
+    // order and the slower reply for an earlier prefix overwrites the results for
+    // what the user actually typed.
+    if (searchAbortRef.current) searchAbortRef.current.abort()
+
     if (!trimmed && !catId) {
+      searchAbortRef.current = null
       setResults({ restaurants: [], dishes: [] })
+      setLoading(false)
       return
     }
-    
+
+    // A category filter is a valid search on its own; a bare 1-char term is not.
+    if (trimmed && !catId && trimmed.length < MIN_QUERY_LENGTH) {
+      searchAbortRef.current = null
+      setResults({ restaurants: [], dishes: [] })
+      setLoading(false)
+      return
+    }
+
+    const params = {
+      q: trimmed,
+      categoryId: catId,
+      lat: userCoords?.latitude,
+      lng: userCoords?.longitude,
+      zoneId,
+      isVeg: vegMode ? 'true' : 'false'
+    }
+    const cacheKey = JSON.stringify(params)
+
+    const cached = readSearchCache(cacheKey)
+    if (cached) {
+      searchAbortRef.current = null
+      setResults(cached)
+      setLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+    searchAbortRef.current = controller
+
     setLoading(true)
     try {
-      const res = await searchAPI.unifiedSearch({
-        q: trimmed,
-        categoryId: catId,
-        lat: userCoords?.latitude,
-        lng: userCoords?.longitude,
-        zoneId,
-        isVeg: vegMode ? 'true' : 'false'
-      })
-      
+      const res = await searchAPI.unifiedSearch(params, { signal: controller.signal })
+
       if (res.data?.success) {
         // Grouping results into Restaurants and potential Dishes
         const all = res.data.data.restaurants || []
-        setResults({
+        const grouped = {
           restaurants: all.filter(r => r.matchType === 'restaurant' || !r.matchType),
           dishes: all.filter(r => r.matchType === 'food')
-        })
+        }
+        writeSearchCache(cacheKey, grouped)
+        setResults(grouped)
       }
     } catch (err) {
+      // An aborted request is expected whenever the user keeps typing.
+      if (err?.name === 'CanceledError' || err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') {
+        return
+      }
       console.error("Search failed", err)
     } finally {
-      setLoading(false)
+      if (searchAbortRef.current === controller) {
+        searchAbortRef.current = null
+        setLoading(false)
+      }
     }
   }, [userCoords, zoneId, vegMode])
 

@@ -184,6 +184,19 @@ async function applyCancellationRefund(order, { cancelledBy = 'system', refundAm
   return { attempted: false, processed: false, reason: `unsupported_method_${paymentMethod}`, method: paymentMethod };
 }
 
+/**
+ * Auto-cancel orders the restaurant never accepted before the deadline.
+ *
+ * This is a maintenance sweep, not a read concern. It used to be awaited at the
+ * top of every order read - `listOrdersUser`, `getOrderById` - so each poll from
+ * each client re-scanned every unaccepted order on the platform before it could
+ * answer. With clients polling on a 8-20s timer, that is dozens of identical
+ * global sweeps per second, all contending to expire the same documents, and it
+ * put the whole sweep on the latency path of a simple list request.
+ *
+ * It now runs on a timer (see `runOrderExpirySweep` and server.js). Callers that
+ * need a specific order settled synchronously still pass a narrow filter.
+ */
 async function expireUnacceptedOrders(filter = {}) {
   const now = new Date();
   const baseFilter = {
@@ -320,32 +333,22 @@ async function getActiveCommissionRules() {
 
 async function getRiderEarning(distanceKm) {
   const d = Number(distanceKm);
-  console.log(`[DEBUG] getRiderEarning - Calculated Distance: ${d}`);
-  if (!Number.isFinite(d) || d < 0) {
-    console.log(`[DEBUG] getRiderEarning - Invalid distance, returning 0`);
-    return 0;
-  }
+  if (!Number.isFinite(d) || d < 0) return 0;
 
   // Fetch fee settings to get distance-based delivery boy payment ranges
   const feeDoc = await FoodFeeSettings.findOne().sort({ createdAt: -1 }).lean();
   if (!feeDoc) {
-    console.log(`[DEBUG] getRiderEarning - No fee settings document found`);
+    logger.warn('getRiderEarning: no fee settings document found; rider earning set to 0');
     return 0;
   }
 
-  console.log(`[DEBUG] getRiderEarning - Fee Settings Doc:`, JSON.stringify({
-    _id: feeDoc._id,
-    deliveryFee: feeDoc.deliveryFee,
-    rangesCount: feeDoc.deliveryFeeRanges?.length
-  }));
-
   if (!Array.isArray(feeDoc.deliveryFeeRanges) || feeDoc.deliveryFeeRanges.length === 0) {
-    console.log(`[DEBUG] getRiderEarning - No ranges found in document`);
+    logger.warn('getRiderEarning: fee settings have no deliveryFeeRanges; rider earning set to 0');
     return 0;
   }
 
   const ranges = [...feeDoc.deliveryFeeRanges].sort((a, b) => Number(a.min) - Number(b.min));
-  
+
   let earning = 0;
   let matched = false;
 
@@ -353,27 +356,24 @@ async function getRiderEarning(distanceKm) {
     const r = ranges[i];
     const min = Number(r.min);
     const max = Number(r.max);
-    
+
     const isLast = i === ranges.length - 1;
     const inRange = isLast
       ? d >= min && d <= max
       : d >= min && d < max;
 
     if (inRange) {
-      console.log(`[DEBUG] getRiderEarning - Matched range: ${min}-${max}`);
-      console.log(`[DEBUG] getRiderEarning - Range Config:`, JSON.stringify(r));
-      
       const basePay = Number(r.deliveryBoyBasePay || 0);
       const perKm = Number(r.deliveryBoyPerKm || 0);
 
       if (basePay > 0) {
         earning = basePay;
-        console.log(`[DEBUG] getRiderEarning - Using Base Pay: ${earning}`);
       } else if (perKm > 0) {
         earning = d * perKm;
-        console.log(`[DEBUG] getRiderEarning - Using Per KM: ${d} * ${perKm} = ${earning}`);
       } else {
-        console.log(`[DEBUG] getRiderEarning - No rider payment config (> 0) in matched range`);
+        logger.warn(
+          `getRiderEarning: matched range ${min}-${max}km has no rider payment configured; earning 0`,
+        );
       }
       matched = true;
       break;
@@ -381,13 +381,11 @@ async function getRiderEarning(distanceKm) {
   }
 
   if (!matched) {
-    console.log(`[DEBUG] getRiderEarning - No range matched for distance ${d}`);
+    logger.warn(`getRiderEarning: no fee range matched distance ${d}km; rider earning set to 0`);
     return 0;
   }
 
-  const finalEarning = Math.round(earning);
-  console.log(`[DEBUG] getRiderEarning - Final earning: ${finalEarning}`);
-  return finalEarning;
+  return Math.round(earning);
 }
 
 function resolvePreferredDistanceKm(distanceDetails = {}) {
@@ -1037,7 +1035,8 @@ export async function processDispatchTimeout(orderId, partnerId, options = {}) {
 
 // ----- User: list, get, cancel -----
 export async function listOrdersUser(userId, query) {
-  await expireUnacceptedOrders();
+  // No expiry sweep here: it is handled by the background job. This endpoint is
+  // polled by every signed-in client, so it must stay a pure read.
   const { page, limit, skip } = buildPaginationOptions(query);
   const filter = { 
     userId: new mongoose.Types.ObjectId(userId),
@@ -1068,9 +1067,13 @@ export async function getOrderById(
   orderId,
   { userId, restaurantId, deliveryPartnerId, admin } = {},
 ) {
-  await expireUnacceptedOrders();
   const identity = buildOrderIdentityFilter(orderId);
   if (!identity) throw new ValidationError("Order id required");
+
+  // Settle only this order if its acceptance window has lapsed. The tracking
+  // screen polls this endpoint, so the check is scoped to one indexed document
+  // instead of the platform-wide sweep that used to run here.
+  await expireUnacceptedOrders(identity);
   const order = await FoodOrder.findOne(identity)
     .populate(
       "restaurantId",
@@ -1082,25 +1085,24 @@ export async function getOrderById(
     .lean();
   if (!order) throw new NotFoundError("Order not found");
 
-  // If order document has 0 coinsEarned, dynamically resolve it from the user's wallet transactions
-  if (!order.coinsEarned || order.coinsEarned === 0) {
+  // Backfill coinsEarned from the wallet ledger for older orders that predate
+  // the denormalised field. Three things keep this cheap:
+  //
+  //  1. Only delivered orders can have earned coins. The live tracking screen
+  //     polls this endpoint for in-flight orders, where coinsEarned is
+  //     legitimately 0 - without this guard every poll hit the wallet.
+  //  2. `$elemMatch` projection makes MongoDB return just the one matching
+  //     transaction. Selecting the whole `coinTransactions` array shipped a
+  //     user's entire coin history, which grows for the life of the account.
+  //  3. The resolved value is written back to the order, so a given order pays
+  //     this cost at most once instead of on every view, forever.
+  if (order.orderStatus === 'delivered' && !order.coinsEarned) {
     try {
-      const { FoodUserWallet } = await import('../../user/models/userWallet.model.js');
-      const orderUserOid = order.userId?._id || order.userId;
-      if (orderUserOid) {
-        const wallet = await FoodUserWallet.findOne({ userId: orderUserOid });
-        if (wallet && wallet.coinTransactions) {
-          const match = wallet.coinTransactions.find(tx => 
-            tx.type === 'earned' && 
-            (tx.description?.includes(String(order._id)) || (order.order_id && tx.description?.includes(order.order_id)))
-          );
-          if (match) {
-            order.coinsEarned = match.amount;
-          }
-        }
-      }
+      const resolved = await resolveCoinsEarnedFromWallet(order);
+      if (resolved !== null) order.coinsEarned = resolved;
     } catch (err) {
-      console.error('Failed to resolve coinsEarned for order details:', err);
+      // Never fail an order read because a cosmetic backfill could not run.
+      logger.warn(`Failed to resolve coinsEarned for order ${order._id}: ${err?.message || err}`);
     }
   }
 
@@ -1178,6 +1180,67 @@ export async function getDropOtpUser(orderId, userId) {
   }
 
   return { otp: order.deliveryOtp };
+}
+
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Resolve how many coins a delivered order earned, from the user's coin ledger.
+ *
+ * Coin awards are recorded as wallet transactions whose `description` embeds the
+ * order reference; older orders never had the amount copied onto the order doc.
+ *
+ * The lookup asks MongoDB for only the matching ledger entry via an `$elemMatch`
+ * projection, so the response is one sub-document regardless of how long the
+ * user's coin history is. On a hit the value is written back to the order, so
+ * each order resolves at most once and later reads are pure.
+ *
+ * @returns {Promise<number|null>} coins earned, or null when nothing matched
+ */
+async function resolveCoinsEarnedFromWallet(order) {
+  const { FoodUserWallet } = await import('../../user/models/userWallet.model.js');
+  const orderUserOid = order.userId?._id || order.userId;
+  if (!orderUserOid) return null;
+
+  // Match the ledger entry by either identifier the description may carry.
+  const references = [String(order._id), order.order_id, order.orderId]
+    .filter(Boolean)
+    .map((ref) => escapeRegExp(String(ref)));
+  if (references.length === 0) return null;
+
+  const wallet = await FoodUserWallet.findOne(
+    { userId: orderUserOid },
+    {
+      coinTransactions: {
+        $elemMatch: {
+          type: 'earned',
+          description: { $regex: references.join('|') },
+        },
+      },
+    },
+  ).lean();
+
+  const match = Array.isArray(wallet?.coinTransactions) ? wallet.coinTransactions[0] : null;
+  const amount = Number(match?.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  // Persist so this order never needs the ledger scan again. Fire-and-forget:
+  // the value is already known for this response.
+  void FoodOrder.updateOne({ _id: order._id }, { $set: { coinsEarned: amount } }).catch((err) =>
+    logger.warn(`coinsEarned write-back failed for order ${order._id}: ${err?.message || err}`),
+  );
+
+  return amount;
+}
+
+/**
+ * Background sweep that auto-cancels orders the restaurant never accepted.
+ *
+ * Runs on a timer from server.js instead of on every order read. Returns the
+ * number of orders expired so the caller can log meaningfully.
+ */
+export async function runOrderExpirySweep() {
+  return expireUnacceptedOrders();
 }
 
 /**
@@ -1658,9 +1721,6 @@ export async function updateOrderStatusRestaurant(
   try {
     const io = getIO();
     if (io) {
-      console.log(
-        `[DEBUG] Emitting status update to restaurant ${restaurantId} and user ${order.userId}: ${orderStatus}`,
-      );
       const payload = {
         orderMongoId: order._id?.toString?.(),
         orderId: order._id.toString(),
@@ -1673,16 +1733,13 @@ export async function updateOrderStatusRestaurant(
       const restRoom = rooms.restaurant(restaurantId);
       const userRoom = rooms.user(order.userId);
       
-      console.log(`[DEBUG] Emitting order_status_update to rooms: ${restRoom}, ${userRoom}`);
       io.to(restRoom).emit("order_status_update", payload);
       io.to(userRoom).emit("order_status_update", payload);
-      
+
       // Notify assigned rider via socket if they exist
       const assignedRiderId = order.dispatch?.deliveryPartnerId;
       if (assignedRiderId) {
-          const riderRoom = rooms.delivery(assignedRiderId);
-          console.log(`[DEBUG] Emitting order_status_update to rider room: ${riderRoom}`);
-          io.to(riderRoom).emit("order_status_update", payload);
+          io.to(rooms.delivery(assignedRiderId)).emit("order_status_update", payload);
       }
     }
 
@@ -1748,25 +1805,21 @@ export async function updateOrderStatusRestaurant(
         (String(orderStatus) === "preparing" || String(orderStatus) === "confirmed") && 
         (String(from) !== "preparing" && String(from) !== "confirmed")
       ) {
-        console.log(
-          `[DEBUG] Order ${order._id.toString()} status changed to '${orderStatus}'. Triggering central delivery dispatch.`,
-        );
-        
         try {
             await tryAutoAssign(order._id);
             // Refresh local order state after assignment search
-            order = await FoodOrder.findById(order._id); 
+            order = await FoodOrder.findById(order._id);
         } catch (err) {
-            console.error(`[DEBUG] Auto-assign in updateOrderStatusRestaurant failed:`, err);
+            logger.error(
+              `Auto-assign failed for order ${order._id.toString()}: ${err?.message || err}`,
+            );
         }
       }
 
             // When ready for pickup -> ping assigned delivery partner.
             if (String(orderStatus) === 'ready_for_pickup' && String(from) !== 'ready_for_pickup') {
-                console.log(`[DEBUG] Order ${order._id.toString()} changed to 'ready_for_pickup'.`);
                 const assignedId = order.dispatch?.deliveryPartnerId?.toString?.() || order.dispatch?.deliveryPartnerId;
                 if (assignedId) {
-                    console.log(`[DEBUG] Notifying assigned partner ${assignedId} that order is ready.`);
                     const restaurant = await FoodRestaurant.findById(order.restaurantId).select('restaurantName location addressLine1 area city state').lean();
                     const payload = buildDeliverySocketPayload(order, restaurant);
                     logger.info(
@@ -1774,12 +1827,14 @@ export async function updateOrderStatusRestaurant(
                     );
                     io.to(rooms.delivery(assignedId)).emit('order_ready', payload);
                 } else {
-                    console.log(`[DEBUG] Order ${order._id.toString()} is ready but no partner assigned.`);
+                    logger.warn(
+                      `Order ${order._id.toString()} is ready for pickup but has no assigned delivery partner`,
+                    );
                 }
             }
         }
     } catch (err) {
-        console.error('[DEBUG] Error in delivery notification logic:', err);
+        logger.error(`Delivery notification logic failed: ${err?.message || err}`);
     }
 
     enqueueOrderEvent('restaurant_order_status_updated', {
@@ -2178,6 +2233,23 @@ export async function updateOrderStatusAdmin(orderId, orderStatus, note = "", ad
     if (!order) throw new NotFoundError("Order not found");
 
     const from = order.orderStatus;
+    const to = String(orderStatus || "");
+
+    // Forward-only progression, matching the rule the restaurant flow already
+    // enforces. Without this an admin could move an order backwards - e.g. from
+    // delivered back to preparing - after payouts and ledger entries had already
+    // been recorded against the delivered state.
+    if (from === to) {
+        // Idempotent: re-issuing the current status is a no-op, not an error,
+        // so a double-click on Accept cannot fail the request.
+        return normalizeOrderForClient(order);
+    }
+    if (!isStatusAdvance(from, to)) {
+        throw new ValidationError(
+            `Cannot change order status from "${from}" to "${to}". Order status can only move forward.`,
+        );
+    }
+
     order.orderStatus = orderStatus;
     if (note && String(note).trim()) {
         order.note = String(note).trim();
@@ -2330,16 +2402,12 @@ export async function updateOrderStatusAdmin(orderId, orderStatus, note = "", ad
                 (String(orderStatus) === "preparing" || String(orderStatus) === "confirmed") && 
                 (String(from) !== "preparing" && String(from) !== "confirmed")
             ) {
-                console.log(
-                    `[DEBUG] Order ${order._id.toString()} status changed to '${orderStatus}' by Admin. Triggering central delivery dispatch.`,
-                );
-                
                 try {
                     await tryAutoAssign(order._id);
                     // Refresh local order state after assignment search
-                    order = await FoodOrder.findById(order._id); 
+                    order = await FoodOrder.findById(order._id);
                 } catch (err) {
-                    console.error(`[DEBUG] Auto-assign in updateOrderStatusAdmin failed:`, err);
+                    logger.error(`Admin auto-assign failed for order ${order._id.toString()}: ${err?.message || err}`);
                 }
             }
         }

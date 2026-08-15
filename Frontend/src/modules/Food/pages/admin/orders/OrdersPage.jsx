@@ -11,6 +11,7 @@ import FilterPanel from "@food/components/admin/orders/FilterPanel"
 import ViewOrderDialog from "@food/components/admin/orders/ViewOrderDialog"
 import SettingsDialog from "@food/components/admin/orders/SettingsDialog"
 import RefundModal from "@food/components/admin/orders/RefundModal"
+import ChangeOrderStatusModal from "@food/components/admin/orders/ChangeOrderStatusModal"
 import { useOrdersManagement } from "@food/components/admin/orders/useOrdersManagement"
 import { Loader2 } from "lucide-react"
 import { OrdersDashboardSkeleton } from "@food/components/ui/loading-skeletons"
@@ -47,6 +48,9 @@ export default function OrdersPage({ statusKey = "all" }) {
   const [deletingOrderId, setDeletingOrderId] = useState(null)
   const [refundModalOpen, setRefundModalOpen] = useState(false)
   const [selectedOrderForRefund, setSelectedOrderForRefund] = useState(null)
+  const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const [selectedOrderForStatus, setSelectedOrderForStatus] = useState(null)
+  const [statusChangingOrderId, setStatusChangingOrderId] = useState(null)
   const showLoadingSkeleton = useDelayedLoading(isLoading, { delay: 120, minDuration: 360 })
   const seenOrderIdsRef = useRef(new Set())
   const isFirstLoadRef = useRef(true)
@@ -535,6 +539,9 @@ export default function OrdersPage({ statusKey = "all" }) {
         paymentType,
         paymentStatus,
         orderStatus: displayStatus,
+        // Raw backend status kept alongside the display label so the status
+        // picker can work out which transitions are actually forward.
+        backendStatus,
         deliveryPartnerName,
         deliveryPartnerPhone,
         deliveryType: order.deliveryType || "Home Delivery",
@@ -713,6 +720,44 @@ export default function OrdersPage({ statusKey = "all" }) {
       toast.error(error.response?.data?.message || "Failed to accept order")
     } finally {
       setProcessingActionOrderId(null)
+    }
+  }
+
+  const handleChangeStatus = (order) => {
+    setSelectedOrderForStatus(order)
+    setStatusModalOpen(true)
+  }
+
+  /**
+   * Applies a forward-only status change. The server re-validates the
+   * transition and owns every side effect (refund, COD settlement, ledger,
+   * notifications), so this only reports the outcome and refreshes the list.
+   */
+  const handleStatusChangeConfirm = async (order, nextStatus, note) => {
+    const orderIdToUse = order?.id || order?._id || order?.orderId
+    if (!orderIdToUse || !nextStatus) {
+      toast.error("Order ID not found")
+      return
+    }
+
+    try {
+      setStatusChangingOrderId(order.id || order.orderId)
+      const response = await adminAPI.updateOrderStatus(orderIdToUse, nextStatus, note)
+      if (response.data?.success) {
+        toast.success(response.data?.message || `Order ${order.orderId} updated`)
+        setStatusModalOpen(false)
+        setSelectedOrderForStatus(null)
+        await fetchOrders({ silent: true, withRingCheck: false })
+      } else {
+        toast.error(response.data?.message || "Failed to update order status")
+      }
+    } catch (error) {
+      debugError("Error updating order status:", error)
+      // A 400 here is the server refusing a backward transition - surface its
+      // message rather than a generic one.
+      toast.error(error.response?.data?.message || "Failed to update order status")
+    } finally {
+      setStatusChangingOrderId(null)
     }
   }
 
@@ -1062,6 +1107,13 @@ export default function OrdersPage({ statusKey = "all" }) {
         onOpenChange={setIsViewOrderOpen}
         order={selectedOrder}
       />
+      <ChangeOrderStatusModal
+        isOpen={statusModalOpen}
+        onOpenChange={setStatusModalOpen}
+        order={selectedOrderForStatus}
+        onConfirm={handleStatusChangeConfirm}
+        isSubmitting={statusChangingOrderId !== null}
+      />
       <RefundModal
         isOpen={refundModalOpen}
         onOpenChange={setRefundModalOpen}
@@ -1073,6 +1125,8 @@ export default function OrdersPage({ statusKey = "all" }) {
         orders={filteredOrders} 
         visibleColumns={visibleColumns}
         onViewOrder={handleViewOrder}
+        onChangeStatus={handleChangeStatus}
+        statusChangingOrderId={statusChangingOrderId}
         onPrintOrder={handlePrintOrder}
         onRefund={handleRefund}
         onDeleteOrder={statusKey === "all" ? handleDeleteOrder : undefined}

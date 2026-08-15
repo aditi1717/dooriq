@@ -1,6 +1,19 @@
 import { FoodBusinessSettings } from '../models/businessSettings.model.js';
 import { sendResponse } from '../../../../utils/response.js';
 import { uploadImageBufferDetailed } from '../../../../services/cloudinary.service.js';
+import { createTtlCache } from '../../../../utils/cache.js';
+
+/**
+ * `/business-settings/public` and `/power-scanning/public` are branding lookups
+ * fetched on every page load across all three apps. They change only when an
+ * admin saves the form, so a short TTL cache keeps them off the database.
+ */
+const businessSettingsCache = createTtlCache({ ttlMs: 30_000, maxEntries: 4, name: 'business-settings' });
+const SETTINGS_CACHE_KEY = 'current';
+
+export function invalidateBusinessSettingsCache() {
+    businessSettingsCache.clear();
+}
 
 const POWER_SCANNING_DEFAULT = {
     user: { themeColor: '#2B04C1', fontFamily: 'Poppins' },
@@ -60,35 +73,41 @@ const ensurePowerScanningOnSettings = (settingsDocOrPlain = null) => {
     };
 };
 
+/**
+ * Load the singleton settings document, creating it if this is a fresh install.
+ * Uses an upsert rather than findOne-then-create so concurrent cluster workers
+ * cannot each insert their own copy.
+ */
+async function loadBusinessSettings() {
+    const settings = await FoodBusinessSettings.findOneAndUpdate(
+        {},
+        { $setOnInsert: { companyName: 'Dooriq', email: 'admin@dooriq.com' } },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).lean();
+
+    // Normalize powerScanning for the response. Older documents may predate the
+    // field; persisting the backfill once keeps later reads write-free.
+    const persisted = settings?.powerScanning || {};
+    const normalizedPowerScanning = buildPowerScanningPayload(persisted, persisted || POWER_SCANNING_DEFAULT);
+
+    const isMissingAnyModule = !persisted?.user || !persisted?.restaurant || !persisted?.delivery;
+    if (isMissingAnyModule) {
+        await FoodBusinessSettings.updateOne(
+            { _id: settings._id },
+            { $set: { powerScanning: normalizedPowerScanning } }
+        );
+    }
+
+    return { ...settings, powerScanning: normalizedPowerScanning };
+}
+
+async function getCachedBusinessSettings() {
+    return businessSettingsCache.get(SETTINGS_CACHE_KEY, loadBusinessSettings);
+}
+
 export async function getBusinessSettings(req, res, next) {
     try {
-        let settings = await FoodBusinessSettings.findOne();
-        if (!settings) {
-            // Create default settings if none exist
-            settings = await FoodBusinessSettings.create({
-                companyName: 'Dooriq',
-                email: 'admin@dooriq.com'
-            });
-        }
-
-        // Backend-side safety: always expose normalized powerScanning in public payload.
-        const normalizedPowerScanning = buildPowerScanningPayload(
-            settings?.powerScanning || {},
-            settings?.powerScanning || POWER_SCANNING_DEFAULT
-        );
-
-        // Backfill old docs that might not have powerScanning persisted yet.
-        const persistedPowerScanning = settings?.powerScanning || {};
-        const wasMissingAnyModule =
-            !persistedPowerScanning?.user ||
-            !persistedPowerScanning?.restaurant ||
-            !persistedPowerScanning?.delivery;
-        if (wasMissingAnyModule) {
-            settings.powerScanning = normalizedPowerScanning;
-            await settings.save();
-        }
-
-        const payload = ensurePowerScanningOnSettings(settings.toObject());
+        const payload = ensurePowerScanningOnSettings(await getCachedBusinessSettings());
         return sendResponse(res, 200, 'Business settings fetched successfully', payload);
     } catch (error) {
         next(error);
@@ -97,14 +116,11 @@ export async function getBusinessSettings(req, res, next) {
 
 export async function getPowerScanningSettings(req, res, next) {
     try {
-        let settings = await FoodBusinessSettings.findOne().lean();
-        if (!settings) {
-            settings = await FoodBusinessSettings.create({
-                companyName: 'Dooriq',
-                email: 'admin@dooriq.com'
-            });
-        }
-        const payload = buildPowerScanningPayload(settings?.powerScanning || {}, settings?.powerScanning || POWER_SCANNING_DEFAULT);
+        const settings = await getCachedBusinessSettings();
+        const payload = buildPowerScanningPayload(
+            settings?.powerScanning || {},
+            settings?.powerScanning || POWER_SCANNING_DEFAULT
+        );
         return sendResponse(res, 200, 'Power scanning settings fetched successfully', payload);
     } catch (error) {
         next(error);
@@ -124,6 +140,7 @@ export async function updatePowerScanningSettings(req, res, next) {
 
         settings.powerScanning = buildPowerScanningPayload(payload, settings.powerScanning || POWER_SCANNING_DEFAULT);
         await settings.save();
+        invalidateBusinessSettingsCache();
 
         return sendResponse(res, 200, 'Power scanning settings updated successfully', settings.powerScanning);
     } catch (error) {
@@ -176,6 +193,7 @@ export async function updateOrderAcceptanceSettings(req, res, next) {
 
         settings.orderAcceptanceTimeMinutes = minutes;
         await settings.save();
+        invalidateBusinessSettingsCache();
 
         return sendResponse(res, 200, 'Order acceptance settings updated successfully', {
             orderAcceptanceTimeMinutes: minutes,
@@ -292,6 +310,7 @@ export async function updateBusinessSettings(req, res, next) {
         }
 
         await settings.save();
+        invalidateBusinessSettingsCache();
         return sendResponse(res, 200, 'Business settings updated successfully', settings);
     } catch (error) {
         next(error);
