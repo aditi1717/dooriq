@@ -668,24 +668,32 @@ export async function rejectOrderDelivery(orderId, deliveryPartnerId, action = '
 
   const order = await FoodOrder.findOne(identity).select('+deliveryOtp');
   if (!order) throw new NotFoundError('Order not found');
-  const safeAction = String(action).toLowerCase() === 'timeout' ? 'timeout' : 'rejected';
-  const assignedToMe =
-    order.dispatch.deliveryPartnerId?.toString() === deliveryPartnerId.toString();
-  const offer = order.dispatch.offeredTo.find(
-    (item) =>
-      String(item.partnerId) === String(deliveryPartnerId) &&
-      item.action === 'offered',
-  );
-
-  if (!assignedToMe && !offer) {
-    throw new ForbiddenError('Not your order');
+  if (!order.dispatch) {
+    order.dispatch = { status: 'unassigned', offeredTo: [] };
+  }
+  if (!Array.isArray(order.dispatch.offeredTo)) {
+    order.dispatch.offeredTo = [];
   }
 
-  const existingOffer = offer || order.dispatch.offeredTo.find(
-    (item) =>
-      String(item.partnerId) === String(deliveryPartnerId),
+  const safeAction = String(action).toLowerCase() === 'timeout' ? 'timeout' : 'rejected';
+  const assignedToMe =
+    order.dispatch.deliveryPartnerId?.toString() === deliveryPartnerId?.toString();
+
+  const existingOffer = order.dispatch.offeredTo.find(
+    (item) => String(item.partnerId) === String(deliveryPartnerId),
   );
-  if (existingOffer) existingOffer.action = safeAction;
+
+  if (existingOffer) {
+    existingOffer.action = safeAction;
+    existingOffer.respondedAt = new Date();
+  } else {
+    order.dispatch.offeredTo.push({
+      partnerId: deliveryPartnerId,
+      action: safeAction,
+      offeredAt: new Date(),
+      respondedAt: new Date(),
+    });
+  }
 
   if (assignedToMe) {
     const fromStatus = order.dispatch.status || 'assigned';

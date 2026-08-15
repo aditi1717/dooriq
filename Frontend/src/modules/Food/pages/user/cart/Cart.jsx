@@ -2968,8 +2968,8 @@ export default function Cart() {
                 </div>
               </div>
             )}
-
-            {/* Place Order Button */}
+            {/* Place Order Button - Hidden as requested */}
+            {/* 
             <button
               onClick={handlePlaceOrder}
               disabled={isPlacingOrder || isRestaurantClosed || (selectedPaymentMethod === "wallet" && walletBalance < total)}
@@ -3002,6 +3002,7 @@ export default function Cart() {
                 </div>
               </div>
             </button>
+            */}
           </div>
         </div>
       </div>

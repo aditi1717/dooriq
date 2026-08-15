@@ -351,6 +351,8 @@ export default function Checkout() {
                     </motion.div>
                   )}
 
+                  {/* Place Order Button - Hidden as requested */}
+                  {/* 
                   <Button
                     className="w-full bg-[#EB590E] hover:bg-[#D94F0C] text-white mt-4 md:mt-6 h-11 md:h-12 text-sm md:text-base border-none"
                     onClick={handlePlaceOrder}
@@ -358,6 +360,7 @@ export default function Checkout() {
                   >
                     {isPlacingOrder ? "Placing Order..." : "Place Order"}
                   </Button>
+                  */}
                 </CardContent>
               </Card>
             </ScrollReveal>
