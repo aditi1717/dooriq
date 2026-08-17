@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { MapPin, ArrowLeft, Save, X, Shapes, Search } from "lucide-react"
 import { adminAPI } from "@food/api"
-import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
+import { loadGoogleMaps } from "@food/utils/googleMapsLoader"
 import { Loader } from "@googlemaps/js-api-loader"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -65,7 +65,7 @@ export default function AddZone() {
 
   useEffect(() => {
     fetchExistingZones()
-    loadGoogleMaps()
+    loadGoogleMapsAndInit()
     if (isEditMode && id) {
       fetchZone()
     }
@@ -147,54 +147,18 @@ export default function AddZone() {
     }
   }
 
-  const loadGoogleMaps = async () => {
+  const loadGoogleMapsAndInit = async () => {
     try {
-      const apiKey = await getGoogleMapsApiKey()
-      setGoogleMapsApiKey(apiKey || "loaded")
-      
-      // Wait for Google Maps to be loaded from main.jsx if it's loading
-      let retries = 0
-      const maxRetries = 50 // Wait up to 5 seconds (50 * 100ms)
-      
-      while (!window.google && retries < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-        retries++
-      }
-
-      // If Google Maps is already loaded, make sure Places is available too.
-      if (window.google && window.google.maps) {
-        if (!window.google.maps.places?.Autocomplete) {
-          if (typeof window.google.maps.importLibrary === "function") {
-            await window.google.maps.importLibrary("places")
-          } else {
-            const scripts = Array.from(document.getElementsByTagName("script"))
-            const mapsScript = scripts.find((s) => s.src?.includes("maps.googleapis.com/maps/api/js"))
-            if (mapsScript && !mapsScript.src.includes("libraries=places")) {
-              mapsScript.remove()
-              delete window.google
-            }
-          }
-        }
-      }
-
-      if (window.google && window.google.maps) {
-        initializeMap(window.google)
+      // Shared loader: one script, one library superset. The previous version
+      // could `mapsScript.remove()` AND `delete window.google`, which broke any
+      // other component already using the SDK.
+      const google = await loadGoogleMaps()
+      setGoogleMapsApiKey(google ? "loaded" : "")
+      if (!google?.maps) {
+        setMapLoading(false)
         return
       }
-
-      // If Google Maps is not loaded yet and we have an API key, use Loader as fallback
-      if (apiKey) {
-        const loader = new Loader({
-          apiKey: apiKey,
-          version: "weekly",
-          libraries: ["places", "geometry"]
-        })
-
-        const google = await loader.load()
-        initializeMap(google)
-      } else {
-        setMapLoading(false)
-      }
+      initializeMap(google)
     } catch (error) {
       debugError("Error loading Google Maps:", error)
       setMapLoading(false)

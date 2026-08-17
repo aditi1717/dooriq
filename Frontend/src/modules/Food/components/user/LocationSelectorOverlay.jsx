@@ -2082,7 +2082,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         longitude,
         formattedAddress: `${address.street}, ${address.city}, ${address.state}`
       }
-      localStorage.setItem("userLocation", JSON.stringify(locationData))
+      persistUserLocation(locationData)
 
       // Update map position to show selected address
       setMapPosition([latitude, longitude])

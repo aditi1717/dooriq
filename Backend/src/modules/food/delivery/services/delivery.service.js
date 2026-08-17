@@ -1024,3 +1024,43 @@ export const deleteDeliveryPartnerAccount = async (partnerId) => {
     return { success: true };
 };
 
+
+/**
+ * Mark riders offline whose app has stopped reporting.
+ *
+ * A rider who force-closes the app never sends `availabilityStatus: 'offline'`,
+ * so they stayed "online" in the database indefinitely — inflating the admin
+ * panel's online count and every metric derived from it. Dispatch already skips
+ * them via the stale-GPS filter, but the stored status stayed wrong.
+ *
+ * Only touches partners whose last location is older than the threshold, so a
+ * rider who is simply parked and still heartbeating is never knocked offline.
+ * The existing scripts/mark-delivery-partners-offline.js is a blunt manual tool
+ * that marks EVERYONE offline; this is the safe scheduled equivalent.
+ *
+ * @param {number} [staleMinutes=15] Minutes without a location update.
+ */
+export const markStaleDeliveryPartnersOffline = async (staleMinutes = 15) => {
+    const minutes = Number.isFinite(Number(staleMinutes)) && Number(staleMinutes) > 0
+        ? Number(staleMinutes)
+        : 15;
+    const cutoff = new Date(Date.now() - minutes * 60 * 1000);
+
+    const result = await FoodDeliveryPartner.updateMany(
+        {
+            availabilityStatus: 'online',
+            $or: [
+                { lastLocationAt: { $lt: cutoff } },
+                { lastLocationAt: { $exists: false } },
+                { lastLocationAt: null },
+            ],
+        },
+        { $set: { availabilityStatus: 'offline' } },
+    );
+
+    return {
+        markedOffline: result.modifiedCount || 0,
+        staleMinutes: minutes,
+        cutoff,
+    };
+};

@@ -14,11 +14,16 @@ import {
 import { buildPaginatedResult, buildPaginationOptions } from '../../../../utils/helpers.js';
 import { logger } from '../../../../utils/logger.js';
 import { getIO, rooms } from '../../../../config/socket.js';
-import { getFirebaseDB } from '../../../../config/firebase.js';
+import { tryGetFirebaseDB as getFirebaseDB } from '../../../../config/firebase.js';
 import { fetchPolyline } from '../utils/googleMaps.js';
 
 import * as foodTransactionService from './foodTransaction.service.js';
 import * as dispatchService from './order-dispatch.service.js';
+import {
+  getDispatchConfig,
+  buildPartnerNotBarredFilter,
+  buildPartnerBarredPredicate,
+} from './dispatch-config.service.js';
 import * as paymentService from './order-payment.service.js';
 import * as userWalletService from '../../user/services/userWallet.service.js';
 
@@ -206,6 +211,7 @@ export async function getCurrentTripDelivery(deliveryPartnerId) {
 export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
   const { page, limit, skip } = buildPaginationOptions(query);
   const partnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
+  const dispatchConfig = await getDispatchConfig();
   const hasActiveDelivery = await partnerHasActiveDelivery(deliveryPartnerId);
 
   const filter = hasActiveDelivery
@@ -218,14 +224,6 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
         $or: [
           {
             'dispatch.status': 'unassigned',
-            'dispatch.offeredTo': {
-              $not: {
-                $elemMatch: {
-                  partnerId,
-                  action: { $in: ['rejected', 'timeout', 'deassigned'] },
-                },
-              },
-            },
             orderStatus: { $in: ['confirmed', 'preparing', 'ready_for_pickup'] },
           },
           {
@@ -294,15 +292,12 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
               String(entry?.action || 'offered') === 'offered',
           )
         : false;
-      const ignoredByMe = Array.isArray(order?.dispatch?.offeredTo)
-        ? order.dispatch.offeredTo.some(
-            (entry) =>
-              String(entry?.partnerId) === String(partnerId) &&
-              ['rejected', 'timeout', 'deassigned'].includes(
-                String(entry?.action || '').toLowerCase(),
-              ),
-          )
-        : false;
+      // Same cooldown rule the dispatcher uses: an expired timeout no longer hides
+      // the order, so a rider who missed one countdown can still see a re-offer.
+      const ignoredByMe = buildPartnerBarredPredicate(
+        order?.dispatch?.offeredTo || [],
+        dispatchConfig,
+      )(partnerId);
 
       let distanceKm = null;
       const coords = order?.restaurantId?.location?.coordinates;
@@ -320,13 +315,16 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
       return { order, assignedToMe, offeredToMe, ignoredByMe, distanceKm };
     });
 
-    const kept = withMeta.filter(({ assignedToMe, offeredToMe, ignoredByMe, distanceKm }) => {
+    // STRICT DISPATCH: only orders this rider was actually offered (or is already
+    // assigned) may appear. The previous rule also surfaced any unassigned order
+    // within a hardcoded 20 km — which is how riders could accept orders the
+    // dispatcher had deliberately excluded them from, and why the distance ranking
+    // was effectively decorative. MAX_OFFER_KM now only bounds display of an
+    // already-offered order, it can no longer grant access to one.
+    const kept = withMeta.filter(({ assignedToMe, offeredToMe, ignoredByMe }) => {
       if (ignoredByMe) return false;
       if (assignedToMe) return true;
-      if (!hasPartnerGps) return offeredToMe;
-      if (distanceKm == null) return offeredToMe;
-      if (distanceKm <= MAX_OFFER_KM) return true;
-      return offeredToMe && distanceKm <= MAX_OFFER_KM * 1.5;
+      return offeredToMe;
     });
 
     kept.sort((a, b) => {
@@ -376,7 +374,17 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
     ? enriched.slice(0, limit)
     : enriched.slice(skip, skip + limit);
 
-  return buildPaginatedResult({ docs: paged, total, page, limit });
+  // Contact details are released only after a rider wins the accept. An order the
+  // rider merely has an OFFER for must not carry the customer's name or phone, and
+  // a direct call to this API must not be a way around that.
+  const safeDocs = paged.map((doc) => {
+    const isMine =
+      String(doc?.dispatch?.deliveryPartnerId || '') === String(partnerId) &&
+      doc?.dispatch?.status === 'accepted';
+    return sanitizeOrderForExternal(doc, { includeCustomerContact: isMine });
+  });
+
+  return buildPaginatedResult({ docs: safeDocs, total, page, limit });
 }
 
 export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
@@ -420,6 +428,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
   }
 
   const now = new Date();
+  const dispatchConfig = await getDispatchConfig();
   const acceptedStatuses = ['created', 'confirmed', 'preparing', 'ready_for_pickup', 'picked_up'];
   const cancellableStatuses = [
     'cancelled_by_user',
@@ -460,26 +469,48 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
     at: now,
   };
 
+  // STRICT DISPATCH + ATOMIC CLAIM.
+  //
+  // Every rule lives in this single conditional update, so the winner is decided by
+  // MongoDB's per-document atomicity rather than by read-then-write logic that two
+  // concurrent requests could both pass. Two riders tapping Accept in the same
+  // millisecond both run this update; exactly one matches, the loser gets null.
+  //
+  // The rules, and why each is here:
+  //   orderStatus IN acceptedStatuses   - not cancelled, not already delivered
+  //   dispatch.status === 'unassigned'  - nobody holds it (accepted/assigned excluded)
+  //   dispatch.acceptedAt not set       - defence in depth against a stale status
+  //   offeredTo $elemMatch action:offered - THIS rider was actually offered the order.
+  //       Previously absent: any rider who could see the order in the available list
+  //       (a hardcoded 20 km radius) could accept it, which made the ranked broadcast
+  //       purely advisory and let excluded riders (cash limit, distance) grab orders.
+  //   offeredTo NOT rejected/timeout/deassigned - they already passed on it
   const order = await FoodOrder.findOneAndUpdate(
     {
       ...identity,
       orderStatus: { $in: acceptedStatuses },
-      $or: [
+      $and: [
         {
-          'dispatch.status': 'unassigned',
-          'dispatch.offeredTo': {
-            $not: {
-              $elemMatch: {
-                partnerId,
-                action: { $in: ['rejected', 'timeout', 'deassigned'] },
+          $or: [
+            {
+              'dispatch.status': 'unassigned',
+              'dispatch.acceptedAt': { $exists: false },
+              'dispatch.offeredTo': {
+                $elemMatch: { partnerId, action: 'offered' },
               },
             },
-          },
+            {
+              // Admin-assigned directly to this rider: an explicit assignment is
+              // itself the authorisation, so no offeredTo entry is required.
+              'dispatch.status': 'assigned',
+              'dispatch.deliveryPartnerId': partnerId,
+            },
+          ],
         },
-        {
-          'dispatch.status': 'assigned',
-          'dispatch.deliveryPartnerId': partnerId,
-        },
+        // Not barred: explicit rejection / deassignment is permanent, while a
+        // timeout only bars the rider for the configured cooldown. Shared with the
+        // dispatcher so the two can never disagree about eligibility.
+        buildPartnerNotBarredFilter(partnerId, dispatchConfig),
       ],
     },
     {
@@ -503,7 +534,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
 
     if (!existing) throw new NotFoundError('Order not found');
     if (cancellableStatuses.includes(existing.orderStatus)) {
-      throw new ValidationError('Order was cancelled');
+      throw new ValidationError('Order is no longer available. It was cancelled.');
     }
     if (existing.orderStatus === 'delivered') {
       throw new ValidationError('Order already delivered');
@@ -511,6 +542,9 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
     if (!acceptedStatuses.includes(existing.orderStatus)) {
       throw new ValidationError('Order not ready for delivery assignment');
     }
+
+    // IDEMPOTENCY: a network retry of a request that already succeeded must return
+    // the same success, not an error, and must not create a second assignment.
     if (
       existing.dispatch?.status === 'accepted' &&
       String(existing.dispatch?.deliveryPartnerId || '') === String(deliveryPartnerId)
@@ -518,20 +552,59 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
       const acceptedOrder = await FoodOrder.findOne(identity)
         .populate('restaurantId userId');
       return acceptedOrder
-        ? sanitizeOrderForExternal(acceptedOrder)
+        ? sanitizeOrderForExternal(acceptedOrder, { includeCustomerContact: true })
         : null;
     }
     if (
       existing.dispatch?.status === 'accepted' &&
       String(existing.dispatch?.deliveryPartnerId || '') !== String(deliveryPartnerId)
     ) {
-      throw new ForbiddenError('Order already accepted by another partner');
+      throw new ForbiddenError('Order is no longer available');
     }
 
-    throw new ValidationError('Order is no longer available to accept');
+    // Strict dispatch: distinguish "never offered to you" from "you already passed",
+    // so the rider app can show something truthful and drop the stale popup.
+    const myOffers = (existing.dispatch?.offeredTo || []).filter(
+      (entry) => String(entry?.partnerId) === String(deliveryPartnerId),
+    );
+    const isBarred = buildPartnerBarredPredicate(existing.dispatch?.offeredTo || [], dispatchConfig);
+    if (isBarred(deliveryPartnerId)) {
+      throw new ForbiddenError('You already passed on this order.');
+    }
+    if (myOffers.length === 0) {
+      throw new ForbiddenError('This order was not offered to you.');
+    }
+
+    throw new ValidationError('Order is no longer available');
   }
 
-  const responseOrder = sanitizeOrderForExternal(order);
+  // This rider WON the atomic claim, so they — and only they — are authorised to
+  // receive the customer's contact details. Every other surface (broadcast payload,
+  // Firebase offer node, available-orders list) has them stripped.
+  const responseOrder = sanitizeOrderForExternal(order, { includeCustomerContact: true });
+  responseOrder.customerContact = {
+    name:
+      order.customerName ||
+      order.deliveryAddress?.fullName ||
+      order.deliveryAddress?.name ||
+      order.userId?.name ||
+      '',
+    phone:
+      order.customerPhone ||
+      order.deliveryAddress?.phone ||
+      order.userId?.phone ||
+      '',
+  };
+
+  logger.info({
+    event: 'ORDER_ACCEPTED',
+    at: new Date().toISOString(),
+    orderId: order._id.toString(),
+    orderFriendlyId: order.order_id || order._id.toString(),
+    acceptedBy: String(deliveryPartnerId),
+    offeredRiderCount: (order.dispatch?.offeredTo || []).length,
+    orderStatus: order.orderStatus,
+  });
 
   void (async () => {
     try {
@@ -608,20 +681,41 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
         io.to(rooms.restaurant(order.restaurantId)).emit('order_status_update', payload);
         io.to(rooms.user(order.userId)).emit('order_status_update', payload);
 
-        // Notify ALL other delivery partners who were offered this order to dismiss it
-        const offeredPartners = order.dispatch?.offeredTo || [];
+        // Tell every OTHER offered rider to drop the popup immediately. The backend
+        // is authoritative here: we do not rely on their local countdown expiring.
+        //
+        // Deduplicated because a rider can appear in offeredTo more than once across
+        // re-offer rounds, and we must never emit to the winner.
+        const winnerId = deliveryPartnerId.toString();
+        const losingPartnerIds = new Set(
+          offeredPartners
+            .map((offer) => offer.partnerId?.toString?.())
+            .filter((pid) => pid && pid !== winnerId),
+        );
+
         const claimedPayload = {
           orderId: order._id.toString(),
           orderMongoId: order._id?.toString?.(),
-          claimedBy: deliveryPartnerId.toString(),
+          orderFriendlyId: order.order_id || order._id.toString(),
+          claimedBy: winnerId,
+          reason: 'accepted_by_another_partner',
         };
-        for (const offer of offeredPartners) {
-          const pid = offer.partnerId?.toString?.();
-          if (pid && pid !== deliveryPartnerId.toString()) {
-            io.to(rooms.delivery(pid)).emit('order_claimed', claimedPayload);
-          }
+        for (const pid of losingPartnerIds) {
+          // `order_claimed` is what the rider app already listens for.
+          io.to(rooms.delivery(pid)).emit('order_claimed', claimedPayload);
+          // `offer_removed` is the explicit, self-describing name for the same
+          // instruction; emitted alongside so newer clients can bind to it.
+          io.to(rooms.delivery(pid)).emit('offer_removed', claimedPayload);
         }
-        logger.info(`[DeliveryDispatch] Broadcasted order_claimed to ${offeredPartners.length - 1} other partners for order ${order._id.toString()}`);
+
+        logger.info({
+          event: 'ORDER_OFFER_REMOVED',
+          at: new Date().toISOString(),
+          orderId: order._id.toString(),
+          acceptedBy: winnerId,
+          notifiedRiderCount: losingPartnerIds.size,
+          reason: 'accepted_by_another_partner',
+        });
       }
 
       await notifyOwnersSafely(

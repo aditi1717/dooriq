@@ -1,5 +1,9 @@
 import mongoose from 'mongoose';
-import { getFirebaseDB } from '../../../../config/firebase.js';
+// Non-throwing accessor: this function has ALREADY mutated the order (dispatch
+// reset to unassigned, transaction rider cleared) by the time it touches Firebase.
+// The throwing accessor left the order half-reassigned whenever the Realtime
+// Database was unavailable, because the throw aborted the notify/redispatch tail.
+import { tryGetFirebaseDB as getFirebaseDB } from '../../../../config/firebase.js';
 import { getIO, rooms } from '../../../../config/socket.js';
 import {
     NotFoundError,

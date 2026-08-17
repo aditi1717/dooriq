@@ -14,6 +14,7 @@ import bikeLogo from '@food/assets/bikelogo.png';
 import { subscribeOrderTracking } from '@food/realtimeTracking';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Navigation, Info, Circle } from 'lucide-react';
+import { MAPS_LIBRARIES, MAPS_SCRIPT_ID } from '@food/utils/googleMapsLoader';
 
 const LIBRARIES = ['geometry', 'places'];
 
@@ -54,14 +55,20 @@ const DeliveryTrackingMap = ({
   const [smoothLocation, setSmoothLocation] = useState(null);
   const socketRef = useRef(null);
   const interpStateRef = useRef({ lastPos: null, nextPos: null, startTime: 0 });
+  // Guards Directions callbacks that resolve after the customer navigates away.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries: LIBRARIES,
+    libraries: MAPS_LIBRARIES,
+    id: MAPS_SCRIPT_ID,
   });
 
   useEffect(() => {
-    console.log('[DeliveryTrackingMap] VITE_GOOGLE_MAPS_API_KEY:', import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? `Provided (length: ${import.meta.env.VITE_GOOGLE_MAPS_API_KEY.length})` : 'MISSING');
   }, []);
 
   useEffect(() => {
@@ -236,6 +243,7 @@ const DeliveryTrackingMap = ({
 
   // 3. Directions Management
   const directionsCallback = useCallback((result, status) => {
+    if (!mountedRef.current) return;
     if (status === 'OK' && result) {
       setDirections(result);
       setLastDirectionsAt(Date.now());
@@ -334,6 +342,7 @@ const DeliveryTrackingMap = ({
            <DirectionsService
              options={baselineDirectionsServiceOptions}
              callback={(r, s) => { 
+                if (!mountedRef.current) return;
                 debugLog('?? Baseline Directions Status:', s);
 
                 if (s === 'OK' && r) {

@@ -127,6 +127,22 @@ export const getCouponIneligibilityReason = async ({
   if (Number(subtotal) < Number(offer.minOrderValue || 0)) return 'min_order_not_met';
 
   const userObjectId = toObjectId(userId);
+
+  // USER-TARGETED COUPONS
+  //
+  // This is the authoritative check. The cart listing also hides these coupons
+  // from non-targeted users, but that is only presentation — a user who learns
+  // the code and types it manually, or posts straight to the API, is rejected
+  // here. An anonymous request can never satisfy a targeted coupon either.
+  if (offer.customerScope === 'selected') {
+    const targeted = Array.isArray(offer.userIds) ? offer.userIds : [];
+    if (targeted.length === 0) return 'user_not_targeted';
+    if (!userObjectId) return 'user_not_targeted';
+    const isTargeted = targeted.some(
+      (id) => String(id?._id || id) === String(userObjectId),
+    );
+    if (!isTargeted) return 'user_not_targeted';
+  }
   await releaseAbandonedPendingCouponOrders({ offer, userObjectId });
 
   const refreshedOffer = await FoodOffer.findById(offer._id).select('usedCount').lean();

@@ -72,7 +72,7 @@ const resolveSectionFromRequest = (path = '', method = '') => {
     if (path.startsWith('/withdrawals')) return 'transaction_management';
     if (path.startsWith('/feedback-experiences')) return 'report_management';
     if (path.startsWith('/reports')) return 'report_management';
-    if (path.startsWith('/feature-settings') || path.startsWith('/business-settings') || path.startsWith('/power-scanning') || path.startsWith('/notifications') || path.startsWith('/coin-settings') || path.startsWith('/coin-requests')) return 'system_settings';
+    if (path.startsWith('/feature-settings') || path.startsWith('/business-settings') || path.startsWith('/power-scanning') || path.startsWith('/notifications') || path.startsWith('/coin-settings') || path.startsWith('/coin-requests') || path.startsWith('/dispatch-settings')) return 'system_settings';
     if (path.startsWith('/pages-social-media')) return 'pages_social_media';
     if (path.startsWith('/sidebar-badges') || path.startsWith('/dashboard-stats')) return 'dashboard';
     return null;
@@ -113,6 +113,7 @@ router.use('/offers', requireAdminPermission('promotions_management', 'view'));
 router.use('/delivery', requireAdminPermission('delivery_management', 'view'));
 router.use('/withdrawals', requireAdminPermission('transaction_management', 'view'));
 router.use('/reports', requireAdminPermission('report_management', 'view'));
+router.use('/dispatch-settings', requireAdminPermission('system_settings', 'view'));
 router.use('/feature-settings', requireAdminPermission('system_settings', 'view'));
 router.use('/business-settings', requireAdminPermission('system_settings', 'view'));
 router.use('/power-scanning', requireAdminPermission('system_settings', 'view'));
@@ -185,6 +186,13 @@ router.patch('/restaurant-subscription-settings', adminController.updateRestaura
 router.get('/restaurant-subscriptions/history', adminController.getRestaurantSubscriptionHistory);
 router.get('/feature-settings', adminController.getFeatureSettings);
 router.patch('/feature-settings/:key', adminController.updateFeatureSetting);
+
+// ----- Order dispatch policy (radius stages, timeouts, crisis threshold) -----
+// These controllers already existed but were never routed, so the dispatch policy
+// had no way to be read or changed from the admin panel.
+router.get('/dispatch-settings', orderController.getDispatchSettingsController);
+router.get('/dispatch-settings/schema', orderController.getDispatchConfigSchemaController);
+router.put('/dispatch-settings', orderController.updateDispatchSettingsController);
 router.get('/restaurants/reviews', adminController.getRestaurantReviews);
 router.get(
     '/restaurants/:id',
@@ -258,6 +266,7 @@ router.post('/foods/bulk-approve', adminController.bulkApproveFoodItems);
 
 // ----- Offers & Coupons -----
 router.get('/offers', adminController.getAllOffers);
+router.get('/offers/:id/usage', adminController.getAdminOfferUsage);
 router.post('/offers', adminController.createAdminOffer);
 router.patch('/offers/:id', adminController.updateAdminOffer);
 router.patch('/offers/:id/cart-visibility', adminController.updateAdminOfferCartVisibility);

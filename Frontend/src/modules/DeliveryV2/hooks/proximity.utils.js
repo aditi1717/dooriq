@@ -9,8 +9,17 @@
  * @returns {number} Distance in meters
  */
 export const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
-  
+  // Must be a finite-number check, not a truthiness check: a legitimate
+  // coordinate of exactly 0 (the equator or the prime meridian) is falsy, and the
+  // old guard reported those positions as infinitely far away — which silently
+  // disabled every proximity gate that depended on this.
+  if (
+    !Number.isFinite(Number(lat1)) || !Number.isFinite(Number(lon1)) ||
+    !Number.isFinite(Number(lat2)) || !Number.isFinite(Number(lon2))
+  ) {
+    return Infinity;
+  }
+
   const R = 6371e3; // Earth radius in meters
   const φ1 = (lat1 * Math.PI) / 180;
   const φ2 = (lat2 * Math.PI) / 180;

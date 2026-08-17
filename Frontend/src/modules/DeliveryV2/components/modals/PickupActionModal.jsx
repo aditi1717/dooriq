@@ -9,6 +9,8 @@ import { ActionSlider } from '@/modules/DeliveryV2/components/ui/ActionSlider';
 import { uploadAPI } from '@food/api';
 import { toast } from 'sonner';
 import { openCamera } from "@food/utils/imageUploadUtils";
+import { openNavigation } from '@/modules/DeliveryV2/utils/navigation';
+import { toast as navToast } from 'sonner';
 
 /**
  * PickupActionModal - Unified White/Green Theme with Slider Actions.
@@ -88,6 +90,13 @@ export const PickupActionModal = ({
     order.restaurantId?.location?.address ||
     order.restaurantLocation?.address ||
     'Address not available';
+  // Exact pickup point. Navigating by coordinates beats resolving an address
+  // string, which in dense areas lands on the wrong building or branch.
+  const restaurantPoint =
+    order.restaurantLocation ||
+    order.restaurantId?.location ||
+    order.restaurant?.location ||
+    null;
   const restaurantPhone =
     order.restaurantPhone ||
     order.restaurant_phone ||
@@ -160,7 +169,10 @@ export const PickupActionModal = ({
                   </button>
                 )}
                 <button 
-                  onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurantAddress)}`, '_blank')}
+                  onClick={() => {
+                    const opened = openNavigation(restaurantPoint, restaurantAddress);
+                    if (!opened) navToast.error('No pickup location available to navigate to.');
+                  }}
                   className="w-11 h-11 rounded-2xl bg-gray-950 flex items-center justify-center text-white shadow-xl hover:bg-gray-800 transition-colors active:scale-90"
                 >
                   <Navigation className="w-5 h-5" />

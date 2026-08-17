@@ -93,6 +93,21 @@ export const getFirebaseDB = () => {
 };
 
 /**
+ * Non-throwing variant: returns the database or `null` when Firebase is not
+ * available.
+ *
+ * Order dispatch used the throwing accessor on its hot path, which made the
+ * entire dispatch pipeline depend on Firebase being healthy — a bad credential
+ * or a failed init meant `tryAutoAssign` threw on every call and no rider was
+ * ever offered an order, even though sockets and FCM were fine. Realtime offer
+ * mirroring is a delivery optimisation, not a dispatch prerequisite, so those
+ * call sites now degrade instead of failing.
+ *
+ * @returns {admin.database.Database|null}
+ */
+export const tryGetFirebaseDB = () => db || null;
+
+/**
  * Returns the initialized Firebase Messaging instance.
  * @returns {admin.messaging.Messaging}
  * @throws Error if not initialized

@@ -243,6 +243,17 @@ async function expireUnacceptedOrders(filter = {}) {
       logger.warn(`expireUnacceptedOrders refund failed for ${updated._id}: ${err?.message || err}`);
     }
 
+    // A 'confirmed' order can already have been broadcast, so the auto-cancel sweep
+    // must release rider offers too or it leaves ghosts behind.
+    try {
+      await dispatchService.releaseOrderOffers(updated, {
+        cancelledBy: 'auto_cancel',
+        reason: 'Not accepted by restaurant',
+      });
+    } catch (err) {
+      logger.warn(`expireUnacceptedOrders offer cleanup failed for ${updated._id}: ${err?.message || err}`);
+    }
+
     try {
       const io = getIO();
       if (io) {
@@ -415,8 +426,8 @@ export async function getDispatchSettings() {
   return dispatchService.getDispatchSettings();
 }
 
-export async function updateDispatchSettings(dispatchMode, adminId) {
-  return dispatchService.updateDispatchSettings(dispatchMode, adminId);
+export async function updateDispatchSettings(payload, adminId) {
+  return dispatchService.updateDispatchSettings(payload, adminId);
 }
 
 // ----- Calculate (validation + return pricing from payload) -----
@@ -441,6 +452,7 @@ const couponLimitErrorMessage = (reason, offer = {}) => {
     not_started: "Coupon offer has not started yet",
     expired: "Coupon offer has expired",
     restaurant_mismatch: "Coupon is not valid for this restaurant",
+    user_not_targeted: "This coupon is not available for your account",
     min_order_not_met: `Minimum order value of INR ${offer.minOrderValue || 0} not met`,
     global_limit_reached: "Coupon usage limit has been reached",
     per_user_limit_reached: "You have already used this coupon",
@@ -645,6 +657,7 @@ export async function createOrder(userId, dto) {
           not_started: "Coupon has not started yet",
           expired: "Coupon has expired",
           restaurant_mismatch: "Coupon is not valid for this restaurant",
+          user_not_targeted: "This coupon is not available for your account",
           min_order_not_met: "Minimum order amount not met for this coupon",
           global_limit_reached: "Coupon usage limit has been reached",
           per_user_limit_reached: "You have already used this coupon the maximum number of times",
@@ -685,6 +698,7 @@ export async function createOrder(userId, dto) {
           not_started: "Coupon offer has not started yet",
           expired: "Coupon offer has expired",
           restaurant_mismatch: "Coupon is not valid for this restaurant",
+          user_not_targeted: "This coupon is not available for your account",
           min_order_not_met: `Minimum order value of ₹${offer.minOrderValue || 0} not met`,
           global_limit_reached: "Coupon usage limit has been reached",
           per_user_limit_reached: "You have already used this coupon",
@@ -1367,6 +1381,13 @@ export async function cancelOrder(orderId, userId, reason) {
   await revertCouponUsageOnCancellation(order);
   await order.save();
 
+  // Release every outstanding rider offer. Without this, riders holding the popup
+  // were never told and their Firebase subscription kept re-raising the offer.
+  await dispatchService.releaseOrderOffers(order, {
+    cancelledBy: 'user',
+    reason: reason || '',
+  });
+
   enqueueOrderEvent("order_cancelled_by_user", {
     orderMongoId: order._id?.toString?.(),
     orderId: order._id.toString(),
@@ -1668,6 +1689,15 @@ export async function updateOrderStatusRestaurant(
 
   await order.save();
 
+  if (String(orderStatus).includes("cancel")) {
+    // Same cleanup as the user and admin paths: drop Firebase offers and tell every
+    // rider who holds a popup, not just dispatch.deliveryPartnerId (null mid-broadcast).
+    await dispatchService.releaseOrderOffers(order, {
+      cancelledBy: 'restaurant',
+      reason: note || '',
+    });
+  }
+
   if (String(orderStatus) === "delivered") {
     try {
       const ledgerKind =
@@ -1821,7 +1851,11 @@ export async function updateOrderStatusRestaurant(
                 const assignedId = order.dispatch?.deliveryPartnerId?.toString?.() || order.dispatch?.deliveryPartnerId;
                 if (assignedId) {
                     const restaurant = await FoodRestaurant.findById(order.restaurantId).select('restaurantName location addressLine1 area city state').lean();
-                    const payload = buildDeliverySocketPayload(order, restaurant);
+                    // Goes to the single assigned rider, who has already won the order,
+                    // so customer contact is authorised here.
+                    const payload = buildDeliverySocketPayload(order, restaurant, {
+                        includeCustomerContact: true,
+                    });
                     logger.info(
                       `[DeliveryDispatch] Emitting order_ready to ${rooms.delivery(assignedId)} for order ${order._id.toString()}`,
                     );
@@ -2092,9 +2126,12 @@ export async function assignDeliveryPartnerAdmin(
         .populate('restaurantId')
         .populate('userId')
         .lean();
+      // Admin has directly assigned this order to one specific rider, so the
+      // payload sent to them may carry customer contact.
       const payload = buildDeliverySocketPayload(
         assignedOrder || order,
         assignedOrder?.restaurantId || order.restaurantId,
+        { includeCustomerContact: true },
       );
       const orderKey = order._id.toString();
       const assignedPartnerKey = String(deliveryPartnerId);
@@ -2278,23 +2315,16 @@ export async function updateOrderStatusAdmin(orderId, orderStatus, note = "", ad
             order.payment.refund = { status: "failed", amount: order.pricing?.total || 0 };
         }
         
+        // Shared implementation (also removes Firebase offers and fans out
+        // order_cancelled to every offered rider), replacing the inline copy that
+        // used to live only on this path.
         try {
-            const db = getFirebaseDB();
-            if (db) {
-                const offeredPartners = order.dispatch?.offeredTo || [];
-                for (const offer of offeredPartners) {
-                    const pid = offer.partnerId?.toString();
-                    if (pid) {
-                        db.ref(`delivery_offers/${pid}/${order._id.toString()}`).remove().catch(() => {});
-                    }
-                }
-                const currentPartnerId = order.dispatch?.deliveryPartnerId?.toString();
-                if (currentPartnerId) {
-                    db.ref(`delivery_offers/${currentPartnerId}/${order._id.toString()}`).remove().catch(() => {});
-                }
-            }
+            await dispatchService.releaseOrderOffers(order, {
+                cancelledBy: 'admin',
+                reason: note || '',
+            });
         } catch (err) {
-            logger.warn(`Admin cancellation firebase offers cleanup failed: ${err?.message || err}`);
+            logger.warn(`Admin cancellation offer cleanup failed: ${err?.message || err}`);
         }
     }
 

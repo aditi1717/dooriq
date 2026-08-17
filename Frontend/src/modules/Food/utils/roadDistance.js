@@ -1,4 +1,4 @@
-import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey";
+import { loadGoogleMaps } from "@food/utils/googleMapsLoader";
 
 export function formatDistanceLabel(km) {
   if (km == null || !Number.isFinite(Number(km))) return "--";
@@ -38,53 +38,61 @@ function toPoint(entity) {
   return null;
 }
 
-let mapsLoadPromise = null;
-
+/**
+ * Delegates to the shared loader rather than injecting its own script tag.
+ * This util only needs Directions, but the shared loader requests one superset
+ * of libraries for the whole app so no component can trigger a reload.
+ */
 async function ensureGoogleMapsLoaded() {
   if (typeof window === "undefined") return false;
   if (window.google?.maps?.DirectionsService) return true;
-  if (mapsLoadPromise) return mapsLoadPromise;
-
-  mapsLoadPromise = (async () => {
-    const apiKey = await getGoogleMapsApiKey();
-    if (!apiKey) return false;
-
-    const existing = Array.from(document.getElementsByTagName("script")).find((script) =>
-      script.src?.includes("maps.googleapis.com/maps/api/js"),
-    );
-
-    if (existing) {
-      if (window.google?.maps?.DirectionsService) return true;
-      await new Promise((resolve, reject) => {
-        existing.addEventListener("load", resolve, { once: true });
-        existing.addEventListener("error", reject, { once: true });
-      }).catch(() => false);
-      return Boolean(window.google?.maps?.DirectionsService);
-    }
-
-    await new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&v=weekly`;
-      script.async = true;
-      script.defer = true;
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    }).catch(() => null);
-
-    return Boolean(window.google?.maps?.DirectionsService);
-  })();
-
-  const loaded = await mapsLoadPromise;
-  if (!loaded) mapsLoadPromise = null;
-  return loaded;
+  const google = await loadGoogleMaps();
+  return Boolean(google?.maps?.DirectionsService);
 }
+
+/**
+ * Road distance for a fixed pair of points never changes, so cache it.
+ *
+ * Keyed on both points rounded to ~11 m. In-flight requests are shared, so N
+ * components asking for the same pair at the same moment produce ONE billed
+ * Directions request rather than N.
+ */
+const distanceCache = new Map();
+const distanceInFlight = new Map();
+const DISTANCE_CACHE_MAX = 500;
+
+const distanceKey = (origin, destination) =>
+  `${origin.lat.toFixed(4)},${origin.lng.toFixed(4)}|${destination.lat.toFixed(4)},${destination.lng.toFixed(4)}`;
 
 export async function fetchDrivingDistanceKm(originEntity, destinationEntity) {
   const origin = toPoint(originEntity);
   const destination = toPoint(destinationEntity);
   if (!origin || !destination) return null;
 
+  const key = distanceKey(origin, destination);
+  if (distanceCache.has(key)) return distanceCache.get(key);
+  if (distanceInFlight.has(key)) return distanceInFlight.get(key);
+
+  const request = requestDrivingDistanceKm(origin, destination)
+    .then((value) => {
+      // Only cache real answers; a null must stay retryable.
+      if (value != null) {
+        if (distanceCache.size >= DISTANCE_CACHE_MAX) {
+          distanceCache.delete(distanceCache.keys().next().value);
+        }
+        distanceCache.set(key, value);
+      }
+      return value;
+    })
+    .finally(() => {
+      distanceInFlight.delete(key);
+    });
+
+  distanceInFlight.set(key, request);
+  return request;
+}
+
+async function requestDrivingDistanceKm(origin, destination) {
   const loaded = await ensureGoogleMapsLoaded();
   if (!loaded || !window.google?.maps?.DirectionsService) return null;
 

@@ -763,6 +763,16 @@ export async function getAllOffers(req, res, next) {
     }
 }
 
+/** GET /admin/offers/:id/usage — which customers redeemed this coupon. */
+export async function getAdminOfferUsage(req, res, next) {
+    try {
+        const data = await adminService.getOfferUsageReport(req.params.id, req.query || {});
+        res.status(200).json({ success: true, message: 'Coupon usage fetched successfully', data });
+    } catch (err) {
+        next(err);
+    }
+}
+
 export async function createAdminOffer(req, res, next) {
     try {
         const body = validateCreateOfferDto(req.body || {});

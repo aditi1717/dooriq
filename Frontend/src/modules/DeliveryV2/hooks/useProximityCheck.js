@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { calculateDistance } from '@/modules/DeliveryV2/hooks/proximity.utils';
+import { isProximityBypassEnabled } from '@/modules/DeliveryV2/utils/devMode';
 
 /**
  * useProximityCheck - Professional hook for dynamic range monitoring.
@@ -50,10 +51,8 @@ export const useProximityCheck = () => {
     );
   }, [riderLocation, targetLocation]);
 
-  // Dev mode bypass
-  const isDevMode = import.meta.env.VITE_APP_MODE === 'developer' || 
-                    import.meta.env.VITE_ENABLE_RANGE_BYPASS === 'true' ||
-                    import.meta.env.DEV;
+  // Shared with the auto-arrival trigger so both relax together (see devMode.js).
+  const isDevMode = isProximityBypassEnabled();
 
   const isWithinRange = isDevMode ? true : (distanceToTarget <= actionLimit);
 

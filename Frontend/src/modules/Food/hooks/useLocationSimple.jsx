@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { restaurantAPI } from "@food/api"
+import { persistUserLocation } from "@food/hooks/useLocation"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -210,7 +211,7 @@ export function useLocationSimple() {
             state: "",
             formattedAddress: "",
           }
-          localStorage.setItem("userLocation", JSON.stringify(locationData))
+          persistUserLocation(locationData)
           resolve(locationData)
         },
         (err) => {
@@ -245,7 +246,7 @@ export function useLocationSimple() {
    */
   const requestLocation = async () => {
     if (!liveGeoEnabledRef.current) {
-      localStorage.setItem("userLocation", JSON.stringify(DEFAULT_INDORE_LOCATION))
+      persistUserLocation(DEFAULT_INDORE_LOCATION)
       setLocation(DEFAULT_INDORE_LOCATION)
       setPermissionGranted(true)
       setError(null)
@@ -302,7 +303,7 @@ export function useLocationSimple() {
       liveGeoEnabledRef.current = liveGeoEnabled
 
       if (!liveGeoEnabled) {
-        localStorage.setItem("userLocation", JSON.stringify(DEFAULT_INDORE_LOCATION))
+        persistUserLocation(DEFAULT_INDORE_LOCATION)
         setLocation(DEFAULT_INDORE_LOCATION)
         setLoading(false)
         setPermissionGranted(true)

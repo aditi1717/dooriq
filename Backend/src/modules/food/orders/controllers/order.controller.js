@@ -146,12 +146,50 @@ export async function getDispatchSettingsController(req, res, next) {
     }
 }
 
+/**
+ * Update dispatch policy.
+ *
+ * Accepts either the legacy `{ dispatchMode }` body or a full dispatch
+ * configuration (stages, timeouts, crisis threshold, ...). The service validates
+ * the configuration and throws ValidationError with a specific, operator-readable
+ * message on bad input.
+ */
 export async function updateDispatchSettingsController(req, res, next) {
     try {
         const adminId = req.user?.userId;
-        const dto = validateDispatchSettingsDto(req.body);
-        const result = await orderService.updateDispatchSettings(dto.dispatchMode, adminId);
+        const body = req.body || {};
+
+        // Legacy shape: only dispatchMode present. Keep the old validator for it so
+        // existing admin clients continue to work unchanged.
+        const isLegacyModeOnly =
+            Object.keys(body).length === 1 && body.dispatchMode !== undefined;
+
+        const payload = isLegacyModeOnly
+            ? validateDispatchSettingsDto(body).dispatchMode
+            : body;
+
+        const result = await orderService.updateDispatchSettings(payload, adminId);
         return sendResponse(res, 200, 'Dispatch settings updated', result);
+    } catch (err) {
+        next(err);
+    }
+}
+
+/**
+ * Config metadata for the admin panel: current values, the fallback defaults, and
+ * the validation bounds so the UI can render inputs without duplicating limits.
+ */
+export async function getDispatchConfigSchemaController(req, res, next) {
+    try {
+        const { DEFAULT_DISPATCH_CONFIG, CONFIG_LIMITS, FINAL_STAGE_BEHAVIORS } =
+            await import('../services/dispatch-config.service.js');
+        const current = await orderService.getDispatchSettings();
+        return sendResponse(res, 200, 'Dispatch configuration schema retrieved', {
+            current: current.config,
+            defaults: DEFAULT_DISPATCH_CONFIG,
+            limits: CONFIG_LIMITS,
+            finalStageBehaviors: FINAL_STAGE_BEHAVIORS,
+        });
     } catch (err) {
         next(err);
     }

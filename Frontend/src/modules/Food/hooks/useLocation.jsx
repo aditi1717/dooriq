@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { locationAPI, userAPI, restaurantAPI } from "@food/api"
+import { locationAPI, userAPI, restaurantAPI, geocodingAPI } from "@food/api"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -52,6 +52,46 @@ let globalReverseGeocodeLastSuccess = null
 // Default behavior: resolve from cache/DB quickly, and when permission is already granted
 // keep a live geolocation watch so zone/location updates react without page refresh.
 const AUTO_START_LIVE_WATCH = true
+
+export const USER_LOCATION_STORAGE_KEY = "userLocation"
+
+/**
+ * Events other screens fire after writing a new location to localStorage.
+ *
+ * Both names were already being dispatched (from two places in
+ * AddressSelectorPage) but NOTHING listened to either, so picking a new address
+ * updated storage while every mounted `useLocation()` kept the old value in
+ * memory — the navbar, the zone lookup and the restaurant list all stayed on the
+ * previous location until a full page reload.
+ */
+export const USER_LOCATION_EVENTS = ["userLocationUpdated", "userLocationChanged"]
+
+/**
+ * Persist a location and notify every mounted `useLocation()` in this tab.
+ * Screens that write the location directly should use this instead of calling
+ * localStorage.setItem themselves, so the notification can never be forgotten.
+ */
+export const persistUserLocation = (location) => {
+  if (!location || typeof location !== "object") return null
+  const stamped = { ...location, updatedAt: Date.now() }
+  try {
+    localStorage.setItem(USER_LOCATION_STORAGE_KEY, JSON.stringify(stamped))
+  } catch {
+    // Private mode / quota — in-memory state below is still updated.
+  }
+  try {
+    window.dispatchEvent(new CustomEvent("userLocationUpdated", { detail: stamped }))
+  } catch {
+    // Non-browser environment.
+  }
+  return stamped
+}
+
+/** Timestamp of a stored location, 0 when it predates the `updatedAt` field. */
+const locationTimestamp = (loc) => {
+  const value = Number(loc?.updatedAt)
+  return Number.isFinite(value) ? value : 0
+}
 
 const reverseGeocodeDirect = async (latitude, longitude) => {
   const now = Date.now()
@@ -290,44 +330,51 @@ export function useLocation() {
     return null
   }
 
+  /**
+   * Reverse geocode via OUR backend, not Google directly.
+   *
+   * This used to fetch `maps.googleapis.com/maps/api/geocode/json` from the
+   * browser with the API key in the URL. Google's web-service endpoints ignore
+   * HTTP-referrer restrictions, so that forced the Maps key to be completely
+   * unrestricted — readable from the bundle or any network trace, and spendable
+   * by anyone who copied it. The server now holds the key (and caches results by
+   * ~11 m grid cell, so a repeated location costs nothing).
+   *
+   * Return shape and the fallback to reverseGeocodeDirect are unchanged, so every
+   * caller behaves exactly as before.
+   */
   const reverseGeocodeWithGoogleMaps = async (latitude, longitude, _options = {}) => {
+    let timeoutId = null
     try {
-      const apiKey = await getGoogleMapsApiKeySafe()
-      if (!apiKey) {
-        return reverseGeocodeDirect(latitude, longitude)
-      }
-
       const controller = new AbortController()
-      setTimeout(() => controller.abort(), 6000)
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${encodeURIComponent(latitude)},${encodeURIComponent(longitude)}&key=${encodeURIComponent(apiKey)}`
-      const res = await fetch(url, { signal: controller.signal })
-      const data = await res.json()
-      const result = Array.isArray(data?.results) ? data.results[0] : null
-      if (!result) {
+      // Previously this timer was never cleared, leaving a pending abort timer
+      // (and its controller) alive after every successful lookup.
+      timeoutId = setTimeout(() => controller.abort(), 6000)
+
+      const res = await geocodingAPI.reverseGeocode(latitude, longitude, {
+        signal: controller.signal,
+      })
+      const data = res?.data
+
+      // `resolved: false` is a normal "no address here" answer, not an error —
+      // fall through to the existing chain exactly as before.
+      if (!data?.success || !data?.resolved || !data?.data) {
         return reverseGeocodeDirect(latitude, longitude)
       }
 
-      const components = Array.isArray(result.address_components) ? result.address_components : []
-      const pick = (...types) =>
-        components.find((c) => types.some((t) => c.types?.includes(t)))?.long_name || ""
-
-      const area =
-        pick("sublocality_level_1", "sublocality", "neighborhood") ||
-        pick("locality")
-      const city = pick("locality") || pick("administrative_area_level_2") || "Unknown City"
-      const state = pick("administrative_area_level_1")
-      const country = pick("country")
-
+      const { city, state, country, area, address, formattedAddress } = data.data
       return {
-        city,
-        state,
-        country,
-        area,
-        address: result.formatted_address || `${city}, ${state}`.trim(),
-        formattedAddress: result.formatted_address || `${city}, ${state}`.trim(),
+        city: city || "Unknown City",
+        state: state || "",
+        country: country || "",
+        area: area || "",
+        address: address || formattedAddress || `${city || ""}, ${state || ""}`.trim(),
+        formattedAddress: formattedAddress || address || `${city || ""}, ${state || ""}`.trim(),
       }
     } catch {
       return reverseGeocodeDirect(latitude, longitude)
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId)
     }
   }
 
@@ -811,7 +858,7 @@ export function useLocation() {
   /* ===================== MAIN LOCATION ===================== */
   const getLocation = async (updateDB = true, forceFresh = false, showLoading = false) => {
     if (!liveGeoEnabledRef.current) {
-      localStorage.setItem("userLocation", JSON.stringify(DEFAULT_INDORE_LOCATION))
+      persistUserLocation(DEFAULT_INDORE_LOCATION)
       setLocation(DEFAULT_INDORE_LOCATION)
       if (showLoading) setLoading(false)
       return DEFAULT_INDORE_LOCATION
@@ -958,7 +1005,7 @@ export function useLocation() {
               }
 
               debugLog("?? Saving location:", finalLoc)
-              localStorage.setItem("userLocation", JSON.stringify(finalLoc))
+              persistUserLocation(finalLoc)
               setLocation(finalLoc)
               setPermissionGranted(true)
               if (showLoading) setLoading(false)
@@ -992,7 +1039,7 @@ export function useLocation() {
                     accuracy: pos.coords.accuracy || null
                   }
                   debugLog("? Last resort geocoding succeeded:", lastResortLoc)
-                  localStorage.setItem("userLocation", JSON.stringify(lastResortLoc))
+                  persistUserLocation(lastResortLoc)
                   setLocation(lastResortLoc)
                   setPermissionGranted(true)
                   if (showLoading) setLoading(false)
@@ -1263,13 +1310,13 @@ export function useLocation() {
             if (coordsChanged) {
               prevLocationCoordsRef.current = { latitude: loc.latitude, longitude: loc.longitude }
               if (shouldPersistLocation) {
-                localStorage.setItem("userLocation", JSON.stringify(persistedLocation))
+                persistUserLocation(persistedLocation)
               }
               setLocation(persistedLocation)
               setPermissionGranted(true)
               setError(null)
             } else if (shouldPersistLocation) {
-              localStorage.setItem("userLocation", JSON.stringify(persistedLocation))
+              persistUserLocation(persistedLocation)
             }
 
             if (shouldPersistLocation) {
@@ -1331,12 +1378,51 @@ export function useLocation() {
       return hasCoords && Boolean(hasAddress)
     }
 
+    // Safety net: never leave the UI spinning. Also settle on whatever we have
+    // stored rather than just stopping the spinner on a null location.
     const loadingTimeout = setTimeout(() => {
       setLoading(false)
+      setLocation((current) => {
+        if (current) return current
+        try {
+          const raw = localStorage.getItem(USER_LOCATION_STORAGE_KEY)
+          const parsed = raw ? JSON.parse(raw) : null
+          if (Number.isFinite(Number(parsed?.latitude))) return parsed
+        } catch {
+          // fall through
+        }
+        return current
+      })
     }, 5000)
 
     const init = async () => {
       try {
+        // Read the stored location FIRST. This is a synchronous localStorage read
+        // and it is what the user saw last time, so it should paint immediately.
+        // It used to sit behind an awaited feature-settings request, which meant a
+        // slow network showed "Select location" for seconds to a user who already
+        // had one saved.
+        let storedLocation = null
+        try {
+          const stored = localStorage.getItem(USER_LOCATION_STORAGE_KEY)
+          if (stored) {
+            const loc = JSON.parse(stored)
+            if (Number.isFinite(Number(loc?.latitude)) && Number.isFinite(Number(loc?.longitude))) {
+              storedLocation = loc
+              setLocation(loc)
+              initialResolvedLocation = loc
+              hasInitialLocation = true
+              setLoading(false)
+
+              if (loc.city === "Current Location" || !loc.formattedAddress || loc.formattedAddress === "Select location") {
+                shouldForceRefresh = true
+              }
+            }
+          }
+        } catch (e) {
+          debugWarn("Failed to parse stored location", e)
+        }
+
         let liveGeoEnabled = true
         try {
           const featureRes = await restaurantAPI.getFeatureSettingsPublic()
@@ -1352,39 +1438,30 @@ export function useLocation() {
         liveGeoEnabledRef.current = liveGeoEnabled
 
         if (!liveGeoEnabled) {
-          localStorage.setItem("userLocation", JSON.stringify(DEFAULT_INDORE_LOCATION))
+          persistUserLocation(DEFAULT_INDORE_LOCATION)
           setLocation(DEFAULT_INDORE_LOCATION)
           setLoading(false)
-          setPermissionGranted(true)
           return
         }
-        const stored = localStorage.getItem("userLocation")
-        if (stored) {
-          try {
-            const loc = JSON.parse(stored)
-            if (loc?.latitude && loc?.longitude) {
-              setLocation(loc)
-              initialResolvedLocation = loc
-              hasInitialLocation = true
-              setLoading(false)
-              setPermissionGranted(true)
 
-              if (loc.city === "Current Location" || !loc.formattedAddress || loc.formattedAddress === "Select location") {
-                shouldForceRefresh = true
-              }
-            }
-          } catch (e) {
-            debugWarn("Failed to parse stored location", e)
-          }
-        }
-
+        // Most-recent-wins between device and server.
+        //
+        // The DB value used to overwrite the device value unconditionally, so a
+        // location the user had just set here could be silently reverted by a
+        // stale or lagging server record. Comparing timestamps keeps
+        // cross-device sync working while never walking back a newer local choice.
+        // A record with no timestamp predates this field and loses a tie.
         const dbLoc = await fetchLocationFromDB()
         if (dbLoc) {
-          setLocation(dbLoc)
-          initialResolvedLocation = dbLoc
-          hasInitialLocation = true
-          setLoading(false)
-          setPermissionGranted(true)
+          const dbIsNewer = locationTimestamp(dbLoc) >= locationTimestamp(storedLocation)
+          if (!storedLocation || dbIsNewer) {
+            setLocation(dbLoc)
+            initialResolvedLocation = dbLoc
+            hasInitialLocation = true
+            setLoading(false)
+          } else {
+            debugLog("Keeping newer device location over the server copy")
+          }
         }
 
         if (!hasInitialLocation) {
@@ -1414,6 +1491,10 @@ export function useLocation() {
 
         if (navigator.permissions && navigator.permissions.query) {
           const result = await navigator.permissions.query({ name: 'geolocation' })
+          // Reflect the REAL permission state. This used to be set true merely
+          // because a location was cached, so the UI believed geolocation was
+          // granted when the user had never been asked (or had denied).
+          setPermissionGranted(result.state === 'granted')
           // `prompt` should also attempt geolocation so browser can ask permission.
           if (result.state === 'granted' || (!hasUsableInitialLocation && result.state === 'prompt')) {
             await tryAutoResolveLocation()
@@ -1434,6 +1515,72 @@ export function useLocation() {
     return () => {
       clearTimeout(loadingTimeout)
       stopWatchingLocation()
+    }
+  }, [])
+
+  /**
+   * React to a location chosen elsewhere.
+   *
+   * Two sources:
+   *  - the in-tab custom events fired after a screen writes a new location
+   *  - the native `storage` event, which covers other TABS of the same app
+   *
+   * Without this the hook only ever learned about a location change by being
+   * remounted, which is why picking a new address left the navbar and the
+   * restaurant list showing the previous one until a reload.
+   */
+  useEffect(() => {
+    const applyExternalLocation = (incoming) => {
+      if (!incoming || typeof incoming !== "object") return
+      const lat = Number(incoming.latitude)
+      const lng = Number(incoming.longitude)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+      setLocation((current) => {
+        // Ignore an event that is older than what we already hold, so a late
+        // listener cannot walk the user backwards.
+        if (current && locationTimestamp(incoming) < locationTimestamp(current)) {
+          return current
+        }
+        const sameCoords =
+          current &&
+          Number(current.latitude) === lat &&
+          Number(current.longitude) === lng &&
+          current.formattedAddress === incoming.formattedAddress
+        return sameCoords ? current : incoming
+      })
+      setLoading(false)
+      setError(null)
+      // Keep the coordinate guard in step so the live watch does not immediately
+      // treat the new position as "moved" and re-persist it.
+      prevLocationCoordsRef.current = { latitude: lat, longitude: lng }
+    }
+
+    const onCustomEvent = (event) => {
+      if (event?.detail) return applyExternalLocation(event.detail)
+      try {
+        const raw = localStorage.getItem(USER_LOCATION_STORAGE_KEY)
+        if (raw) applyExternalLocation(JSON.parse(raw))
+      } catch {
+        // ignore malformed storage
+      }
+    }
+
+    const onStorage = (event) => {
+      if (event.key && event.key !== USER_LOCATION_STORAGE_KEY) return
+      try {
+        const raw = event.newValue ?? localStorage.getItem(USER_LOCATION_STORAGE_KEY)
+        if (raw) applyExternalLocation(JSON.parse(raw))
+      } catch {
+        // ignore malformed storage
+      }
+    }
+
+    USER_LOCATION_EVENTS.forEach((name) => window.addEventListener(name, onCustomEvent))
+    window.addEventListener("storage", onStorage)
+    return () => {
+      USER_LOCATION_EVENTS.forEach((name) => window.removeEventListener(name, onCustomEvent))
+      window.removeEventListener("storage", onStorage)
     }
   }, [])
 

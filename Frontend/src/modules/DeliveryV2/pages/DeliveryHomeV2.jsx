@@ -32,6 +32,8 @@ import {
 } from 'lucide-react';
 
 import { getHaversineDistance, calculateETA, calculateHeading } from '@/modules/DeliveryV2/utils/geo';
+import { openNavigation } from '@/modules/DeliveryV2/utils/navigation';
+import { isProximityBypassEnabled } from '@/modules/DeliveryV2/utils/devMode';
 import { useCompanyName } from "@food/hooks/useCompanyName";
 import { useNavigate } from 'react-router-dom';
 
@@ -53,8 +55,29 @@ const getStoredDeliveryPartnerId = () => {
   }
 };
 
+/**
+ * How old a GPS fix may be before the heartbeat stops replaying it.
+ *
+ * Comfortably longer than a normal signal gap (traffic light, indoors, tunnel)
+ * but well inside the backend's `staleGpsMinutes` window, so dispatch notices a
+ * genuinely dead GPS before the rider silently keeps receiving offers.
+ * A stationary rider is unaffected: their app still produces real fixes.
+ */
+const STALE_FIX_CUTOFF_MS = 5 * 60 * 1000;
+
 const getOrderRaceKey = (order) =>
   String(order?.orderMongoId || order?._id || order?.orderId || order?.id || '');
+
+/**
+ * Canonical realtime tracking key for an order: always the Mongo _id.
+ *
+ * The rider app used to stream location under the human-readable order_id while
+ * the backend wrote its tracking node under the Mongo _id, so a single delivery
+ * produced two Firebase nodes and two socket rooms. The customer map only worked
+ * because it subscribed to several candidate ids at once.
+ */
+const getTrackingKey = (order) =>
+  String(order?.orderMongoId || order?._id || order?.orderId || '');
 
 const isAcceptRaceLoss = (error) => {
   const status = error?.response?.status;
@@ -213,10 +236,16 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const [eta, setEta] = useState(null);
   const lastLocationSentAt = useRef(0);
   const lastCoordRef = useRef(null);
+  const lastHeadingRef = useRef(null);
+  /** When the last REAL GPS fix was measured (not when we last transmitted). */
+  const lastFixAtRef = useRef(0);
   const deliveryPartnerIdRef = useRef(getStoredDeliveryPartnerId());
   const rollingSpeedRef = useRef([]);
   const lastAutoArrivalRef = useRef({ PICKING_UP: false, PICKED_UP: false });
   const [zoom, setZoom] = useState(14);
+  // Follow mode keeps the map centred on the rider. Dragging the map disarms it
+  // so the rider can look ahead; the Center-map button re-arms it.
+  const [followMode, setFollowMode] = useState(true);
   const [isSimMode, setIsSimMode] = useState(false);
   const [simPath, setSimPath] = useState([]);
   const [simIndex, setSimIndex] = useState(0);
@@ -323,7 +352,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                 lat,
                 lng,
                 heading,
-                orderId: activeOrder?.orderId || activeOrder?._id,
+                orderId: getTrackingKey(activeOrder),
+                orderMongoId: getTrackingKey(activeOrder),
+                orderFriendlyId: activeOrder?.order_id || activeOrder?.orderId || null,
                 status: 'on_the_way',
                 polyline: activePolyline // Include polyline in every stream update for resilience
               };
@@ -525,7 +556,24 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       const latest = latestGpsStateRef.current;
       const { latitude: lat, longitude: lng, heading, speed } = pos.coords;
       const now = Date.now();
-      const normalizedHeading = Number.isFinite(heading) ? heading : 0;
+      // Many Android browsers report heading only while moving fast, and null
+      // otherwise — which used to snap the bike icon due north. Fall back to the
+      // bearing between the last two fixes before giving up and reusing the last
+      // known heading.
+      let normalizedHeading = Number.isFinite(heading) ? heading : null;
+      if (normalizedHeading === null && lastCoordRef.current) {
+        const moved = getHaversineDistance(lat, lng, lastCoordRef.current.lat, lastCoordRef.current.lng);
+        // Below ~5 m the bearing is GPS noise, not a real direction.
+        if (moved >= 5) {
+          normalizedHeading = calculateHeading(
+            lastCoordRef.current.lat, lastCoordRef.current.lng, lat, lng,
+          );
+        }
+      }
+      if (normalizedHeading === null) {
+        normalizedHeading = lastHeadingRef.current ?? 0;
+      }
+      lastHeadingRef.current = normalizedHeading;
       const normalizedSpeed = Number.isFinite(speed) ? speed : 0;
       const accuracy = Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null;
 
@@ -535,11 +583,21 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         rollingSpeedRef.current = [...rollingSpeedRef.current.slice(-4), normalizedSpeed];
       }
 
+      // Auto-arrival now runs in development too. It previously required
+      // !import.meta.env.DEV while the proximity gate was force-unlocked in DEV,
+      // so the two rules pointed in opposite directions and this path was only
+      // ever exercised in production.
+      //
+      // It deliberately still requires REAL proximity, including in dev: the
+      // bypass unlocks the manual buttons, it does not auto-advance the trip.
+      // Simulation mode is how you drive this locally.
+      const withinArrivalRange =
+        Number.isFinite(latest.distanceToTarget) && latest.distanceToTarget <= 100;
+
       if (
         latest.isOnline &&
-        !import.meta.env.DEV &&
-        latest.distanceToTarget &&
-        latest.distanceToTarget <= 100 &&
+        latest.activeOrder &&
+        withinArrivalRange &&
         !lastAutoArrivalRef.current[latest.tripStatus]
       ) {
         if (latest.tripStatus === 'PICKING_UP') {
@@ -560,6 +618,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         : 1000;
 
       lastCoordRef.current = { lat, lng };
+      lastFixAtRef.current = now;
 
       if (!latest.isOnline) {
         return;
@@ -576,7 +635,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
         heading: normalizedHeading,
         speed: normalizedSpeed,
         accuracy,
-        orderId: latest.activeOrder?.orderId || latest.activeOrder?._id,
+        orderId: getTrackingKey(latest.activeOrder),
+        orderMongoId: getTrackingKey(latest.activeOrder),
+        orderFriendlyId: latest.activeOrder?.order_id || latest.activeOrder?.orderId || null,
         status: 'on_the_way',
         polyline: latest.activePolyline
       };
@@ -657,8 +718,24 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
     const pingInterval = setInterval(() => {
       const now = Date.now();
-      // If no natural GPS update happened in the last 15 seconds, force a ping
-      if (now - lastLocationSentAt.current >= 15000 && lastCoordRef.current) {
+
+      // Only replay a coordinate that is still a RECENT measurement.
+      //
+      // This heartbeat re-sends the last known position so a stationary rider
+      // stays online — but it also refreshes `lastLocationAt` server-side. If the
+      // app stayed alive while GPS died (permission revoked, location services
+      // off, backgrounded), it kept replaying one frozen coordinate forever and
+      // dispatch saw a permanently "fresh" timestamp on an hours-old position,
+      // defeating the stale-GPS exclusion. Past the cutoff we stop transmitting
+      // and let the rider go stale, which is the truthful state.
+      const fixAgeMs = now - lastFixAtRef.current;
+      const fixIsUsable = lastFixAtRef.current > 0 && fixAgeMs <= STALE_FIX_CUTOFF_MS;
+
+      if (!fixIsUsable && lastFixAtRef.current > 0) {
+        setIsGpsOff(true);
+      }
+
+      if (now - lastLocationSentAt.current >= 15000 && lastCoordRef.current && fixIsUsable) {
         lastLocationSentAt.current = now;
         deliveryAPI.updateLocation(
           lastCoordRef.current.lat,
@@ -676,7 +753,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
             heading: 0,
             speed: 0,
             isOnline: true,
-            activeOrderId: activeOrder?.orderId || activeOrder?._id || null,
+            activeOrderId: getTrackingKey(activeOrder) || null,
             timestamp: now
           }).catch(() => { });
         }
@@ -818,6 +895,8 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
 
   const handleCenterMap = () => {
+    // Re-arm follow mode: this button is the rider's way back to "stay on me".
+    setFollowMode(true);
     if (mapRef.current && useDeliveryStore.getState().riderLocation) {
       const loc = useDeliveryStore.getState().riderLocation;
       mapRef.current.panTo({
@@ -904,7 +983,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                             speed: pos.coords.speed || 0,
                             accuracy: pos.coords.accuracy,
                             isOnline: true,
-                            activeOrderId: activeOrder?.orderId || activeOrder?._id || null,
+                            activeOrderId: getTrackingKey(activeOrder) || null,
                             timestamp: Date.now()
                           }).catch(() => { });
                         }
@@ -1018,12 +1097,14 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
               onPolylineReceived={(poly) => {
                 setActivePolyline(poly);
                 // If we have an order, push the INITIAL polyline to Firebase immediately for the customer
-                const orderId = activeOrder?.orderId || activeOrder?._id;
+                const orderId = getTrackingKey(activeOrder);
                 if (orderId && poly) {
                   writeOrderTracking(orderId, { polyline: poly, status: tripStatus, eta: eta }).catch(() => { });
                 }
               }}
               zoom={zoom}
+              followMode={followMode}
+              onFollowModeChange={setFollowMode}
             />
 
             {/* SIMULATION INDICATOR (Removed from top) */}
@@ -1242,7 +1323,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                                 if (customerLocation?.lat != null && customerLocation?.lng != null) {
                                   return (
                                     <button
-                                      onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${customerLocation.lat},${customerLocation.lng}`, '_blank')}
+                                      onClick={() => openNavigation(customerLocation)}
                                       className="w-11 h-11 rounded-2xl bg-gray-950 flex items-center justify-center text-white shadow-xl hover:bg-gray-800 transition-colors active:scale-90 shrink-0"
                                     >
                                       <Navigation className="w-5 h-5" />
@@ -1265,7 +1346,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                                 if (customerAddress) {
                                   return (
                                     <button
-                                      onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customerAddress)}`, '_blank')}
+                                      onClick={() => openNavigation(null, customerAddress)}
                                       className="w-11 h-11 rounded-2xl bg-gray-950 flex items-center justify-center text-white shadow-xl hover:bg-gray-800 transition-colors active:scale-90 shrink-0"
                                     >
                                       <Navigation className="w-5 h-5" />

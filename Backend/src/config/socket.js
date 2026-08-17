@@ -187,7 +187,16 @@ export const initSocket = async (server) => {
         const _lastLocationBroadcast = {};
         socket.on('update-location', async (data) => {
             if (socket.user?.role !== 'DELIVERY_PARTNER') return;
-            if (!data || !data.orderId) return;
+            if (!data || !(data.orderMongoId || data.orderId)) return;
+
+            // Canonical tracking key is the Mongo _id.
+            //
+            // The rider app used to send the human-readable order_id, while the
+            // backend wrote the Firebase tracking node under the Mongo _id — two
+            // different nodes for one delivery, which the customer map only
+            // survived by subscribing to several candidate ids at once. Prefer the
+            // explicit orderMongoId and fall back for older clients.
+            const trackingKey = String(data.orderMongoId || data.orderId);
 
             const lat = Number(data.lat);
             const lng = Number(data.lng);
@@ -200,12 +209,14 @@ export const initSocket = async (server) => {
 
             // Throttle: max one broadcast per 2s per orderId
             const now = Date.now();
-            const lastTS = _lastLocationBroadcast[data.orderId] || 0;
+            const lastTS = _lastLocationBroadcast[trackingKey] || 0;
             if (now - lastTS < 2000) return;
-            _lastLocationBroadcast[data.orderId] = now;
+            _lastLocationBroadcast[trackingKey] = now;
 
             const payload = {
-                orderId: String(data.orderId),
+                orderId: trackingKey,
+                orderMongoId: trackingKey,
+                orderFriendlyId: data.orderFriendlyId ? String(data.orderFriendlyId) : undefined,
                 deliveryPartnerId: String(userId),
                 lat,
                 lng,
@@ -221,14 +232,16 @@ export const initSocket = async (server) => {
             logDeliverySocket('Location update received', {
                 socketId: socket.id,
                 deliveryPartnerId: String(userId),
-                orderId: String(data.orderId),
+                orderId: trackingKey,
+                orderMongoId: trackingKey,
+                orderFriendlyId: data.orderFriendlyId ? String(data.orderFriendlyId) : undefined,
                 lat,
                 lng,
                 status: data.status || 'on_the_way',
             });
 
             // Broadcast to tracking room (all users watching this order)
-            const trackingRoom = roomNames.tracking(data.orderId);
+            const trackingRoom = roomNames.tracking(trackingKey);
             socket.to(trackingRoom).emit('location-update', payload);
 
             // Also emit to the specific user room if userId is provided
@@ -253,15 +266,15 @@ export const initSocket = async (server) => {
                     // 1. Immediately buffer the newest location in high-speed Redis Hash (HOT storage)
                     await Promise.all([
                         redis.hSet('rider:locations:hot', String(userId), coordString),
-                        redis.hSet('order:locations:hot', String(data.orderId), coordString)
+                        redis.hSet('order:locations:hot', trackingKey, coordString)
                     ]);
 
                     // 2. Schedule a deferred MongoDB write (COLD storage)
                     // jobId debulks updates: if a job is already waiting, BullMQ ignores the new add()
                     // Delay (30s) ensures we don't spam MongoDB while the rider is moving fast
-                    const syncJobId = `sync:loc:${data.orderId}`;
+                    const syncJobId = `sync:loc:${trackingKey}`;
                     trackingQueue.add('sync-hot-locations', 
-                        { userId, orderId: data.orderId }, 
+                        { userId, orderId: trackingKey }, 
                         { jobId: syncJobId, delay: 30000, removeOnComplete: true }
                     ).catch(e => logger.error(`BullMQ sync schedule failed: ${e.message}`));
                 }
@@ -274,7 +287,7 @@ export const initSocket = async (server) => {
                 const db = getFirebaseDB();
                 if (db) {
                     // 1. Update order-specific tracking node
-                    const orderRef = db.ref(`active_orders/${data.orderId}`);
+                    const orderRef = db.ref(`active_orders/${trackingKey}`);
                     orderRef.update({
                         lat,
                         lng,

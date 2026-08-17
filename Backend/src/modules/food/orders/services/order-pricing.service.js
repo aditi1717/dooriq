@@ -229,6 +229,7 @@ export async function calculateOrderPricing(userId, dto) {
           not_started: "Coupon offer has not started yet",
           expired: "Coupon offer has expired",
           restaurant_mismatch: "Coupon is not valid for this restaurant",
+          user_not_targeted: "This coupon is not available for your account",
           min_order_not_met: `Minimum order value of ₹${offer.minOrderValue || 0} not met`,
           global_limit_reached: "Coupon usage limit has been reached",
           per_user_limit_reached: "You have already used this coupon",

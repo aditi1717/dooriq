@@ -21,6 +21,7 @@ import { determineStepToShow } from "@food/utils/onboardingUtils"
 import { toast } from "sonner"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
+import { loadGoogleMaps } from "@food/utils/googleMapsLoader"
 import { clearModuleAuth, clearAuthData } from "@food/utils/auth"
 import { cleanupPushForModule } from "@food/utils/firebaseMessaging"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
@@ -2355,58 +2356,13 @@ export default function RestaurantOnboarding() {
       if (!inputElement || cancelled) return
 
       const loadMaps = async () => {
-        // 1. If already available with places, return true
-        if (window.google?.maps?.places?.Autocomplete) {
-          mapsScriptLoadedRef.current = true
-          return true
-        }
-
-        // 2. Load API Key
-        const apiKey = await getGoogleMapsApiKey()
-        if (!apiKey) {
-          debugError("Google Maps API Key missing or invalid")
-          return false
-        }
-
-        // 3. Handle Auth Failure
-        window.gm_authFailure = () => {
-          debugError("Google Maps authentication failed.")
-          // Don't show toast here as we have Nominatim fallback
-        }
-
-        // 4. Check for existing script and force libraries=places if needed
-        const scripts = Array.from(document.getElementsByTagName("script"))
-        const mapsScript = scripts.find(s => s.src?.includes("maps.googleapis.com/maps/api/js"))
-        
-        if (mapsScript && !mapsScript.src.includes("libraries=places")) {
-          debugLog("Found maps script without places, removing to reload properly.")
-          mapsScript.remove()
-        } else if (mapsScript && mapsScript.src.includes("libraries=places")) {
-           // Wait if it's still loading
-           for (let i = 0; i < 60; i++) {
-             if (window.google?.maps?.places?.Autocomplete) return true
-             if (cancelled) return false
-             await new Promise(r => setTimeout(r, 100))
-           }
-        }
-
-        // 5. Create and append new script
-        return new Promise((resolve) => {
-          const script = document.createElement("script")
-          script.id = "google-maps-sdk"
-          script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`
-          script.async = true
-          script.defer = true
-          script.onload = () => {
-            setTimeout(() => {
-              const ok = !!window.google?.maps?.places?.Autocomplete
-              mapsScriptLoadedRef.current = ok
-              resolve(ok)
-            }, 200)
-          }
-          script.onerror = () => resolve(false)
-          document.head.appendChild(script)
-        })
+        // Delegates to the single shared loader. The previous inline version
+        // could REMOVE another component's script tag when its `libraries`
+        // string differed, breaking whichever map had loaded first.
+        const google = await loadGoogleMaps()
+        const ok = Boolean(google?.maps?.places?.Autocomplete)
+        mapsScriptLoadedRef.current = ok
+        return ok
       }
 
       const parsePlace = (place) => {

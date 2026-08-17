@@ -4,6 +4,7 @@ import { MapPin, ArrowLeft, Search } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { Loader } from "@googlemaps/js-api-loader"
+import { MAPS_LIBRARIES } from "@food/utils/googleMapsLoader"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -118,7 +119,7 @@ export default function AllZonesMap() {
         const loader = new Loader({
           apiKey: apiKey,
           version: "weekly",
-          libraries: ["places", "drawing", "geometry"]
+          libraries: [...MAPS_LIBRARIES]
         })
 
         const google = await loader.load()

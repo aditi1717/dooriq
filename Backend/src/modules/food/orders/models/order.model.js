@@ -120,7 +120,16 @@ const dispatchSchema = new mongoose.Schema(
         offeredTo: [{
             partnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodDeliveryPartner' },
             at: { type: Date, default: Date.now },
-            action: { type: String, enum: ['offered', 'rejected', 'timeout', 'deassigned'], default: 'offered' }
+            action: { type: String, enum: ['offered', 'rejected', 'timeout', 'deassigned'], default: 'offered' },
+            /**
+             * When the partner responded (or the offer timed out).
+             *
+             * rejectOrderDelivery has always written this field, but it was never
+             * declared here, so Mongoose silently stripped it on every save. The
+             * timeout cooldown needs it: a `timeout` only excludes a rider while it
+             * is recent, whereas an explicit `rejected` excludes them for good.
+             */
+            respondedAt: { type: Date }
         }],
         dispatchingAt: { type: Date }
     },
@@ -352,10 +361,53 @@ orderSchema.pre('save', async function (next) {
 
 export const FoodOrder = mongoose.model('FoodOrder', orderSchema);
 
+/**
+ * One rung of the admin-configured dispatch ladder: how far to search on this
+ * attempt, and how long to wait before escalating to the next one.
+ */
+const dispatchStageSchema = new mongoose.Schema(
+    {
+        radiusKm: { type: Number, required: true, min: 0 },
+        timeoutSeconds: { type: Number, required: true, min: 1 }
+    },
+    { _id: false }
+);
+
+/**
+ * Admin-owned dispatch policy. This is the ONLY place radius/timeout/fan-out
+ * values live; `dispatch-config.service.js` is the only reader.
+ *
+ * Every field is optional with no schema-level default on purpose: an absent or
+ * partial document must fall through to the service-layer defaults rather than
+ * having Mongoose invent a half-configured policy. Validation and clamping live
+ * in the service so a document written by an older build still loads.
+ */
+const dispatchConfigSchema = new mongoose.Schema(
+    {
+        radiusExpansionEnabled: { type: Boolean },
+        stages: { type: [dispatchStageSchema], default: undefined },
+        maxRadiusKm: { type: Number, min: 0 },
+        /** 0 (or absent) means keep hunting indefinitely. */
+        maxAttempts: { type: Number, min: 0 },
+        /** Crisis escalation begins once the attempt number exceeds this. 0 disables it. */
+        crisisAfterStage: { type: Number, min: 0 },
+        finalStageBehavior: { type: String, enum: ['repeat_last', 'stop', 'crisis_only'] },
+        riderFanoutLimit: { type: Number, min: 1 },
+        offerCountdownSeconds: { type: Number, min: 1 },
+        /** 0 = a timeout bars the rider permanently (legacy behaviour). */
+        timeoutCooldownSeconds: { type: Number, min: 0 },
+        staleGpsMinutes: { type: Number, min: 1 },
+        includeStaleGpsRiders: { type: Boolean },
+        unboundedFallbackEnabled: { type: Boolean }
+    },
+    { _id: false }
+);
+
 const settingsSchema = new mongoose.Schema(
     {
         key: { type: String, required: true, unique: true, trim: true },
         dispatchMode: { type: String, enum: ['auto'], default: 'auto' },
+        dispatchConfig: { type: dispatchConfigSchema, default: undefined },
         updatedBy: {
             role: { type: String },
             adminId: { type: mongoose.Schema.Types.ObjectId },

@@ -1178,6 +1178,14 @@ export const useDeliveryNotifications = () => {
       }
     });
 
+    // Explicit "drop this offer now" instruction from the backend. Emitted
+    // alongside order_claimed so the popup disappears the moment another rider
+    // wins, rather than waiting for the local countdown to run out.
+    socketRef.current.on('offer_removed', (data) => {
+      debugLog('Offer withdrawn by server:', data);
+      removeIncomingOrderByKey(data);
+    });
+
     socketRef.current.on('order_reassigned_elsewhere', (data) => {
       debugLog('?? Order reassigned to another partner:', data);
       if (data.orderId === activeOrderRef.current?._id || data.orderId === activeOrderRef.current?.orderId) {

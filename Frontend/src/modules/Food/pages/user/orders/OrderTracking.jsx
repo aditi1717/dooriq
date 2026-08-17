@@ -149,14 +149,18 @@ const DeliveryMap = React.memo(({ orderId, order, isVisible, fallbackCustomerCoo
     avatar: order.deliveryPartner.avatar || null
   } : null, [order?.deliveryPartner]);
 
-  // Firebase and backend write tracking under order.orderId (string) or mongoId; subscribe to all so we receive updates
+  // The rider app and backend now both publish tracking under the Mongo _id
+  // (`orderMongoId`). The other ids stay in the list for backward compatibility
+  // with orders that were already in flight during the rollout, and with any
+  // older rider build still emitting under the human-readable order_id.
   const orderTrackingIdsList = useMemo(() => [
-    order?.orderId,
-    order?.mongoId,
+    order?.orderMongoId,
     order?._id,
+    order?.mongoId,
+    order?.orderId,
     orderId,
     order?.id
-  ].filter(Boolean), [order?.orderId, order?.mongoId, order?._id, orderId, order?.id]);
+  ].filter(Boolean), [order?.orderMongoId, order?.orderId, order?.mongoId, order?._id, orderId, order?.id]);
 
   if (!isVisible || !orderId || !order || !restaurantCoords || !customerCoords) {
     return (

@@ -4,6 +4,7 @@ import { MapPin, ArrowLeft } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { Loader } from "@googlemaps/js-api-loader"
+import { MAPS_LIBRARIES } from "@food/utils/googleMapsLoader"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -88,7 +89,7 @@ const coordinatesLength = useMemo(() => zone?.coordinates?.length || 0, [zone?.c
         const loader = new Loader({
           apiKey: apiKey,
           version: "weekly",
-          libraries: ["geometry"],
+          libraries: [...MAPS_LIBRARIES],
         })
 
         const google = await loader.load()

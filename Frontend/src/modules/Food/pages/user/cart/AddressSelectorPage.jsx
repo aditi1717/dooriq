@@ -13,6 +13,7 @@ import { Loader } from '@googlemaps/js-api-loader'
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { isModuleAuthenticated } from "@food/utils/auth"
+import { MAPS_LIBRARIES } from "@food/utils/googleMapsLoader"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -275,7 +276,7 @@ export default function AddressSelectorPage() {
       const loader = new Loader({
         apiKey: GOOGLE_MAPS_API_KEY,
         version: "weekly",
-        libraries: ["places"],
+        libraries: [...MAPS_LIBRARIES],
       })
       await loader.load()
     }
@@ -475,7 +476,7 @@ export default function AddressSelectorPage() {
         const loader = new Loader({
           apiKey: GOOGLE_MAPS_API_KEY,
           version: "weekly",
-          libraries: ["places"],
+          libraries: [...MAPS_LIBRARIES],
         })
         const google = await loader.load()
         if (!isMounted || !mapContainerRef.current) return
@@ -582,9 +583,11 @@ export default function AddressSelectorPage() {
         }
 
         try {
-          localStorage.setItem("userLocation", JSON.stringify(liveLocationPayload))
+          // persistUserLocation stamps `updatedAt` and notifies every mounted
+          // useLocation() so the navbar, zone lookup and restaurant list follow
+          // the change immediately instead of waiting for a page reload.
+          persistUserLocation(liveLocationPayload)
           localStorage.setItem("deliveryAddressMode", "current")
-          window.dispatchEvent(new CustomEvent("userLocationUpdated", { detail: liveLocationPayload }))
           window.dispatchEvent(new Event("deliveryAddressModeChanged"))
         } catch {}
 
@@ -636,8 +639,7 @@ export default function AddressSelectorPage() {
                 .filter(Boolean)
                 .join(", "),
           }
-          localStorage.setItem("userLocation", JSON.stringify(locationData))
-          window.dispatchEvent(new Event("userLocationChanged"))
+          persistUserLocation(locationData)
         }
 
         localStorage.setItem("deliveryAddressMode", "saved")

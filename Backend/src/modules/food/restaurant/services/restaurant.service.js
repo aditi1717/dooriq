@@ -2148,6 +2148,21 @@ export const listPublicOffers = async (query = {}) => {
     await releaseAbandonedPendingOfferReservations(userId);
     const filter = buildActivePublicOfferFilter(now);
 
+    // USER-TARGETED COUPONS
+    //
+    // A coupon with customerScope 'selected' is only listed for the customers it
+    // names. Anonymous callers never see them. This is presentation only — the
+    // authoritative rejection lives in getCouponIneligibilityReason(), so typing
+    // the code by hand still fails for everyone else.
+    const viewerObjectId = userId && mongoose.Types.ObjectId.isValid(userId)
+        ? new mongoose.Types.ObjectId(userId)
+        : null;
+    filter.$and.push(
+        viewerObjectId
+            ? { $or: [{ customerScope: { $ne: 'selected' } }, { userIds: viewerObjectId }] }
+            : { customerScope: { $ne: 'selected' } },
+    );
+
     // If restaurantId is provided, filter for global (all) or specific restaurant coupons
     if (restaurantId && mongoose.Types.ObjectId.isValid(restaurantId)) {
         filter.$and.push({

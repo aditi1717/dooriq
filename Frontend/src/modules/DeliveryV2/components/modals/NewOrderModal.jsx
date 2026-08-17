@@ -1,10 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, MapPin, FastForward, Clock, Phone, ChefHat, ChevronDown } from 'lucide-react';
 import { ActionSlider } from '@/modules/DeliveryV2/components/ui/ActionSlider';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { getHaversineDistance } from '@/modules/DeliveryV2/utils/geo';
-import { fetchDrivingDistanceKm, formatDistanceLabel } from '@food/utils/roadDistance';
+import { formatDistanceLabel } from '@food/utils/roadDistance';
+
+/**
+ * Straight-line to road-distance correction. Used only for the offer card's
+ * estimate when the server has not yet computed the exact `tripDistanceKm`;
+ * buying a Directions route per rider per offer to render one number was a
+ * significant share of the Maps bill.
+ */
+const ROAD_DISTANCE_FACTOR = 1.3;
 
 /**
  * NewOrderModal - Ported to Original 1:1 Theme with Slider Accept.
@@ -65,17 +73,24 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
     }
   };
 
+  // The countdown length is admin-configured and travels with the offer payload.
+  // Falls back to 30s for offers published by an older backend.
+  const countdownSeconds = (() => {
+    const raw = Number(order?.offerCountdownSeconds);
+    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 30;
+  })();
+
   const [timeLeft, setTimeLeft] = useState(() => {
     const partnerId = getStoredDeliveryPartnerId();
-    if (!partnerId || !order?.dispatch?.offeredTo) return 30;
-    
+    if (!partnerId || !order?.dispatch?.offeredTo) return countdownSeconds;
+
     const offer = order.dispatch.offeredTo.find(
       (o) => String(o.partnerId?._id || o.partnerId) === String(partnerId)
     );
-    if (!offer || !offer.at) return 30;
+    if (!offer || !offer.at) return countdownSeconds;
 
     const elapsed = Math.floor((Date.now() - new Date(offer.at).getTime()) / 1000);
-    return Math.max(0, 30 - elapsed);
+    return Math.max(0, countdownSeconds - elapsed);
   });
 
   useEffect(() => {
@@ -93,31 +108,41 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
     etaMins: null,
   });
 
+  /**
+   * Restaurant and customer points are properties of the ORDER, not of where the
+   * rider currently is. Memoising them on `order` alone keeps the expensive
+   * effect below off the GPS update path.
+   */
+  const orderPoints = useMemo(() => {
+    if (!order) return { restaurantPoint: null, customerPoint: null };
+    return {
+      restaurantPoint:
+        getLocationPoint(order.restaurantLocation) ||
+        getLocationPoint(order.restaurantId, ['restaurant_lat', 'restaurantLat'], ['restaurant_lng', 'restaurantLng']) ||
+        getLocationPoint(order, ['restaurant_lat', 'restaurantLat'], ['restaurant_lng', 'restaurantLng']),
+      customerPoint:
+        getLocationPoint(order.customerLocation) ||
+        getLocationPoint(order.deliveryLocation) ||
+        getLocationPoint(order.deliveryAddress) ||
+        getLocationPoint(order, ['customer_lat', 'customerLat'], ['customer_lng', 'customerLng']),
+    };
+  }, [order]);
+
+  /**
+   * CHEAP effect: "you → restaurant" genuinely depends on the rider's position,
+   * so it re-runs on every GPS tick — but it is a local haversine calculation and
+   * costs nothing. It never calls Google.
+   */
   useEffect(() => {
     if (!order) {
-      setDistanceMeta({
-        pickupDistanceKm: null,
-        deliveryDistanceKm: null,
-        etaMins: null,
-      });
+      setDistanceMeta((prev) => ({ ...prev, pickupDistanceKm: null }));
       return;
     }
 
-    let cancelled = false;
-
-    const restaurantPoint =
-      getLocationPoint(order.restaurantLocation) ||
-      getLocationPoint(order.restaurantId, ['restaurant_lat', 'restaurantLat'], ['restaurant_lng', 'restaurantLng']) ||
-      getLocationPoint(order, ['restaurant_lat', 'restaurantLat'], ['restaurant_lng', 'restaurantLng']);
-
-    const customerPoint =
-      getLocationPoint(order.customerLocation) ||
-      getLocationPoint(order.deliveryLocation) ||
-      getLocationPoint(order.deliveryAddress) ||
-      getLocationPoint(order, ['customer_lat', 'customerLat'], ['customer_lng', 'customerLng']);
-
+    const { restaurantPoint } = orderPoints;
     const riderPoint = getLocationPoint(riderLocation);
     const backendPickupDistance = Number(order.pickupDistanceKm);
+
     const pickupDistanceKm =
       Number.isFinite(backendPickupDistance) && backendPickupDistance >= 0 && backendPickupDistance < 100
         ? backendPickupDistance
@@ -132,6 +157,32 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
               return Number.isFinite(distM) ? Number((distM / 1000).toFixed(2)) : null;
             })()
           : null;
+
+    setDistanceMeta((prev) => ({ ...prev, pickupDistanceKm }));
+  }, [order, orderPoints, riderLocation]);
+
+  /**
+   * "restaurant → customer" is a fixed property of the order, so this must NOT
+   * depend on `riderLocation`.
+   *
+   * It previously did, and it also fell back to a paid Directions request — so
+   * every GPS tick re-ran it, and with up to 15 riders holding the same offer one
+   * order could fire dozens of Directions calls to display a single number that
+   * was identical for all of them. It now uses the server-computed distance when
+   * present and a free local estimate otherwise: zero Google calls either way.
+   */
+  useEffect(() => {
+    if (!order) {
+      setDistanceMeta({
+        pickupDistanceKm: null,
+        deliveryDistanceKm: null,
+        etaMins: null,
+      });
+      return;
+    }
+
+    let cancelled = false;
+    const { restaurantPoint, customerPoint } = orderPoints;
 
     const basePrepTime = Number(order.estimatedDeliveryTime || order.prepTime || 15) || 15;
     const getPreparingTimestamp = (currentOrder) => {
@@ -168,14 +219,15 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
 
     const applyDistanceMeta = (deliveryDistanceKm) => {
       if (cancelled) return;
-      setDistanceMeta({
-        pickupDistanceKm,
+      // Preserve pickupDistanceKm — the cheap effect above owns that field.
+      setDistanceMeta((prev) => ({
+        ...prev,
         deliveryDistanceKm:
           Number.isFinite(Number(deliveryDistanceKm))
             ? Number(Number(deliveryDistanceKm).toFixed(2))
             : null,
         etaMins: etaDisplay,
-      });
+      }));
     };
 
     const resolveDeliveryDistance = async () => {
@@ -194,20 +246,18 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
         return;
       }
 
-      const roadDistanceKm = await fetchDrivingDistanceKm(
-        restaurantPoint || order.restaurantLocation || order.restaurantId,
-        customerPoint || order.deliveryAddress,
-      );
-      if (!cancelled && Number.isFinite(Number(roadDistanceKm))) {
-        applyDistanceMeta(roadDistanceKm);
-        return;
-      }
-
       if (Number.isFinite(Number(backendTripDistance))) {
         applyDistanceMeta(backendTripDistance);
         return;
       }
 
+      // No server-computed distance available. Show a FREE local estimate rather
+      // than buying a Directions route just to render one number on a card.
+      //
+      // Straight-line × 1.3 is the usual road-network correction and is well
+      // inside the accuracy an offer card needs — the rider is deciding whether
+      // to accept, not navigating. The exact figure arrives with the order once
+      // the server has computed `tripDistanceKm`.
       if (restaurantPoint && customerPoint) {
         const distM = getHaversineDistance(
           restaurantPoint.lat,
@@ -215,8 +265,10 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
           customerPoint.lat,
           customerPoint.lng,
         );
-        applyDistanceMeta(Number.isFinite(distM) ? distM / 1000 : null);
-        return;
+        if (Number.isFinite(distM)) {
+          applyDistanceMeta((distM / 1000) * ROAD_DISTANCE_FACTOR);
+          return;
+        }
       }
 
       applyDistanceMeta(null);
@@ -226,7 +278,8 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
     return () => {
       cancelled = true;
     };
-  }, [order, riderLocation]);
+    // Deliberately NOT riderLocation — see the comment above this effect.
+  }, [order, orderPoints]);
 
   const { pickupDistanceKm, deliveryDistanceKm, etaMins } = distanceMeta;
 
@@ -267,13 +320,6 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
     (customerLocation?.lat != null && customerLocation?.lng != null
       ? `Lat ${Number(customerLocation.lat).toFixed(5)}, Lng ${Number(customerLocation.lng).toFixed(5)}`
       : 'Location not available');
-
-  const mapsLink =
-    customerLocation?.lat != null && customerLocation?.lng != null
-      ? `https://www.google.com/maps?q=${encodeURIComponent(
-          `${customerLocation.lat},${customerLocation.lng}`,
-        )}`
-      : null;
 
   return (
     <motion.div

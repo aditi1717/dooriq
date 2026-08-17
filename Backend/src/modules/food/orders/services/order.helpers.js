@@ -35,9 +35,28 @@ export function generateFourDigitDeliveryOtp() {
   return String(Math.floor(1000 + Math.random() * 9000));
 }
 
-export function sanitizeOrderForExternal(orderDoc) {
+/**
+ * @param {object} orderDoc
+ * @param {{ includeCustomerContact?: boolean }} [options]
+ *   Defaults to TRUE because every existing caller is an assigned-rider,
+ *   restaurant or customer context where contact is legitimate. Pass false for
+ *   any surface a non-assigned rider can reach.
+ */
+export function sanitizeOrderForExternal(orderDoc, options = {}) {
+  const includeCustomerContact = options.includeCustomerContact !== false;
   const o = orderDoc?.toObject ? orderDoc.toObject() : { ...(orderDoc || {}) };
   delete o.deliveryOtp;
+
+  if (!includeCustomerContact) {
+    o.deliveryAddress = redactDeliveryAddress(o.deliveryAddress);
+    o.customerName = '';
+    o.customerPhone = '';
+    if (o.userId && typeof o.userId === 'object') {
+      const { name, phone, email, ...safeUser } = o.userId;
+      o.userId = safeUser;
+    }
+  }
+  o.customerContactAvailable = includeCustomerContact;
   const dv = o.deliveryVerification;
   if (dv && dv.dropOtp != null) {
     const d = dv.dropOtp;
@@ -241,7 +260,33 @@ export async function applyAggregateRating(model, entityId, newRating) {
   await doc.save();
 }
 
-export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
+/**
+ * Strip customer-identifying fields from a delivery address while keeping
+ * everything a rider needs to judge and route the trip (street, area, geo).
+ */
+function redactDeliveryAddress(deliveryAddress) {
+  if (!deliveryAddress || typeof deliveryAddress !== 'object') return deliveryAddress;
+  const source = deliveryAddress?.toObject ? deliveryAddress.toObject() : { ...deliveryAddress };
+  delete source.phone;
+  delete source.name;
+  delete source.fullName;
+  return source;
+}
+
+/**
+ * Build the rider-facing order payload.
+ *
+ * @param {object} orderDoc
+ * @param {object|null} restaurantDoc
+ * @param {{ includeCustomerContact?: boolean }} [options]
+ *   `includeCustomerContact` defaults to FALSE — the safe default. A broadcast
+ *   offer goes to many riders who have no relationship with this order yet, so it
+ *   must not carry the customer's name or phone number. Only call sites that emit
+ *   to the single assigned rider (order_ready, admin assignment, the accept
+ *   response) may pass true.
+ */
+export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null, options = {}) {
+  const includeCustomerContact = options.includeCustomerContact === true;
   const order = orderDoc?.toObject ? orderDoc.toObject() : orderDoc || {};
   const restaurant = restaurantDoc || order?.restaurantId || null;
   const restaurantLocation = restaurant?.location || {};
@@ -309,12 +354,25 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
       city: restaurantLocation?.city || restaurant?.city || "",
       state: restaurantLocation?.state || restaurant?.state || "",
     },
-    deliveryAddress: order?.deliveryAddress,
+    deliveryAddress: includeCustomerContact
+      ? order?.deliveryAddress
+      : redactDeliveryAddress(order?.deliveryAddress),
     customerAddress: customerAddressParts.length ? customerAddressParts.join(', ') : "",
-    customerName: order?.customerName || order?.deliveryAddress?.fullName || order?.deliveryAddress?.name || order?.userId?.name || "",
-    customerPhone: order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "",
-    userName: order?.customerName || order?.deliveryAddress?.fullName || order?.deliveryAddress?.name || order?.userId?.name || "",
-    userPhone: order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "",
+    // Contact block: present only for the assigned rider. `customerContactAvailable`
+    // lets the rider app render "contact unlocks on accept" without guessing.
+    customerContactAvailable: includeCustomerContact,
+    customerName: includeCustomerContact
+      ? (order?.customerName || order?.deliveryAddress?.fullName || order?.deliveryAddress?.name || order?.userId?.name || "")
+      : "",
+    customerPhone: includeCustomerContact
+      ? (order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "")
+      : "",
+    userName: includeCustomerContact
+      ? (order?.customerName || order?.deliveryAddress?.fullName || order?.deliveryAddress?.name || order?.userId?.name || "")
+      : "",
+    userPhone: includeCustomerContact
+      ? (order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "")
+      : "",
     note: order?.note || "",
     tripDistanceKm,
     tripDurationMins,

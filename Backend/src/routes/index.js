@@ -19,6 +19,7 @@ import { requireRoles } from '../core/roles/role.middleware.js';
 import { getQueuesController } from '../controllers/admin.controller.js';
 import webhookRoutes from '../core/payments/routes/webhook.routes.js'; // ✅ NEW
 import searchRoutes from '../modules/food/search/routes/search.routes.js';
+import locationRoutes from '../modules/food/location/routes/location.routes.js';
 import { CACHE_PRESETS } from '../middleware/httpCache.js';
 
 const router = express.Router();
@@ -37,6 +38,9 @@ router.use('/v1/food/restaurant', restaurantRoutes);
 // Landing & hero-banners for Food user app (paths start with /food/hero-banners/...)
 router.use('/v1/food', landingRoutes);
 router.use('/v1/food/search', searchRoutes);
+// Server-side geocoding proxy. Keeps the Google key off the browser so the
+// browser key can be referrer-restricted (see geocode.service.js).
+router.use('/v1/food/location', locationRoutes);
 router.get('/v1/food/dining/categories/public', getPublicDiningCategories);
 router.get('/v1/food/dining/restaurants/public', getPublicDiningRestaurants);
 router.use('/v1/uploads', uploadRoutes);

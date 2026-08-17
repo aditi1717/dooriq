@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
-import { Check, ChevronDown, Pencil, Search, X } from "lucide-react"
+import { Check, ChevronDown, Pencil, Search, Users, X } from "lucide-react"
 import { adminAPI } from "@food/api"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -71,6 +71,175 @@ function StyledSelect({ value, options, onChange, ariaLabel }) {
               </button>
             )
           })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+/**
+ * Customer picker for user-specific coupons.
+ *
+ * Searches server-side rather than loading every customer: the restaurant list
+ * is a few hundred rows and can be held in memory, but the customer list is
+ * unbounded. Selected customers are kept in local state so their chips survive
+ * a search that no longer returns them.
+ */
+function CustomerMultiSelect({ value, selectedDetails, onChange, error }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  const [results, setResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const rootRef = useRef(null)
+
+  const selectedIds = useMemo(
+    () => (Array.isArray(value) ? value.map((v) => String(v?._id || v?.id || v)).filter(Boolean) : []),
+    [value],
+  )
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
+
+  // Remember every customer we have seen so chips keep their names when the
+  // search results change underneath them.
+  const knownRef = useRef(new Map())
+  useEffect(() => {
+    for (const customer of selectedDetails || []) {
+      if (customer?.id) knownRef.current.set(String(customer.id), customer)
+    }
+  }, [selectedDetails])
+  useEffect(() => {
+    for (const customer of results) {
+      if (customer?.id) knownRef.current.set(String(customer.id), customer)
+    }
+  }, [results])
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) setIsOpen(false)
+    }
+    document.addEventListener("mousedown", handleOutsideClick)
+    return () => document.removeEventListener("mousedown", handleOutsideClick)
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen) return undefined
+    let cancelled = false
+    setSearching(true)
+    const timer = setTimeout(async () => {
+      try {
+        const response = await adminAPI.getCustomers({ page: 1, limit: 25, search: query.trim() })
+        const payload = response?.data?.data
+        const rows = payload?.customers || payload?.users || payload?.data || (Array.isArray(payload) ? payload : [])
+        if (!cancelled) {
+          setResults(rows.map((row) => ({
+            id: String(row._id || row.id || ""),
+            name: row.name || row.fullName || "Unnamed customer",
+            phone: row.phone || row.mobile || "",
+            email: row.email || "",
+          })).filter((row) => row.id))
+        }
+      } catch {
+        if (!cancelled) setResults([])
+      } finally {
+        if (!cancelled) setSearching(false)
+      }
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [query, isOpen])
+
+  const toggleCustomer = (id) => {
+    const key = String(id)
+    onChange(selectedSet.has(key)
+      ? selectedIds.filter((selectedId) => selectedId !== key)
+      : [...selectedIds, key])
+  }
+
+  const chips = selectedIds.map((id) => knownRef.current.get(id) || { id, name: "Selected customer", phone: "" })
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        aria-expanded={isOpen}
+        className={`flex min-h-11 w-full items-center justify-between rounded-xl border bg-white px-3.5 py-2.5 text-left text-sm shadow-sm outline-none transition ${
+          error ? "border-red-500" : "border-slate-200 hover:border-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        }`}
+      >
+        <span className={selectedIds.length ? "font-medium text-slate-700" : "text-slate-400"}>
+          {selectedIds.length
+            ? `${selectedIds.length} customer${selectedIds.length === 1 ? "" : "s"} selected`
+            : "Search and choose customers"}
+        </span>
+        <ChevronDown className={`h-4 w-4 text-slate-400 transition ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+          <div className="border-b border-slate-100 p-2.5">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search by name, phone or email..."
+                className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                autoFocus
+              />
+            </div>
+          </div>
+          <div className="max-h-64 overflow-y-auto p-1.5">
+            {searching && <p className="px-3 py-6 text-center text-sm text-slate-500">Searching...</p>}
+            {!searching && results.length === 0 && (
+              <p className="px-3 py-6 text-center text-sm text-slate-500">No customers found</p>
+            )}
+            {!searching && results.map((customer) => {
+              const selected = selectedSet.has(customer.id)
+              return (
+                <button
+                  key={customer.id}
+                  type="button"
+                  onClick={() => toggleCustomer(customer.id)}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                    selected ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                    selected ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white"
+                  }`}>
+                    {selected && <Check className="h-3.5 w-3.5" />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{customer.name}</span>
+                    {(customer.phone || customer.email) && (
+                      <span className="block truncate text-xs text-slate-500">
+                        {[customer.phone, customer.email].filter(Boolean).join(" | ")}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {chips.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {chips.map((customer) => (
+            <span key={customer.id} className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+              {customer.name}{customer.phone ? ` (${customer.phone})` : ""}
+              <button
+                type="button"
+                onClick={() => toggleCustomer(customer.id)}
+                aria-label={`Remove ${customer.name}`}
+                className="rounded-full p-0.5 hover:bg-blue-100"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
         </div>
       )}
     </div>
@@ -225,11 +394,18 @@ export default function Coupons() {
   const [updatingCartVisibility, setUpdatingCartVisibility] = useState({})
   const [deletingOffer, setDeletingOffer] = useState({})
   const [errors, setErrors] = useState({})
+  // Names/phones for the customers already attached to the coupon being edited,
+  // so their chips render properly before any search has run.
+  const [editingTargetedUsers, setEditingTargetedUsers] = useState([])
+  const [usageModal, setUsageModal] = useState(null)
+  const [usageLoading, setUsageLoading] = useState(false)
+  const [usageError, setUsageError] = useState("")
   const [formData, setFormData] = useState({
     couponCode: "",
     discountType: "percentage",
     discountValue: "",
     customerScope: "all",
+    userIds: [],
     restaurantScope: "all",
     restaurantIds: [],
     endDate: "",
@@ -305,6 +481,7 @@ export default function Coupons() {
     }
 
     let parsedRestaurantIds = []
+    setEditingTargetedUsers(Array.isArray(offer?.targetedUsers) ? offer.targetedUsers : [])
     if (Array.isArray(offer?.restaurantIds) && offer.restaurantIds.length > 0) {
       parsedRestaurantIds = offer.restaurantIds.map(extractId).filter(Boolean)
     } else if (offer?.restaurantId) {
@@ -324,6 +501,7 @@ export default function Coupons() {
         )
       ),
       customerScope: offer?.customerScope || (offer?.customerGroup === "new" ? "first-time" : "all"),
+      userIds: Array.isArray(offer?.userIds) ? offer.userIds.map(extractId).filter(Boolean) : [],
       restaurantScope: offer?.restaurantScope || (parsedRestaurantIds.length > 0 ? "selected" : "all"),
       restaurantIds: parsedRestaurantIds,
       endDate: offer?.endDate ? new Date(offer.endDate).toISOString().slice(0, 10) : "",
@@ -366,6 +544,9 @@ export default function Coupons() {
       e.adminBearPercentage = "Both shares must total 100%"
       e.restaurantBearPercentage = "Both shares must total 100%"
     }
+    if (f.customerScope === "selected" && (!Array.isArray(f.userIds) || f.userIds.length === 0)) {
+      e.userIds = "Select at least one customer"
+    }
     if (f.restaurantScope === "selected" && (!Array.isArray(f.restaurantIds) || f.restaurantIds.length === 0)) {
       e.restaurantIds = "Select at least one restaurant"
     }
@@ -395,6 +576,9 @@ export default function Coupons() {
           customerScope: value,
           isFirstOrderOnly: value === "first-time",
           perUserLimit: value === "first-time" ? "1" : prev.perUserLimit,
+          // Drop the target list when the coupon stops being user-specific, so a
+          // stale selection cannot be submitted with a different scope.
+          userIds: value === "selected" ? prev.userIds : [],
         }
         validateForm(next)
         return next
@@ -488,6 +672,7 @@ export default function Coupons() {
       discountType: "percentage",
       discountValue: "",
       customerScope: "all",
+      userIds: [],
       restaurantScope: "all",
       restaurantIds: [],
       endDate: "",
@@ -500,6 +685,28 @@ export default function Coupons() {
       adminBearPercentage: "100",
       restaurantBearPercentage: "0",
     })
+  }
+
+  const openUsageReport = async (offer) => {
+    const offerId = offer?.offerId || offer?.id
+    if (!offerId) return
+    setUsageModal({ couponCode: offer.couponCode, users: [], summary: null, coupon: null })
+    setUsageLoading(true)
+    setUsageError("")
+    try {
+      const response = await adminAPI.getOfferUsage(offerId)
+      const data = response?.data?.data || {}
+      setUsageModal({
+        couponCode: data?.coupon?.couponCode || offer.couponCode,
+        users: Array.isArray(data.users) ? data.users : [],
+        summary: data.summary || null,
+        coupon: data.coupon || null,
+      })
+    } catch (err) {
+      setUsageError(err?.response?.data?.message || "Failed to load coupon usage")
+    } finally {
+      setUsageLoading(false)
+    }
   }
 
   const handleSubmitCoupon = async (e) => {
@@ -523,6 +730,10 @@ export default function Coupons() {
       return
     }
 
+    if (formData.customerScope === "selected" && formData.userIds.length === 0) {
+      setSubmitError("Select at least one customer for a user-specific coupon")
+      return
+    }
     if (formData.restaurantScope === "selected" && formData.restaurantIds.length === 0) {
       setSubmitError("Please select at least one restaurant")
       return
@@ -533,6 +744,7 @@ export default function Coupons() {
       discountType: formData.discountType,
       discountValue: parsedDiscountValue,
       customerScope: formData.customerScope,
+      userIds: formData.customerScope === "selected" ? formData.userIds : undefined,
       restaurantScope: formData.restaurantScope,
       restaurantIds: formData.restaurantScope === "selected" ? formData.restaurantIds : undefined,
       endDate: formData.endDate || undefined,
@@ -748,6 +960,7 @@ export default function Coupons() {
                     options={[
                       { value: "all", label: "All Users" },
                       { value: "first-time", label: "First-time Users" },
+                      { value: "selected", label: "Specific Customers" },
                     ]}
                   />
                 </div>
@@ -877,6 +1090,22 @@ export default function Coupons() {
                 {errors.perUserLimit && <p className="mt-1 text-xs text-red-600">{errors.perUserLimit}</p>}
               </div>
 
+                {formData.customerScope === "selected" && (
+                  <div className="md:col-span-2 lg:col-span-3">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Select Customers</label>
+                    <CustomerMultiSelect
+                      value={formData.userIds}
+                      selectedDetails={editingTargetedUsers}
+                      onChange={(userIds) => handleFormChange("userIds", userIds)}
+                      error={errors.userIds}
+                    />
+                    {errors.userIds && <p className="mt-1 text-xs text-red-600">{errors.userIds}</p>}
+                    <p className="mt-1 text-xs text-slate-500">
+                      Only these customers will see and be able to redeem this coupon.
+                    </p>
+                  </div>
+                )}
+
                 {formData.restaurantScope === "selected" && (
                   <div className="md:col-span-2 lg:col-span-3">
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Select Restaurants</label>
@@ -997,9 +1226,15 @@ export default function Coupons() {
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           offer.customerGroup === "new"
                             ? "bg-purple-100 text-purple-700"
-                            : "bg-slate-100 text-slate-700"
+                            : offer.customerGroup === "specific"
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-slate-100 text-slate-700"
                         }`}>
-                          {offer.customerGroup === "new" ? "First-time Users" : "All Users"}
+                          {offer.customerGroup === "new"
+                            ? "First-time Users"
+                            : offer.customerGroup === "specific"
+                              ? `${offer.targetedUserCount || 0} Specific Customer${offer.targetedUserCount === 1 ? "" : "s"}`
+                              : "All Users"}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -1097,6 +1332,15 @@ export default function Coupons() {
                           </button>
                           <button
                             type="button"
+                            onClick={() => openUsageReport(offer)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            title="See which customers used this coupon"
+                          >
+                            <Users className="h-3.5 w-3.5" />
+                            Usage
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDeleteOffer(offer.offerId)}
                             disabled={!!deletingOffer[offer.offerId]}
                             className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 disabled:opacity-60"
@@ -1178,6 +1422,103 @@ export default function Coupons() {
         )}
         </div>
       </div>
+
+      {usageModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setUsageModal(null)}>
+          <div
+            className="max-h-[85vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">
+                  Coupon usage - <span className="font-mono text-blue-600">{usageModal.couponCode}</span>
+                </h3>
+                {usageModal.coupon && (
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {usageModal.coupon.customerScope === "selected"
+                      ? `Targeted at ${usageModal.coupon.targetedUserCount} customer${usageModal.coupon.targetedUserCount === 1 ? "" : "s"}`
+                      : usageModal.coupon.customerScope === "first-time"
+                        ? "Available to first-time customers"
+                        : "Available to all customers"}
+                    {usageModal.coupon.usageLimit ? ` | Limit ${usageModal.coupon.usedCount}/${usageModal.coupon.usageLimit}` : ""}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setUsageModal(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {usageModal.summary && (
+              <div className="grid grid-cols-2 gap-3 border-b border-slate-100 px-6 py-4 sm:grid-cols-4">
+                {[
+                  { label: "Customers", value: usageModal.summary.uniqueUsers },
+                  { label: "Orders", value: usageModal.summary.totalOrders },
+                  { label: "Discount given", value: `Rs. ${Math.round(usageModal.summary.totalDiscount)}` },
+                  { label: "Order value", value: `Rs. ${Math.round(usageModal.summary.totalOrderValue)}` },
+                ].map((stat) => (
+                  <div key={stat.label} className="rounded-xl bg-slate-50 px-3 py-2.5">
+                    <p className="text-xs font-medium text-slate-500">{stat.label}</p>
+                    <p className="mt-0.5 text-lg font-bold tabular-nums text-slate-900">{stat.value}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="max-h-[50vh] overflow-y-auto">
+              {usageLoading && <p className="px-6 py-10 text-center text-sm text-slate-500">Loading usage...</p>}
+              {usageError && <p className="px-6 py-10 text-center text-sm text-red-600">{usageError}</p>}
+              {!usageLoading && !usageError && usageModal.users.length === 0 && (
+                <p className="px-6 py-10 text-center text-sm text-slate-500">No one has used this coupon yet.</p>
+              )}
+              {!usageLoading && !usageError && usageModal.users.length > 0 && (
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-slate-50">
+                    <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <th className="px-6 py-2.5">Customer</th>
+                      <th className="px-6 py-2.5 text-right">Orders</th>
+                      <th className="px-6 py-2.5 text-right">Discount</th>
+                      <th className="px-6 py-2.5">Last used</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {usageModal.users.map((user) => (
+                      <tr key={user.userId} className={user.orderCount === 0 ? "bg-slate-50/60" : ""}>
+                        <td className="px-6 py-3">
+                          <p className="font-medium text-slate-900">{user.name || "Unnamed customer"}</p>
+                          <p className="text-xs text-slate-500">
+                            {[user.phone, user.email].filter(Boolean).join(" | ") || "No contact on file"}
+                          </p>
+                          {user.isTargeted && (
+                            <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                              Targeted
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-3 text-right font-semibold tabular-nums text-slate-900">
+                          {user.orderCount}
+                        </td>
+                        <td className="px-6 py-3 text-right tabular-nums text-slate-700">
+                          Rs. {Math.round(user.totalDiscount)}
+                        </td>
+                        <td className="px-6 py-3 text-slate-600">
+                          {user.lastUsedAt ? new Date(user.lastUsedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Not used yet"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -5,10 +5,32 @@ import { logger } from '../../utils/logger.js';
 import { getBullMQConnection } from '../connection.js';
 import { ORDER_QUEUE } from '../queue.constants.js';
 import { processOrderJob } from '../processors/order.processor.js';
+import { connectRedis } from '../../config/redis.js';
+import { initRedisEmitter } from '../../config/socket.js';
 
 const defaultJobOptions = {
     attempts: 3,
     backoff: { type: 'exponential', delay: 1000 }
+};
+
+/**
+ * Dispatch retries run in this process and emit `new_order`, `order_claimed` and
+ * `order_cancelled` to rider rooms. Without a Redis emitter, `getIO()` finds no
+ * Socket.IO server here and falls back to a no-op stub, so every one of those emits
+ * was silently discarded — retry broadcasts survived on Firebase and FCM alone.
+ * The BullMQ connection is a separate ioredis client and does not cover this.
+ */
+const bootstrapSocketEmitter = async () => {
+    if (!config.redisEnabled) {
+        logger.warn('Order worker: Redis disabled, socket emits from queued jobs will be dropped.');
+        return;
+    }
+    try {
+        await connectRedis();
+        initRedisEmitter();
+    } catch (err) {
+        logger.error(`Order worker: Redis emitter bootstrap failed: ${err.message}`);
+    }
 };
 
 const startOrderWorker = () => {
@@ -33,12 +55,17 @@ const startOrderWorker = () => {
     return worker;
 };
 
-const worker = startOrderWorker();
-if (worker) {
-    const shutdown = async () => {
-        await worker.close();
-        process.exit(0);
-    };
-    process.on('SIGTERM', shutdown);
-    process.on('SIGINT', shutdown);
-}
+const start = async () => {
+    await bootstrapSocketEmitter();
+    const worker = startOrderWorker();
+    if (worker) {
+        const shutdown = async () => {
+            await worker.close();
+            process.exit(0);
+        };
+        process.on('SIGTERM', shutdown);
+        process.on('SIGINT', shutdown);
+    }
+};
+
+start();

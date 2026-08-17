@@ -824,6 +824,10 @@ export const adminAPI = {
     }),
 
   /** Offers & Coupons (admin) */
+  /** GET /admin/offers/:id/usage — customers who redeemed a coupon. */
+  getOfferUsage: (offerId, params = {}) =>
+    apiClient.get(`/food/admin/offers/${offerId}/usage`, { params }),
+
   getAllOffers: (params = {}) =>
     apiClient.get("/food/admin/offers", { params, contextModule: "admin" }),
   createAdminOffer: (body) =>
@@ -2601,6 +2605,27 @@ export const userAPI = {
   },
 };
 export const locationAPI = createStubAPI();
+
+/**
+ * Server-side geocoding proxy.
+ *
+ * Deliberately separate from the stubbed `locationAPI` above: that stub's three
+ * callers already treat a rejection as "fall back to the next provider", and
+ * quietly giving it a real implementation would change those paths. This is a new
+ * surface with one job.
+ *
+ * The browser no longer calls Google's Geocoding web service directly, which is
+ * what forced the Maps key to be unrestricted. Always resolves 200 — check
+ * `data.resolved` to see whether an address was actually found.
+ */
+export const geocodingAPI = {
+  /** GET /food/location/reverse-geocode — cached server-side by ~11 m grid cell. */
+  reverseGeocode: (lat, lng, config = {}) =>
+    apiClient.get("/food/location/reverse-geocode", {
+      params: { lat, lng },
+      ...config,
+    }),
+};
 export const zoneAPI = {
   /** Public: detect active service zone for a lat/lng point. */
   detectZone: (lat, lng) =>

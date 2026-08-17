@@ -5,6 +5,7 @@ const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 import bikeLogo from '../../Food/assets/bikelogo.png'
+import { MAPS_LIBRARIES, MAPS_SCRIPT_ID } from '@food/utils/googleMapsLoader';
 
 
 /**
@@ -110,11 +111,11 @@ export default function GoogleMapsTracking({
     id: 'google-map-script',
     googleMapsApiKey: apiKey || '',
     // Do not load `places` — it pulls Geocoding-related code paths; Directions is in core Maps JS.
-    libraries: [],
+    libraries: MAPS_LIBRARIES,
+    id: MAPS_SCRIPT_ID,
   })
 
   useEffect(() => {
-    console.log('[GoogleMapsTracking] VITE_GOOGLE_MAPS_API_KEY:', apiKey ? `Provided (length: ${apiKey.length})` : 'MISSING');
   }, [apiKey]);
 
   useEffect(() => {

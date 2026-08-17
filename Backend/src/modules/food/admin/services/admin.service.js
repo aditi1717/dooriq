@@ -3709,6 +3709,7 @@ export async function getAllOffers(_query = {}) {
         .sort({ createdAt: -1 })
         .populate({ path: 'restaurantId', select: 'restaurantName' })
         .populate({ path: 'restaurantIds', select: 'restaurantName' })
+        .populate({ path: 'userIds', select: 'name phone email' })
         .lean();
 
     const offers = list.map((o, index) => {
@@ -3736,8 +3737,26 @@ export async function getAllOffers(_query = {}) {
             restaurantIds: Array.isArray(o.restaurantIds) ? o.restaurantIds.map((id) => String(id?._id || id)).filter(Boolean) : [],
             dishName: 'All Items',
             couponCode: o.couponCode,
-            customerGroup: o.customerScope === 'first-time' ? 'new' : 'all',
+            customerGroup:
+                o.customerScope === 'first-time' ? 'new'
+                : o.customerScope === 'selected' ? 'specific'
+                : 'all',
             customerScope: o.customerScope || 'all',
+            // Targeted customers, for the admin UI's chips and edit form.
+            userIds: Array.isArray(o.userIds)
+                ? o.userIds.map((u) => String(u?._id || u)).filter(Boolean)
+                : [],
+            targetedUsers: Array.isArray(o.userIds)
+                ? o.userIds
+                    .filter((u) => u && typeof u === 'object' && u._id)
+                    .map((u) => ({
+                        id: String(u._id),
+                        name: u.name || '',
+                        phone: u.phone || '',
+                        email: u.email || '',
+                    }))
+                : [],
+            targetedUserCount: Array.isArray(o.userIds) ? o.userIds.length : 0,
             discountType: o.discountType,
             discountValue: Number(o.discountValue ?? 0),
             discountPercentage,
@@ -3775,6 +3794,9 @@ export async function createAdminOffer(body) {
         discountType: body.discountType,
         discountValue: body.discountValue,
         customerScope: body.customerScope,
+        // Only stored for a user-targeted coupon; cleared otherwise so a scope
+        // change cannot leave a stale target list behind.
+        userIds: body.customerScope === 'selected' ? (body.userIds || []) : [],
         restaurantScope: body.restaurantScope,
         restaurantId: body.restaurantScope === 'selected' ? body.restaurantId : undefined,
         restaurantIds: body.restaurantScope === 'selected' ? body.restaurantIds : [],
@@ -3838,6 +3860,7 @@ export async function updateAdminOffer(id, body) {
     existing.discountType = body.discountType;
     existing.discountValue = body.discountValue;
     existing.customerScope = body.customerScope;
+    existing.userIds = body.customerScope === 'selected' ? (body.userIds || []) : [];
     existing.restaurantScope = body.restaurantScope;
     existing.restaurantId = body.restaurantScope === 'selected' ? body.restaurantId : undefined;
     existing.restaurantIds = body.restaurantScope === 'selected' ? body.restaurantIds : [];
@@ -5890,3 +5913,148 @@ export function getAdminPermissionCatalog() {
 
 
 
+
+/**
+ * Redemption report for one coupon: which customers used it, how many times,
+ * and what they spent.
+ *
+ * Two sources are combined because they answer different questions:
+ *  - FoodOfferUsage is the counter the eligibility check enforces against
+ *    (authoritative for "how many times has this user used it")
+ *  - FoodOrder carries the actual orders, so it supplies dates and amounts
+ *
+ * Targeted customers who have NOT redeemed are included with zero counts, so an
+ * admin can see uptake on a user-specific campaign rather than only redemptions.
+ */
+export async function getOfferUsageReport(offerId, query = {}) {
+    if (!offerId || !mongoose.Types.ObjectId.isValid(offerId)) {
+        throw new ValidationError('Invalid coupon id');
+    }
+
+    const offer = await FoodOffer.findById(offerId)
+        .populate({ path: 'userIds', select: 'name phone email' })
+        .lean();
+    if (!offer) throw new NotFoundError('Coupon not found');
+
+    const couponCode = String(offer.couponCode || '').trim().toUpperCase();
+
+    const [usageRows, orderRows] = await Promise.all([
+        FoodOfferUsage.find({ offerId: offer._id })
+            .populate({ path: 'userId', select: 'name phone email' })
+            .lean(),
+        couponCode
+            ? FoodOrder.find({
+                'pricing.couponCode': couponCode,
+                orderStatus: { $nin: ['pending_payment', 'cancelled_by_user', 'cancelled_by_restaurant', 'cancelled_by_admin'] },
+            })
+                .select('userId order_id createdAt orderStatus pricing.total pricing.discount')
+                .populate({ path: 'userId', select: 'name phone email' })
+                .sort({ createdAt: -1 })
+                .lean()
+            : [],
+    ]);
+
+    /** @type {Map<string, object>} */
+    const byUser = new Map();
+    const ensureRow = (user, id) => {
+        const key = String(id);
+        if (!byUser.has(key)) {
+            byUser.set(key, {
+                userId: key,
+                name: user?.name || '',
+                phone: user?.phone || '',
+                email: user?.email || '',
+                usageCount: 0,
+                orderCount: 0,
+                totalDiscount: 0,
+                totalOrderValue: 0,
+                lastUsedAt: null,
+                isTargeted: false,
+                orders: [],
+            });
+        }
+        const row = byUser.get(key);
+        if (user?.name && !row.name) row.name = user.name;
+        if (user?.phone && !row.phone) row.phone = user.phone;
+        if (user?.email && !row.email) row.email = user.email;
+        return row;
+    };
+
+    // Targeted customers first, so zero-redemption targets still appear.
+    for (const user of offer.userIds || []) {
+        const id = user?._id || user;
+        if (!id) continue;
+        ensureRow(user, id).isTargeted = true;
+    }
+
+    for (const usage of usageRows) {
+        const id = usage.userId?._id || usage.userId;
+        if (!id) continue;
+        const row = ensureRow(usage.userId, id);
+        row.usageCount = Number(usage.count || 0);
+        row.lastUsedAt = usage.lastUsedAt || row.lastUsedAt;
+    }
+
+    for (const order of orderRows) {
+        const id = order.userId?._id || order.userId;
+        if (!id) continue;
+        const row = ensureRow(order.userId, id);
+        row.orderCount += 1;
+        row.totalDiscount += Number(order.pricing?.discount || 0);
+        row.totalOrderValue += Number(order.pricing?.total || 0);
+        if (!row.lastUsedAt || new Date(order.createdAt) > new Date(row.lastUsedAt)) {
+            row.lastUsedAt = order.createdAt;
+        }
+        if (row.orders.length < 20) {
+            row.orders.push({
+                orderId: String(order._id),
+                orderCode: order.order_id || String(order._id),
+                createdAt: order.createdAt,
+                orderStatus: order.orderStatus,
+                total: Number(order.pricing?.total || 0),
+                discount: Number(order.pricing?.discount || 0),
+            });
+        }
+    }
+
+    let rows = [...byUser.values()];
+
+    const search = String(query.search || '').trim().toLowerCase();
+    if (search) {
+        rows = rows.filter((r) =>
+            r.name.toLowerCase().includes(search) ||
+            r.phone.toLowerCase().includes(search) ||
+            r.email.toLowerCase().includes(search));
+    }
+    if (String(query.redeemedOnly) === 'true') {
+        rows = rows.filter((r) => r.orderCount > 0 || r.usageCount > 0);
+    }
+
+    // Most active redeemers first; never-redeemed targets sink to the bottom.
+    rows.sort((a, b) =>
+        (b.orderCount - a.orderCount) ||
+        (b.usageCount - a.usageCount) ||
+        String(a.name).localeCompare(String(b.name)));
+
+    const redeemedRows = rows.filter((r) => r.orderCount > 0 || r.usageCount > 0);
+
+    return {
+        coupon: {
+            id: String(offer._id),
+            couponCode: offer.couponCode,
+            customerScope: offer.customerScope || 'all',
+            status: offer.status,
+            usedCount: Number(offer.usedCount || 0),
+            usageLimit: offer.usageLimit ?? null,
+            perUserLimit: offer.perUserLimit ?? null,
+            targetedUserCount: Array.isArray(offer.userIds) ? offer.userIds.length : 0,
+        },
+        summary: {
+            uniqueUsers: redeemedRows.length,
+            totalOrders: redeemedRows.reduce((sum, r) => sum + r.orderCount, 0),
+            totalDiscount: redeemedRows.reduce((sum, r) => sum + r.totalDiscount, 0),
+            totalOrderValue: redeemedRows.reduce((sum, r) => sum + r.totalOrderValue, 0),
+        },
+        users: rows,
+    };
+}

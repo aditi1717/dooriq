@@ -10,6 +10,7 @@ import {
 } from '@react-google-maps/api';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { zoneAPI } from '@food/api';
+import { MAPS_LIBRARIES, MAPS_SCRIPT_ID } from '@food/utils/googleMapsLoader';
 
 const mapContainerStyle = {
   width: '100%',
@@ -40,16 +41,27 @@ const mapOptions = {
 };
 const LIBRARIES = ['places', 'geometry'];
 
-export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineReceived, zoom = 12 }) => {
+/**
+ * Fallback map centre used only before the first GPS fix arrives.
+ * Exported so it is a named default rather than a magic literal in the JSX.
+ */
+export const DEFAULT_MAP_CENTER = { lat: 22.7196, lng: 75.8577 };
+
+/** Rider is considered off-route beyond this distance from the drawn path. */
+const OFF_ROUTE_METERS = 50;
+/** Consecutive off-route fixes before forcing a reroute (debounces GPS jitter). */
+const OFF_ROUTE_STRIKES = 2;
+
+export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineReceived, zoom = 12, followMode = true, onFollowModeChange }) => {
   const { riderLocation, activeOrder, tripStatus } = useDeliveryStore();
   
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries: LIBRARIES
+    libraries: MAPS_LIBRARIES,
+    id: MAPS_SCRIPT_ID,
   });
 
   useEffect(() => {
-    console.log('[LiveMap] VITE_GOOGLE_MAPS_API_KEY:', import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? `Provided (length: ${import.meta.env.VITE_GOOGLE_MAPS_API_KEY.length})` : 'MISSING');
   }, []);
 
   useEffect(() => {
@@ -108,11 +120,64 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
     return (Number.isFinite(lat) && Number.isFinite(lng)) ? { lat, lng, heading: parseFloat(riderLocation.heading || 0) } : null;
   }, [riderLocation]);
 
+  // Seed the initial view exactly once. Recomputing this would re-mount the map's
+  // options and yank the rider's view back to the first GPS fix.
+  const initialMapOptions = useRef(null);
+  if (!initialMapOptions.current) {
+    initialMapOptions.current = {
+      ...mapOptions,
+      center: parsedRiderLocation || DEFAULT_MAP_CENTER,
+      zoom,
+    };
+  }
+
+  // Single source of truth for zoom: the `zoom` prop drives setZoom, and the map
+  // is never handed a competing `zoom` prop.
   useEffect(() => { if (map) map.setZoom(zoom); }, [zoom, map]);
+
+  // OFF-ROUTE DETECTION
+  //
+  // Rerouting used to be purely a wall-clock throttle, so a rider who turned off
+  // the route right after a refresh followed a dead line for up to a minute. If
+  // the rider sits more than OFF_ROUTE_METERS from the drawn path for two
+  // consecutive fixes, force a refresh regardless of the throttle. Two strikes
+  // debounces ordinary GPS jitter.
+  const offRouteStrikesRef = useRef(0);
+  const [forceRerouteAt, setForceRerouteAt] = useState(0);
+
+  useEffect(() => {
+    if (!directions || !parsedRiderLocation || !window.google?.maps?.geometry?.poly) {
+      offRouteStrikesRef.current = 0;
+      return;
+    }
+    try {
+      const path = directions.routes[0]?.overview_path;
+      if (!path?.length) return;
+      const here = new window.google.maps.LatLng(parsedRiderLocation.lat, parsedRiderLocation.lng);
+      const line = new window.google.maps.Polyline({ path });
+      // isLocationOnEdge tolerance is in degrees; convert metres at the equator.
+      const tolerance = OFF_ROUTE_METERS / 111320;
+      const onRoute = window.google.maps.geometry.poly.isLocationOnEdge(here, line, tolerance);
+
+      if (onRoute) {
+        offRouteStrikesRef.current = 0;
+        return;
+      }
+      offRouteStrikesRef.current += 1;
+      if (offRouteStrikesRef.current >= OFF_ROUTE_STRIKES) {
+        offRouteStrikesRef.current = 0;
+        setForceRerouteAt(Date.now());
+      }
+    } catch (_) {
+      // Geometry failures must never break the map.
+    }
+  }, [directions, parsedRiderLocation]);
 
   const shouldUpdateRoute = useMemo(() => {
     const now = Date.now();
     if (!directions) return true;
+    // A confirmed deviation bypasses the throttle entirely.
+    if (forceRerouteAt > lastDirectionsAt) return true;
     let throttleMs = 20000;
     if (parsedRiderLocation && targetLocation && window.google) {
       try {
@@ -125,7 +190,7 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
       } catch (e) {}
     }
     return (now - lastDirectionsAt) >= throttleMs;
-  }, [lastDirectionsAt, directions, parsedRiderLocation, targetLocation]);
+  }, [lastDirectionsAt, directions, parsedRiderLocation, targetLocation, forceRerouteAt]);
 
   useEffect(() => {
     if (directions && onPathReceived) {
@@ -140,7 +205,17 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
     }
   }, [directions, onPathReceived]);
 
+  // Directions requests outlive the component if the rider navigates away
+  // mid-flight. Without this guard the callback calls setState on an unmounted
+  // component (React warning, and a wasted billed request either way).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const directionsCallback = useCallback((result, status) => {
+    if (!mountedRef.current) return;
     if (status === 'OK' && result) {
       setDirections(result);
       setLastDirectionsAt(Date.now());
@@ -174,24 +249,40 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
     return activeOrder.customerImage || activeOrder.user?.logo || activeOrder.user?.profileImage || 'https://cdn-icons-png.flaticon.com/512/1275/1275302.png';
   }, [activeOrder]);
 
+  // FOLLOW MODE
+  //
+  // `center` used to be a controlled prop recomputed on every render, fighting
+  // this panTo effect. The result was that dragging the map snapped straight back
+  // on the next GPS tick, so a rider could never look ahead at the route or hunt
+  // for a building entrance. The map is now uncontrolled (defaultCenter set once)
+  // and this effect only follows while follow mode is armed. Dragging disarms it;
+  // the Center-map button re-arms it.
   const lastCenteredPosRef = useRef(null);
   useEffect(() => {
-    if (map && parsedRiderLocation) {
-      if (!lastCenteredPosRef.current) {
-        map.panTo(parsedRiderLocation);
-        lastCenteredPosRef.current = parsedRiderLocation;
-        return;
-      }
-      const dist = window.google.maps.geometry.spherical.computeDistanceBetween(
-        new window.google.maps.LatLng(parsedRiderLocation.lat, parsedRiderLocation.lng),
-        new window.google.maps.LatLng(lastCenteredPosRef.current.lat, lastCenteredPosRef.current.lng)
-      );
-      if (dist > 30) {
-        map.panTo(parsedRiderLocation);
-        lastCenteredPosRef.current = parsedRiderLocation;
-      }
+    if (!map || !parsedRiderLocation || !followMode) return;
+
+    if (!lastCenteredPosRef.current) {
+      map.panTo(parsedRiderLocation);
+      lastCenteredPosRef.current = parsedRiderLocation;
+      return;
     }
-  }, [map, parsedRiderLocation]);
+    const dist = window.google.maps.geometry.spherical.computeDistanceBetween(
+      new window.google.maps.LatLng(parsedRiderLocation.lat, parsedRiderLocation.lng),
+      new window.google.maps.LatLng(lastCenteredPosRef.current.lat, lastCenteredPosRef.current.lng)
+    );
+    if (dist > 30) {
+      map.panTo(parsedRiderLocation);
+      lastCenteredPosRef.current = parsedRiderLocation;
+    }
+  }, [map, parsedRiderLocation, followMode]);
+
+  // A user-initiated drag disarms follow mode. `dragstart` only fires for real
+  // gestures, not for programmatic panTo, so this cannot disarm itself.
+  useEffect(() => {
+    if (!map || !window.google) return;
+    const listener = map.addListener('dragstart', () => onFollowModeChange?.(false));
+    return () => listener?.remove?.();
+  }, [map, onFollowModeChange]);
 
   const remainingPath = useMemo(() => {
     if (!directions || !parsedRiderLocation) return [];
@@ -217,13 +308,17 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
 
   return (
     <div className="absolute inset-0 z-0 text-gray-900 overflow-hidden flex flex-col">
+      {/*
+        Deliberately UNCONTROLLED. Passing `center`/`zoom` as props makes the map
+        controlled, which fought both the panTo effect and the zoom effect and
+        snapped the rider's view back on every render. The initial view is seeded
+        once through options; the effects own it from then on.
+      */}
       <GoogleMap
         onLoad={handleMapLoad}
         mapContainerStyle={mapContainerStyle}
-        center={parsedRiderLocation || { lat: 22.7196, lng: 75.8577 }}
-        zoom={14}
+        options={initialMapOptions.current}
         onClick={(e) => onMapClick?.(e.latLng.lat(), e.latLng.lng())}
-        options={mapOptions}
       >
         {directionsServiceOptions && shouldUpdateRoute && (
           <DirectionsService options={directionsServiceOptions} callback={directionsCallback} />

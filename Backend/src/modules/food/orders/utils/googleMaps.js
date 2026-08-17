@@ -1,5 +1,24 @@
 import { config } from '../../../../config/env.js';
 import { logger } from '../../../../utils/logger.js';
+import { createTtlCache } from '../../../../utils/cache.js';
+
+/**
+ * Road distance/duration between two fixed points does not change minute to
+ * minute, but the same pair was previously re-requested by every dispatch
+ * attempt and every re-broadcast of the same order.
+ *
+ * Keyed on both endpoints rounded to ~11 m. In-flight requests are shared by
+ * the cache's single-flight behaviour, so concurrent dispatches for the same
+ * restaurant→customer pair produce one billed request instead of N.
+ *
+ * 10 minutes: long enough to cover an order's whole dispatch lifecycle, short
+ * enough that a route is never wildly stale.
+ */
+const routeCache = createTtlCache({ ttlMs: 10 * 60 * 1000, maxEntries: 1000, name: 'driving-route' });
+
+const routeKey = (origin, destination) =>
+    `${Number(origin.lat).toFixed(4)},${Number(origin.lng).toFixed(4)}` +
+    `|${Number(destination.lat).toFixed(4)},${Number(destination.lng).toFixed(4)}`;
 
 /**
  * Fetches driving route metrics from Google Directions API.
@@ -33,6 +52,14 @@ export async function fetchDrivingRoute(origin, destination) {
         return empty;
     }
 
+    // Served from cache when the same pair was resolved recently.
+    return routeCache.get(routeKey(origin, destination), () =>
+        requestDrivingRoute(origin, destination, empty),
+    );
+}
+
+async function requestDrivingRoute(origin, destination, empty) {
+    const apiKey = config.googleMapsApiKey;
     try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);

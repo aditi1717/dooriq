@@ -4,7 +4,7 @@ import { Search, Download, ChevronDown, Eye, Settings, ArrowUpDown, Loader2, X, 
 import { adminAPI, restaurantAPI, uploadAPI, zoneAPI } from "@food/api"
 import { clearModuleAuth } from "@food/utils/auth"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
-import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
+import { loadGoogleMaps } from "@food/utils/googleMapsLoader"
 
 // Import icons from Dashboard-icons
 import locationIcon from "@food/assets/Dashboard-icons/image1.png"
@@ -502,62 +502,17 @@ export default function RestaurantsList() {
   }
 
   const loadGoogleMapsScript = async () => {
-    if (window.google?.maps?.places?.Autocomplete) return true
-
-    const apiKey = await getGoogleMapsApiKey()
-    if (!apiKey) {
-      setLocationEditError("Google Maps API key is missing in Admin Environment Variables.")
+    // Shared loader. The previous version removed any existing maps script whose
+    // URL lacked "libraries=places", which could tear the SDK out from under
+    // another component mid-session.
+    const google = await loadGoogleMaps()
+    if (!google?.maps?.places?.Autocomplete) {
+      setLocationEditError(
+        "Google Maps failed to load. Check: Maps JavaScript API enabled, billing enabled, and HTTP referrer restrictions allow this domain."
+      )
       return false
     }
-
-    // Surface auth/key/billing/referrer issues instead of showing a blank map.
-    // Google invokes this global when the JS API loads but auth fails.
-    window.gm_authFailure = () => {
-      setLocationEditError(
-        "Google Maps authentication failed. Check: Maps JavaScript API enabled, billing enabled, and HTTP referrer restrictions allow this domain."
-      )
-    }
-
-    if (window.google?.maps && !window.google?.maps?.places?.Autocomplete) {
-      if (typeof window.google.maps.importLibrary === "function") {
-        try {
-          await window.google.maps.importLibrary("places")
-          if (window.google?.maps?.places?.Autocomplete) return true
-        } catch {}
-      }
-    }
-
-    const scripts = Array.from(document.getElementsByTagName("script"))
-    const existingScript =
-      document.getElementById("admin-google-maps-script") ||
-      scripts.find((s) => s.src?.includes("maps.googleapis.com/maps/api/js"))
-
-    if (existingScript && !existingScript.src.includes("libraries=places")) {
-      existingScript.remove()
-    } else if (existingScript) {
-      await new Promise((resolve, reject) => {
-        if (window.google?.maps?.places?.Autocomplete) {
-          resolve()
-          return
-        }
-        existingScript.addEventListener("load", resolve, { once: true })
-        existingScript.addEventListener("error", reject, { once: true })
-      })
-      return !!window.google?.maps?.places?.Autocomplete
-    }
-
-    await new Promise((resolve, reject) => {
-      const script = document.createElement("script")
-      script.id = "admin-google-maps-script"
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`
-      script.async = true
-      script.defer = true
-      script.onload = resolve
-      script.onerror = reject
-      document.head.appendChild(script)
-    })
-
-    return !!window.google?.maps?.places?.Autocomplete
+    return true
   }
 
   const initPlacesAutocomplete = async () => {

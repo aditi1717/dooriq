@@ -4,7 +4,7 @@ import { adminAPI, uploadAPI } from "@food/api"
 import { Input } from "@food/components/ui/input"
 import { Button } from "@food/components/ui/button"
 import { Label } from "@food/components/ui/label"
-import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
+import { loadGoogleMaps } from "@food/utils/googleMapsLoader"
 import { ArrowLeft, Loader2, Upload, Image as ImageIcon } from "lucide-react"
 
 const debugError = (..._args) => {}
@@ -115,37 +115,10 @@ const normalizeDetailsFormFromRestaurant = (restaurant) => {
 }
 
 async function loadGooglePlaces() {
-  if (window.google?.maps?.places?.Autocomplete) return true
-  const apiKey = await getGoogleMapsApiKey()
-  if (!apiKey) return false
-
-  window.gm_authFailure = () => {}
-
-  const existing = document.getElementById("admin-google-maps-script")
-  if (existing) {
-    await new Promise((resolve, reject) => {
-      if (window.google?.maps?.places?.Autocomplete) {
-        resolve()
-        return
-      }
-      existing.addEventListener("load", resolve, { once: true })
-      existing.addEventListener("error", reject, { once: true })
-    })
-    return !!window.google?.maps?.places?.Autocomplete
-  }
-
-  await new Promise((resolve, reject) => {
-    const script = document.createElement("script")
-    script.id = "admin-google-maps-script"
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`
-    script.async = true
-    script.defer = true
-    script.onload = resolve
-    script.onerror = reject
-    document.head.appendChild(script)
-  })
-
-  return !!window.google?.maps?.places?.Autocomplete
+  // Uses the shared loader so this page cannot race with, or tear down, the
+  // script another component already loaded.
+  const google = await loadGoogleMaps()
+  return Boolean(google?.maps?.places?.Autocomplete)
 }
 
 export default function EditRestaurant() {

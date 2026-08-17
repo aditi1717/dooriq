@@ -5,10 +5,30 @@ import { logger } from '../../utils/logger.js';
 import { getBullMQConnection } from '../connection.js';
 import { TRACKING_QUEUE } from '../queue.constants.js';
 import { processTrackingJob } from '../processors/tracking.processor.js';
+import { connectRedis } from '../../config/redis.js';
 
 const defaultJobOptions = {
     attempts: 3,
     backoff: { type: 'exponential', delay: 1000 }
+};
+
+/**
+ * The hot-to-cold sync reads rider positions back out of the `rider:locations:hot` and
+ * `order:locations:hot` hashes via `getRedisClient()`. That client is only created by
+ * `connectRedis()`, which this process never called — so every sync job returned
+ * immediately and no location ever reached MongoDB. The BullMQ ioredis connection is a
+ * different client and is not what the processor reads.
+ */
+const bootstrapRedisClient = async () => {
+    if (!config.redisEnabled) {
+        logger.warn('Tracking worker: Redis disabled, hot location sync will no-op.');
+        return;
+    }
+    try {
+        await connectRedis();
+    } catch (err) {
+        logger.error(`Tracking worker: Redis client bootstrap failed: ${err.message}`);
+    }
 };
 
 const startTrackingWorker = () => {
@@ -37,13 +57,18 @@ const startTrackingWorker = () => {
     return worker;
 };
 
-const worker = startTrackingWorker();
-if (worker) {
-    const shutdown = async () => {
-        logger.info('Graceful shutdown: closing tracking worker');
-        await worker.close();
-        process.exit(0);
-    };
-    process.on('SIGTERM', shutdown);
-    process.on('SIGINT', shutdown);
-}
+const start = async () => {
+    await bootstrapRedisClient();
+    const worker = startTrackingWorker();
+    if (worker) {
+        const shutdown = async () => {
+            logger.info('Graceful shutdown: closing tracking worker');
+            await worker.close();
+            process.exit(0);
+        };
+        process.on('SIGTERM', shutdown);
+        process.on('SIGINT', shutdown);
+    }
+};
+
+start();

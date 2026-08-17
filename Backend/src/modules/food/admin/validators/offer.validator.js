@@ -6,7 +6,8 @@ const createOfferSchema = z.object({
     couponCode: z.string().min(1, 'Coupon code is required'),
     discountType: z.enum(['percentage', 'flat-price']).default('percentage'),
     discountValue: z.number().positive('Discount value must be greater than 0'),
-    customerScope: z.enum(['all', 'first-time']).default('all'),
+    customerScope: z.enum(['all', 'first-time', 'selected']).default('all'),
+    userIds: z.array(z.string()).optional(),
     restaurantScope: z.enum(['all', 'selected']).default('all'),
     restaurantId: z.string().optional(),
     restaurantIds: z.array(z.string()).optional(),
@@ -33,6 +34,9 @@ export const validateCreateOfferDto = (body) => {
         restaurantIds: Array.isArray(body?.restaurantIds)
             ? body.restaurantIds.map((id) => String(id)).filter(Boolean)
             : undefined,
+        userIds: Array.isArray(body?.userIds)
+            ? body.userIds.map((id) => String(id)).filter(Boolean)
+            : undefined,
         endDate: body?.endDate ? String(body.endDate) : undefined,
         startDate: body?.startDate ? String(body.startDate) : undefined,
         minOrderValue: body?.minOrderValue !== undefined ? Number(body.minOrderValue) : undefined,
@@ -56,6 +60,21 @@ export const validateCreateOfferDto = (body) => {
         ];
         if (restaurantIds.length === 0 || restaurantIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
             throw new ValidationError('At least one valid restaurant is required for selected restaurant scope');
+        }
+    }
+
+    // A user-targeted coupon is meaningless without users, and silently creating
+    // one that nobody can redeem is worse than rejecting it.
+    if (result.data.customerScope === 'selected') {
+        const userIds = [...new Set(result.data.userIds || [])];
+        if (userIds.length === 0) {
+            throw new ValidationError('Select at least one customer for a user-specific coupon');
+        }
+        if (userIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+            throw new ValidationError('One or more selected customers are invalid');
+        }
+        if (userIds.length > 5000) {
+            throw new ValidationError('A coupon can target at most 5000 customers');
         }
     }
 
@@ -101,6 +120,9 @@ export const validateCreateOfferDto = (body) => {
         discountType: result.data.discountType,
         discountValue: result.data.discountValue,
         customerScope: result.data.customerScope,
+        userIds: result.data.customerScope === 'selected'
+            ? [...new Set(result.data.userIds || [])]
+            : [],
         restaurantScope: result.data.restaurantScope,
         restaurantId: restaurantIds[0],
         restaurantIds,

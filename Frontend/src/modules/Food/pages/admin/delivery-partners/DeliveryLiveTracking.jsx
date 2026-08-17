@@ -4,6 +4,7 @@ import { Loader } from "@googlemaps/js-api-loader"
 import { adminAPI } from "@food/api"
 import { subscribeAllDeliveryLocations } from "@food/realtimeTracking"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
+import { MAPS_LIBRARIES } from "@food/utils/googleMapsLoader"
 
 const debugError = () => {}
 
@@ -204,7 +205,7 @@ export default function DeliveryLiveTracking() {
           : await new Loader({
               apiKey,
               version: "weekly",
-              libraries: ["places"],
+              libraries: [...MAPS_LIBRARIES],
             }).load()
 
         if (cancelled || !mapContainerRef.current) return
@@ -373,25 +374,63 @@ export default function DeliveryLiveTracking() {
     infoWindow.open(map, marker)
   }, [selectedDeliveryId, selectedDeliveryman])
 
+  /**
+   * Address of the selected driver.
+   *
+   * This effect used to depend on the whole `selectedDeliveryman` object, which is
+   * memoised from `deliveryRows` and therefore rebuilt every time the Firebase
+   * location subscription fires — roughly every 2 seconds per moving driver. That
+   * meant one selected driver issued ~1,800 reverse-geocode requests an hour, for
+   * an address that had barely changed.
+   *
+   * Now it keys on the driver id plus their position rounded to ~11 m, so the
+   * lookup only re-runs when the driver has actually moved a meaningful distance,
+   * and repeated visits to the same cell are served from a local cache.
+   */
+  /** Bound on the per-session address cache. ~500 entries ≈ tens of KB. */
+  const GEOCODE_CACHE_MAX = 500
+  const geocodeCacheRef = useRef(new Map())
+  const selectedLat = selectedDeliveryman?.location?.lat
+  const selectedLng = selectedDeliveryman?.location?.lng
+  const selectedIsOnline = Boolean(selectedDeliveryman?.isOnline)
+  // 4dp ≈ 11 m. Rounding is what collapses a stream of ticks into one lookup.
+  const coarseKey =
+    Number.isFinite(selectedLat) && Number.isFinite(selectedLng)
+      ? `${selectedLat.toFixed(4)},${selectedLng.toFixed(4)}`
+      : null
+
   useEffect(() => {
     let cancelled = false
+
+    if (!selectedIsOnline || !coarseKey || !geocoderRef.current) {
+      setSelectedAddress("")
+      return
+    }
+
+    const cached = geocodeCacheRef.current.get(coarseKey)
+    if (cached) {
+      setSelectedAddress(cached)
+      return
+    }
+
     setSelectedAddress("")
 
-    if (!selectedDeliveryman?.isOnline || !selectedDeliveryman.location || !geocoderRef.current) return
-
     const loadAddress = async () => {
-      const lat = selectedDeliveryman.location.lat.toFixed(6)
-      const lng = selectedDeliveryman.location.lng.toFixed(6)
+      const lat = Number(selectedLat).toFixed(6)
+      const lng = Number(selectedLng).toFixed(6)
       try {
         const results = await geocoderRef.current.geocode({
-          location: {
-            lat: Number(lat),
-            lng: Number(lng),
-          },
+          location: { lat: Number(lat), lng: Number(lng) },
         })
-        if (!cancelled) {
-          setSelectedAddress(results?.results?.[0]?.formatted_address || `${lat}, ${lng}`)
+        const formatted = results?.results?.[0]?.formatted_address || `${lat}, ${lng}`
+        // Bounded: a dashboard left open all day across many moving drivers would
+        // otherwise grow this Map without limit. Oldest entry is evicted first
+        // (Map preserves insertion order).
+        if (geocodeCacheRef.current.size >= GEOCODE_CACHE_MAX) {
+          geocodeCacheRef.current.delete(geocodeCacheRef.current.keys().next().value)
         }
+        geocodeCacheRef.current.set(coarseKey, formatted)
+        if (!cancelled) setSelectedAddress(formatted)
       } catch (error) {
         debugError("Google reverse geocode failed:", error)
         if (!cancelled) setSelectedAddress(`${lat}, ${lng}`)
@@ -403,7 +442,7 @@ export default function DeliveryLiveTracking() {
     return () => {
       cancelled = true
     }
-  }, [selectedDeliveryman])
+  }, [selectedDeliveryId, coarseKey, selectedIsOnline])
 
   return (
     <div className="min-h-screen bg-slate-50 p-3 lg:p-4">
