@@ -470,6 +470,17 @@ export const adminAPI = {
     apiClient.delete(`/food/admin/delivery/${String(id)}`, {
       contextModule: "admin",
     }),
+  /** GET /food/admin/support-tickets - list all support tickets for admin */
+  getSupportTicketsAdmin: (params = {}) =>
+    apiClient.get("/food/admin/support-tickets", {
+      params,
+      contextModule: "admin",
+    }),
+  /** PATCH /food/admin/support-tickets/:id - update support ticket status/reply */
+  updateSupportTicketAdmin: (id, body = {}) =>
+    apiClient.patch(`/food/admin/support-tickets/${String(id)}`, body ?? {}, {
+      contextModule: "admin",
+    }),
   /** GET /food/admin/delivery/support-tickets - list all delivery support tickets (query: status, priority, search, page, limit). */
   getDeliverySupportTickets: (params) =>
     apiClient.get("/food/admin/delivery/support-tickets", {

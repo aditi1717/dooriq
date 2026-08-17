@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { adminAPI } from "@food/api";
+import { adminAPI, supportAPI } from "@food/api";
 
 const STORAGE_KEY = "admin_notifications_dismissed_v1";
 const UPDATE_EVENT = "adminNotificationsUpdated";
@@ -281,7 +281,7 @@ export default function useAdminNotifications(options = {}) {
         adminAPI.getPendingRestaurants(),
         adminAPI.getDeliveryPartnerJoinRequests({ page: 1, limit: 50 }),
         adminAPI.getPendingFoodApprovals({ page: 1, limit: 50 }),
-        adminAPI.getSupportTicketsAdmin({ page: 1, limit: 50, source: "all" }),
+        supportAPI.getSupportTicketsAdmin({ page: 1, limit: 50, source: "all" }),
         adminAPI.getDeliverySupportTickets({ page: 1, limit: 50 }),
         adminAPI.getExpiredFssaiNotifications(),
         adminAPI.getWithdrawals({ page: 1, limit: 50, status: "pending" }),
