@@ -227,9 +227,9 @@ export default function DispatchSettings() {
             {form.stages.map((stage, index) => (
               <div
                 key={index}
-                className="flex items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3"
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3"
               >
-                <span className="mb-2 w-16 shrink-0 text-xs font-bold text-slate-500">Stage {index + 1}</span>
+                <span className="w-16 shrink-0 text-xs font-bold text-slate-500">Stage {index + 1}</span>
                 <div className="flex-1">
                   <label className={labelClass}>Radius (km)</label>
                   <input
@@ -242,24 +242,12 @@ export default function DispatchSettings() {
                     className={numberInput}
                   />
                 </div>
-                <div className="flex-1">
-                  <label className={labelClass}>Wait before widening (seconds)</label>
-                  <input
-                    type="number"
-                    min={limits?.minTimeoutSeconds ?? 5}
-                    max={limits?.maxTimeoutSeconds ?? 3600}
-                    step="5"
-                    value={stage.timeoutSeconds}
-                    onChange={(e) => setStage(index, "timeoutSeconds", e.target.value)}
-                    className={numberInput}
-                  />
-                </div>
                 <button
                   type="button"
                   onClick={() => removeStage(index)}
                   disabled={form.stages.length <= 1}
                   aria-label={`Remove stage ${index + 1}`}
-                  className="mb-0.5 rounded-lg border border-slate-300 bg-white p-2 text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                  className="mt-5 rounded-lg border border-slate-300 bg-white p-2 text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -289,7 +277,7 @@ export default function DispatchSettings() {
                   <span>
                     Attempt {i + 1}: offer to riders within{" "}
                     <b className="text-white">{s.radiusKm || "?"} km</b>, wait{" "}
-                    <b className="text-white">{s.timeoutSeconds || "?"}s</b>
+                    <b className="text-white">{form.offerCountdownSeconds || "?"}s</b>
                   </span>
                 </li>
               ))}

@@ -258,7 +258,7 @@ export function normalizeDispatchConfig(raw) {
       typeof source.radiusExpansionEnabled === 'boolean'
         ? source.radiusExpansionEnabled
         : DEFAULT_DISPATCH_CONFIG.radiusExpansionEnabled,
-    stages,
+    stages: stages.map((s) => ({ ...s, timeoutSeconds: offerCountdownSeconds })),
     maxRadiusKm,
     maxAttempts,
     crisisAfterStage,
@@ -309,7 +309,7 @@ export function validateDispatchConfigInput(body) {
     body.stages.forEach((stage, index) => {
       const label = `Stage ${index + 1}`;
       if (!stage || typeof stage !== 'object') {
-        throw new ValidationError(`${label}: each stage must be an object with radiusKm and timeoutSeconds.`);
+        throw new ValidationError(`${label}: each stage must be an object with radiusKm.`);
       }
 
       const radiusKm = toFiniteNumber(stage.radiusKm);

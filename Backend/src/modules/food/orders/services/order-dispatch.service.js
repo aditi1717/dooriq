@@ -496,7 +496,6 @@ export async function tryAutoAssign(orderId, options = {}) {
           for (const p of reofferEligible) {
             db.ref(`delivery_offers/${p.partnerId}/${order._id.toString()}`).set({
               ...payload,
-              pickupDistanceKm: p.distanceKm,
               offerCountdownSeconds: config.offerCountdownSeconds,
               offeredAt: Date.now()
             }).catch(() => {});
@@ -505,7 +504,7 @@ export async function tryAutoAssign(orderId, options = {}) {
         if (io) {
           for (const p of reofferEligible) {
             const roomName = rooms.delivery(p.partnerId);
-            io.to(roomName).emit('new_order_available', { ...payload, pickupDistanceKm: p.distanceKm, offerCountdownSeconds: config.offerCountdownSeconds });
+            io.to(roomName).emit('new_order_available', { ...payload, offerCountdownSeconds: config.offerCountdownSeconds });
           }
         }
       }
@@ -579,7 +578,6 @@ export async function tryAutoAssign(orderId, options = {}) {
       for (const p of eligible) {
         db.ref(`delivery_offers/${p.partnerId}/${order._id.toString()}`).set({
           ...payload,
-          pickupDistanceKm: p.distanceKm,
           offerCountdownSeconds: config.offerCountdownSeconds,
           offeredAt: Date.now()
         }).catch(() => {});
@@ -587,7 +585,7 @@ export async function tryAutoAssign(orderId, options = {}) {
     }
     for (const p of eligible) {
       const roomName = rooms.delivery(p.partnerId);
-      if (io) io.to(roomName).emit('new_order', { ...payload, pickupDistanceKm: p.distanceKm, offerCountdownSeconds: config.offerCountdownSeconds });
+      if (io) io.to(roomName).emit('new_order', { ...payload, offerCountdownSeconds: config.offerCountdownSeconds });
     }
 
     // Batch Push Notifications

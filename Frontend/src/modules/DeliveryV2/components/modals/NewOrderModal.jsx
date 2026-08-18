@@ -103,15 +103,12 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
   }, [timeLeft, onReject]);
 
   const [distanceMeta, setDistanceMeta] = useState({
-    pickupDistanceKm: null,
     deliveryDistanceKm: null,
     etaMins: null,
   });
 
   /**
-   * Restaurant and customer points are properties of the ORDER, not of where the
-   * rider currently is. Memoising them on `order` alone keeps the expensive
-   * effect below off the GPS update path.
+   * Restaurant and customer points are properties of the ORDER.
    */
   const orderPoints = useMemo(() => {
     if (!order) return { restaurantPoint: null, customerPoint: null };
@@ -129,52 +126,11 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
   }, [order]);
 
   /**
-   * CHEAP effect: "you → restaurant" genuinely depends on the rider's position,
-   * so it re-runs on every GPS tick — but it is a local haversine calculation and
-   * costs nothing. It never calls Google.
-   */
-  useEffect(() => {
-    if (!order) {
-      setDistanceMeta((prev) => ({ ...prev, pickupDistanceKm: null }));
-      return;
-    }
-
-    const { restaurantPoint } = orderPoints;
-    const riderPoint = getLocationPoint(riderLocation);
-    const backendPickupDistance = Number(order.pickupDistanceKm);
-
-    const pickupDistanceKm =
-      Number.isFinite(backendPickupDistance) && backendPickupDistance >= 0 && backendPickupDistance < 100
-        ? backendPickupDistance
-        : riderPoint && restaurantPoint
-          ? (() => {
-              const distM = getHaversineDistance(
-                riderPoint.lat,
-                riderPoint.lng,
-                restaurantPoint.lat,
-                restaurantPoint.lng,
-              );
-              return Number.isFinite(distM) ? Number((distM / 1000).toFixed(2)) : null;
-            })()
-          : null;
-
-    setDistanceMeta((prev) => ({ ...prev, pickupDistanceKm }));
-  }, [order, orderPoints, riderLocation]);
-
-  /**
-   * "restaurant → customer" is a fixed property of the order, so this must NOT
-   * depend on `riderLocation`.
-   *
-   * It previously did, and it also fell back to a paid Directions request — so
-   * every GPS tick re-ran it, and with up to 15 riders holding the same offer one
-   * order could fire dozens of Directions calls to display a single number that
-   * was identical for all of them. It now uses the server-computed distance when
-   * present and a free local estimate otherwise: zero Google calls either way.
+   * "restaurant → customer" is a fixed property of the order.
    */
   useEffect(() => {
     if (!order) {
       setDistanceMeta({
-        pickupDistanceKm: null,
         deliveryDistanceKm: null,
         etaMins: null,
       });
@@ -219,7 +175,6 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
 
     const applyDistanceMeta = (deliveryDistanceKm) => {
       if (cancelled) return;
-      // Preserve pickupDistanceKm — the cheap effect above owns that field.
       setDistanceMeta((prev) => ({
         ...prev,
         deliveryDistanceKm:
@@ -251,13 +206,6 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
         return;
       }
 
-      // No server-computed distance available. Show a FREE local estimate rather
-      // than buying a Directions route just to render one number on a card.
-      //
-      // Straight-line × 1.3 is the usual road-network correction and is well
-      // inside the accuracy an offer card needs — the rider is deciding whether
-      // to accept, not navigating. The exact figure arrives with the order once
-      // the server has computed `tripDistanceKm`.
       if (restaurantPoint && customerPoint) {
         const distM = getHaversineDistance(
           restaurantPoint.lat,
@@ -278,10 +226,9 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
     return () => {
       cancelled = true;
     };
-    // Deliberately NOT riderLocation — see the comment above this effect.
   }, [order, orderPoints]);
 
-  const { pickupDistanceKm, deliveryDistanceKm, etaMins } = distanceMeta;
+  const { deliveryDistanceKm, etaMins } = distanceMeta;
 
   if (!order) return null;
 
@@ -404,9 +351,6 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, acceptDis
                   <div>
                     <div className="flex items-center justify-between gap-3 mb-0.5">
                       <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-emerald-600">Restaurant Pickup</h4>
-                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-1">
-                        You -&gt; Restaurant {formatDistanceLabel(pickupDistanceKm)}
-                      </span>
                     </div>
                     <h3 className="text-gray-950 font-black text-lg leading-tight mb-0.5">{restaurantName}</h3>
                     <p className="text-gray-500 text-[11px] font-bold leading-normal">{restaurantAddress}</p>
