@@ -834,6 +834,23 @@ export const adminAPI = {
       ...config,
     }),
 
+  /** Dispatch policy (broadcast radius stages, timeouts, crisis threshold) */
+
+  getDispatchSettings: () =>
+
+    apiClient.get("/food/admin/dispatch-settings", { contextModule: "admin" }),
+
+  /** Current values + defaults + validation bounds, for rendering the form. */
+
+  getDispatchSettingsSchema: () =>
+
+    apiClient.get("/food/admin/dispatch-settings/schema", { contextModule: "admin" }),
+
+  updateDispatchSettings: (body) =>
+
+    apiClient.put("/food/admin/dispatch-settings", body ?? {}, { contextModule: "admin" }),
+
+
   /** Offers & Coupons (admin) */
   /** GET /admin/offers/:id/usage — customers who redeemed a coupon. */
   getOfferUsage: (offerId, params = {}) =>

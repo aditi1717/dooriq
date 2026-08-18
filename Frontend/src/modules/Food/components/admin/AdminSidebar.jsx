@@ -15,6 +15,7 @@ import {
   FolderTree,
   Plus,
   Utensils,
+  Radio,
   Megaphone,
   ChevronDown,
   ChevronRight,
@@ -63,6 +64,7 @@ const debugError = (...args) => {}
 // Icon mapping
 const iconMap = {
   LayoutDashboard,
+  Radio,
   UtensilsCrossed,
   Building2,
   FileText,
