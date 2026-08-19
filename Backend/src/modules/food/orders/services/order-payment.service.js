@@ -10,6 +10,9 @@ import { logger } from '../../../../utils/logger.js';
 import {
   createPaymentLink,
   fetchRazorpayPaymentLink,
+  createRazorpayQrCode,
+  fetchRazorpayQrCode,
+  fetchRazorpayQrPayments,
   isRazorpayConfigured,
 } from '../helpers/razorpay.helper.js';
 import * as foodTransactionService from './foodTransaction.service.js';
@@ -43,27 +46,43 @@ export async function syncRazorpayQrPayment(orderDoc) {
     return payment;
   }
 
-  let link;
-  try {
-    link = await fetchRazorpayPaymentLink(paymentLinkId);
-    logger.info(`[QrSync] Razorpay link status for ${paymentLinkId}: ${link?.status}`);
-  } catch (error) {
-    logger.error(
-      `[QrSync] Razorpay payment-link fetch FAILED for ${paymentLinkId}: ${
-        error?.message || error
-      }`,
-    );
-    return payment;
+  const isNativeQr = String(paymentLinkId).startsWith('qr_');
+  let isPaid = false;
+  let isFailed = false;
+  let linkStatus = 'created';
+
+  if (isNativeQr) {
+    try {
+      const qrPayments = await fetchRazorpayQrPayments(paymentLinkId);
+      logger.info(`[QrSync] Razorpay QR payments fetched for ${paymentLinkId}: ${JSON.stringify(qrPayments)}`);
+      const payments = qrPayments?.items || [];
+      const successfulPayment = payments.find(p => ['captured', 'authorized'].includes(String(p.status || '').toLowerCase()));
+      if (successfulPayment) {
+        isPaid = true;
+        linkStatus = 'paid';
+      } else {
+        const qrCodeDetails = await fetchRazorpayQrCode(paymentLinkId);
+        linkStatus = qrCodeDetails?.status || 'active';
+        isFailed = ['closed', 'inactive'].includes(String(linkStatus).toLowerCase());
+      }
+    } catch (error) {
+      logger.error(`[QrSync] Razorpay QR fetch FAILED for ${paymentLinkId}: ${error?.message || error}`);
+      return payment;
+    }
+  } else {
+    let link;
+    try {
+      link = await fetchRazorpayPaymentLink(paymentLinkId);
+      logger.info(`[QrSync] Razorpay link status for ${paymentLinkId}: ${link?.status}`);
+      linkStatus = String(link?.status || '').toLowerCase();
+      isPaid = ['paid', 'partially_paid', 'captured', 'authorized'].includes(linkStatus);
+      isFailed = ['expired', 'cancelled', 'canceled', 'failed'].includes(linkStatus);
+    } catch (error) {
+      logger.error(`[QrSync] Razorpay payment-link fetch FAILED for ${paymentLinkId}: ${error?.message || error}`);
+      return payment;
+    }
   }
 
-  const linkStatus = String(link?.status || '').toLowerCase();
-  if (!linkStatus) {
-    logger.warn(`[QrSync] Empty linkStatus for ${paymentLinkId}`);
-    return payment;
-  }
-
-  const isPaid = ['paid', 'partially_paid', 'captured', 'authorized'].includes(linkStatus);
-  const isFailed = ['expired', 'cancelled', 'canceled', 'failed'].includes(linkStatus);
   const newPaymentStatus = isPaid ? 'paid' : isFailed ? 'failed' : (payment.status || 'pending_qr');
 
   logger.info(`[QrSync] Updating order ${orderId} payment.status from '${payment.status}' to '${newPaymentStatus}'`);
@@ -73,7 +92,7 @@ export async function syncRazorpayQrPayment(orderDoc) {
     { orderId },
     {
       $set: {
-        'payment.qr.status': linkStatus,
+        'payment.qr.status': isPaid ? 'paid' : isFailed ? 'failed' : linkStatus,
         'payment.status': newPaymentStatus,
       },
     },
@@ -124,17 +143,18 @@ export async function createCollectQr(
     throw new ValidationError('QR payment not configured');
   }
 
-  const user = order.userId || {};
-  const link = await createPaymentLink({
+  const qrCodeData = await createRazorpayQrCode({
     amountPaise: Math.round(amountDue * 100),
-    currency: 'INR',
+    name: 'Dooriq',
     description: `Order ${order._id.toString()} - COD collect`,
-    orderId: order._id.toString(),
-    customerName: customerInfo.name || user.name || 'Customer',
-    customerEmail: customerInfo.email || user.email || 'customer@example.com',
-    customerPhone: customerInfo.phone || user.phone,
   });
 
+
+  const qrLinkId = qrCodeData.id;
+  const qrShortUrl = qrCodeData.payment_flow?.intent_url || qrCodeData.short_url || qrCodeData.image_url || '';
+  const qrImageUrl = qrCodeData.image_url || qrCodeData.short_url || '';
+  const qrStatus = qrCodeData.status || 'created';
+  const qrExpiresAt = qrCodeData.close_by ? new Date(qrCodeData.close_by * 1000) : null;
 
   // CRITICAL: use upsert so this works even if FoodTransaction was never created at order placement
   const upsertData = {
@@ -144,11 +164,11 @@ export async function createCollectQr(
       'payment.status': 'pending_qr',
       'payment.amountDue': amountDue,
       'payment.qr': {
-        paymentLinkId: link.id,
-        shortUrl: link.short_url,
-        imageUrl: link.short_url,
-        status: link.status || 'created',
-        expiresAt: link.expire_by ? new Date(link.expire_by * 1000) : null,
+        paymentLinkId: qrLinkId,
+        shortUrl: qrShortUrl,
+        imageUrl: qrImageUrl,
+        status: qrStatus,
+        expiresAt: qrExpiresAt,
       },
     },
     $setOnInsert: {
@@ -172,7 +192,10 @@ export async function createCollectQr(
       },
       amounts: {
         totalCustomerPaid: order.pricing?.total || 0,
-        restaurantShare: 0, riderShare: 0, restaurantCommission: 0, platformNetProfit: 0,
+        restaurantShare: 0,
+        riderShare: 0,
+        restaurantCommission: 0,
+        platformNetProfit: 0,
       },
       history: [{ kind: 'created', amount: amountDue, note: 'Transaction auto-created at QR generation' }],
     },
@@ -191,16 +214,15 @@ export async function createCollectQr(
       $set: {
         'payment.method': 'razorpay_qr',
         'payment.status': 'pending_qr',
-        'payment.qr.paymentLinkId': link.id,
-        'payment.qr.shortUrl': link.short_url,
-        'payment.qr.imageUrl': link.short_url,
-        'payment.qr.status': link.status || 'created',
+        'payment.qr.paymentLinkId': qrLinkId,
+        'payment.qr.shortUrl': qrShortUrl,
+        'payment.qr.imageUrl': qrImageUrl,
+        'payment.qr.status': qrStatus,
       }
     }
   );
 
   const updatedTx = await FoodTransaction.findOne({ orderId: order._id }).lean();
-
 
   if (updatedTx) {
     await foodTransactionService.updateTransactionStatus(
@@ -218,26 +240,16 @@ export async function createCollectQr(
     orderMongoId: String(orderId),
     orderId: order?.orderId || null,
     deliveryPartnerId,
-    paymentLinkId: link.id,
-    shortUrl: link.short_url,
+    paymentLinkId: qrLinkId,
+    shortUrl: qrShortUrl,
     amountDue,
   });
 
   return {
-    shortUrl:
-      link?.short_url ?? link?.shortUrl ?? link?.short_url_path ?? null,
-    imageUrl:
-      link?.short_url ??
-      link?.image_url ??
-      link?.imageUrl ??
-      link?.image ??
-      null,
+    shortUrl: qrShortUrl,
+    imageUrl: qrImageUrl,
     amount: amountDue,
-    expiresAt: link?.expire_by
-      ? new Date(link.expire_by * 1000)
-      : link?.expiresAt
-        ? new Date(link.expiresAt)
-        : null,
+    expiresAt: qrExpiresAt,
   };
 }
 

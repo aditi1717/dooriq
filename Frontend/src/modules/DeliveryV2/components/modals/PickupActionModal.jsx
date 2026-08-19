@@ -101,7 +101,11 @@ export const PickupActionModal = ({
     order.restaurantPhone ||
     order.restaurant_phone ||
     order.restaurant?.phone ||
+    order.restaurant?.primaryContactNumber ||
+    order.restaurant?.ownerPhone ||
     order.restaurantId?.phone ||
+    order.restaurantId?.primaryContactNumber ||
+    order.restaurantId?.ownerPhone ||
     '';
   const items = order.items || [];
   const restaurantLogo = order.restaurantImage || order.restaurant?.logo || order.restaurant?.profileImage || 'https://cdn-icons-png.flaticon.com/512/3170/3170733.png';
@@ -149,9 +153,10 @@ export const PickupActionModal = ({
                         <span className="text-emerald-600 text-[10px] font-black uppercase tracking-widest">At Restaurant</span>
                       </div>
                     ) : (
-                      <div className="bg-orange-50 px-3 py-1 rounded-full border border-orange-100">
+                      <div className="bg-orange-50 px-3 py-1 rounded-full border border-orange-100 flex items-center gap-1.5">
+                        <Phone className="w-3 h-3 text-orange-600" />
                         <span className="text-orange-600 text-[10px] font-black uppercase tracking-widest">
-                          {(distanceToTarget / 1000).toFixed(1)} km • {eta || '--'} min
+                          {restaurantPhone || 'N/A'}
                         </span>
                       </div>
                     )}

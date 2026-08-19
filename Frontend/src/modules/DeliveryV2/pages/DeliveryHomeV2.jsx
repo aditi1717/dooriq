@@ -1031,39 +1031,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                 exit={{ opacity: 0, y: -20 }}
                 className="px-4 mt-3 pointer-events-auto"
               >
-                {activeOrder ? (
-                  <div className="grid grid-cols-2 gap-3 w-full">
-                    <div className="bg-[#111111]/95 backdrop-blur-md rounded-[24px] p-4 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] flex flex-col justify-between h-[100px]">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-[#f97316]/20 flex items-center justify-center">
-                          <Navigation2 className="w-3.5 h-3.5 text-[#f97316] rotate-45" />
-                        </div>
-                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Distance</span>
-                      </div>
-                      <div className="flex items-baseline gap-1 mt-auto">
-                        <span className="text-3xl font-bold text-white tracking-tight leading-none">
-                          {distanceToTarget && distanceToTarget !== Infinity ? (distanceToTarget / 1000).toFixed(1) : '--'}
-                        </span>
-                        <span className="text-[13px] text-gray-500 font-medium">km</span>
-                      </div>
-                    </div>
-
-                    <div className="bg-[#111111]/95 backdrop-blur-md rounded-[24px] p-4 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] flex flex-col justify-between h-[100px]">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-[#10b981]/20 flex items-center justify-center">
-                          <Clock className="w-3.5 h-3.5 text-[#10b981]" />
-                        </div>
-                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Arrival</span>
-                      </div>
-                      <div className="flex items-baseline gap-1 mt-auto">
-                        <span className="text-3xl font-bold text-white tracking-tight leading-none">
-                          {eta ? String(eta) : '--'}
-                        </span>
-                        <span className="text-[13px] text-gray-500 font-medium">min</span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
+                {activeOrder ? null : (
                   <div className={`overflow-hidden rounded-[24px] p-4 flex items-center gap-4 transition-all duration-300 ${isOnline ? 'bg-[#111111]/95 border border-white/10' : 'bg-[#111111]/90 border border-white/5'} backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.4)]`}>
                     <div className="relative flex items-center justify-center shrink-0">
                       <div className={`w-3.5 h-3.5 rounded-full ${isOnline ? 'bg-[#10b981]' : 'bg-gray-600'}`} />
