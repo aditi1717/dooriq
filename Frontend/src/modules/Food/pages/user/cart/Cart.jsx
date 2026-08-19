@@ -10,7 +10,7 @@ import { Button } from "@food/components/ui/button"
 import { useCart } from "@food/context/CartContext"
 import { useProfile } from "@food/context/ProfileContext"
 import { useOrders } from "@food/context/OrdersContext"
-import { useLocation as useUserLocation } from "@food/hooks/useLocation"
+import { useLocation as useUserLocation, persistUserLocation } from "@food/hooks/useLocation"
 import { useZone } from "@food/hooks/useZone"
 import { useLocationSelector } from "@food/components/user/UserLayout"
 import { orderAPI, restaurantAPI, adminAPI, userAPI, API_ENDPOINTS } from "@food/api"
@@ -1123,75 +1123,86 @@ export default function Cart() {
 
   // Calculate pricing from backend whenever cart, address, or coupon changes
   useEffect(() => {
-    const calculatePricing = async () => {
-      if (cart.length === 0 || !hasSavedAddress) {
-        setPricing(null)
-        return
-      }
+    let active = true
+    const timer = setTimeout(() => {
+      const calculatePricing = async () => {
+        if (cart.length === 0 || !hasSavedAddress) {
+          if (active) setPricing(null)
+          return
+        }
 
-      try {
-        setLoadingPricing(true)
-        const items = cart.map(item => ({
-          itemId: item.itemId || item.id,
-          name: item.name,
-          price: item.price, // Price should already be in INR
-          variantId: item.variantId || undefined,
-          variantName: item.variantName || undefined,
-          variantPrice: item.variantPrice || item.price,
-          quantity: item.quantity || 1,
-          image: item.image,
-          description: item.description,
-          isVeg: item.isVeg !== false
-        }))
+        try {
+          if (active) setLoadingPricing(true)
+          const items = cart.map(item => ({
+            itemId: item.itemId || item.id,
+            name: item.name,
+            price: item.price, // Price should already be in INR
+            variantId: item.variantId || undefined,
+            variantName: item.variantName || undefined,
+            variantPrice: item.variantPrice || item.price,
+            quantity: item.quantity || 1,
+            image: item.image,
+            description: item.description,
+            isVeg: item.isVeg !== false
+          }))
 
-        const resolvedRestaurantId = restaurantData?.restaurantId || restaurantData?._id || restaurantId || undefined
-        const resolvedCouponCode = appliedCoupon?.code || couponCode || undefined
+          const resolvedRestaurantId = restaurantData?.restaurantId || restaurantData?._id || restaurantId || undefined
+          const resolvedCouponCode = appliedCoupon?.code || couponCode || undefined
 
-        const response = await orderAPI.calculateOrder({
-          items,
-          restaurantId: resolvedRestaurantId,
-          deliveryAddress: defaultAddress,
-          couponCode: resolvedCouponCode
-        })
+          const response = await orderAPI.calculateOrder({
+            items,
+            restaurantId: resolvedRestaurantId,
+            deliveryAddress: defaultAddress,
+            couponCode: resolvedCouponCode
+          })
 
-        if (response?.data?.success && response?.data?.data?.pricing) {
-          const pricingData = response.data.data.pricing
-          setPricing(pricingData)
+          if (!active) return
 
-          // Update applied coupon if backend returns one
-          if (pricingData.appliedCoupon) {
-            const appliedCode = String(pricingData.appliedCoupon.code || resolvedCouponCode || "").trim().toUpperCase()
-            const coupon = availableCoupons.find(c => String(c.code || "").toUpperCase() === appliedCode) || appliedCoupon || {
-              code: appliedCode,
-              discount: pricingData.appliedCoupon.discount || 0,
-              minOrder: 0,
-              customerGroup: "all",
+          if (response?.data?.success && response?.data?.data?.pricing) {
+            const pricingData = response.data.data.pricing
+            setPricing(pricingData)
+
+            // Update applied coupon if backend returns one
+            if (pricingData.appliedCoupon) {
+              const appliedCode = String(pricingData.appliedCoupon.code || resolvedCouponCode || "").trim().toUpperCase()
+              const coupon = availableCoupons.find(c => String(c.code || "").toUpperCase() === appliedCode) || appliedCoupon || {
+                code: appliedCode,
+                discount: pricingData.appliedCoupon.discount || 0,
+                minOrder: 0,
+                customerGroup: "all",
+              }
+              setAppliedCoupon(coupon)
+              setCouponCode(appliedCode)
+              setManualCouponCode(appliedCode)
+              persistAppliedCoupon(coupon, appliedCode)
+            } else if (resolvedCouponCode) {
+              setAppliedCoupon(null)
+              setCouponCode("")
+              setManualCouponCode("")
+              clearStoredCoupon()
             }
-            setAppliedCoupon(coupon)
-            setCouponCode(appliedCode)
-            setManualCouponCode(appliedCode)
-            persistAppliedCoupon(coupon, appliedCode)
-          } else if (resolvedCouponCode) {
-            setAppliedCoupon(null)
-            setCouponCode("")
-            setManualCouponCode("")
-            clearStoredCoupon()
           }
+        } catch (error) {
+          if (!active) return
+          // Network errors or 404 errors - silently handle, fallback to frontend calculation
+          if (error.code !== 'ERR_NETWORK' && error.response?.status !== 404) {
+            debugError("Error calculating pricing:", error)
+          }
+          // Fallback to frontend calculation if backend fails
+          setPricing(null)
+        } finally {
+          if (active) setLoadingPricing(false)
         }
-      } catch (error) {
-        // Network errors or 404 errors - silently handle, fallback to frontend calculation
-        if (error.code !== 'ERR_NETWORK' && error.response?.status !== 404) {
-          debugError("Error calculating pricing:", error)
-        }
-        // Fallback to frontend calculation if backend fails
-        setPricing(null)
-      } finally {
-        setLoadingPricing(false)
       }
-    }
 
-    calculatePricing()
-  }, [cart, defaultAddress, appliedCoupon, couponCode, restaurantId])
+      calculatePricing()
+    }, 300)
+
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [cart, defaultAddress, appliedCoupon, couponCode, restaurantId, restaurantData])
 
   // Fetch wallet balance
   useEffect(() => {
@@ -1555,10 +1566,10 @@ export default function Cart() {
           : `${address.street}, ${address.city}, ${address.state}${address.zipCode ? ` ${address.zipCode}` : ''}`
       }
       persistUserLocation(locationData)
-      // User selected a saved address from Cart; prefer saved mode.
       try {
         localStorage.setItem("deliveryAddressMode", "saved")
         setDeliveryAddressMode("saved")
+        window.dispatchEvent(new Event("deliveryAddressModeChanged"))
       } catch { }
 
       toast.success(`${address.label || "Saved"} address selected!`)

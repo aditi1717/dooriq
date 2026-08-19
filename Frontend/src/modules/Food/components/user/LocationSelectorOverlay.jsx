@@ -4,7 +4,7 @@ import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
 import { Textarea } from "@food/components/ui/textarea"
-import { useLocation as useGeoLocation } from "@food/hooks/useLocation"
+import { useLocation as useGeoLocation, persistUserLocation } from "@food/hooks/useLocation"
 import { useProfile } from "@food/context/ProfileContext"
 import { toast } from "sonner"
 import { locationAPI, userAPI } from "@food/api"
@@ -941,7 +941,9 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       // don't open the "Add address" form. Just close and return to homepage.
       // Store selection mode so Cart can prefer this current location for delivery address.
       try {
+        persistUserLocation(locationData);
         localStorage.setItem("deliveryAddressMode", "current");
+        window.dispatchEvent(new Event("deliveryAddressModeChanged"));
       } catch {}
       setShowAddressForm(false)
       setAddressFormData((prev) => ({
@@ -1991,6 +1993,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         // User saved an address; prefer saved delivery address in Cart.
         try {
           localStorage.setItem("deliveryAddressMode", "saved")
+          window.dispatchEvent(new Event("deliveryAddressModeChanged"))
         } catch {}
       }
 
@@ -2133,6 +2136,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       // User picked a saved address; Cart should prefer saved address over current location.
       try {
         localStorage.setItem("deliveryAddressMode", "saved");
+        window.dispatchEvent(new Event("deliveryAddressModeChanged"));
       } catch {}
       onClose()
     } catch (error) {
