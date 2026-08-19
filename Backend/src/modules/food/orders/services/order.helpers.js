@@ -400,7 +400,7 @@ export function canExposeOrderToRestaurant(orderLike) {
   if (String(orderLike?.orderStatus || "").toLowerCase() === "pending_payment") return false;
   const method = String(orderLike?.payment?.method || "").toLowerCase();
   const status = String(orderLike?.payment?.status || "").toLowerCase();
-  if (["cash", "wallet"].includes(method)) return true;
+  if (["cash", "wallet", "razorpay_qr"].includes(method)) return true;
   return ["paid", "authorized", "captured", "settled"].includes(status);
 }
 

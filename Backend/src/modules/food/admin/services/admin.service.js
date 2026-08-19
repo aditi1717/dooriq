@@ -394,7 +394,7 @@ export async function getDashboardStats(query = {}) {
 
     const orderMatch = {
         $or: [
-            { "payment.method": { $in: ["cash", "wallet"] } },
+            { "payment.method": { $in: ["cash", "wallet", "razorpay_qr"] } },
             { "payment.status": { $in: ["paid", "authorized", "captured", "settled", "refunded"] } },
         ],
     };
@@ -1098,7 +1098,7 @@ export async function getRestaurantReport(query = {}) {
     const orderMatch = {
         restaurantId: { $in: restaurantIds },
         $or: [
-            { "payment.method": { $in: ["cash", "wallet"] } },
+            { "payment.method": { $in: ["cash", "wallet", "razorpay_qr"] } },
             { "payment.status": { $in: ["paid", "authorized", "captured", "settled", "refunded"] } },
         ],
     };
@@ -2337,7 +2337,13 @@ export async function getRestaurantAnalytics(restaurantId) {
     const [restaurant, commissionDoc, orders, txRows] = await Promise.all([
         FoodRestaurant.findById(rId).lean(),
         FoodRestaurantCommission.findOne({ restaurantId: rId, status: { $ne: false } }).lean(),
-        FoodOrder.find({ restaurantId: rId }).lean(),
+        FoodOrder.find({
+            restaurantId: rId,
+            $or: [
+                { "payment.method": { $in: ["cash", "wallet", "razorpay_qr"] } },
+                { "payment.status": { $in: ["paid", "authorized", "captured", "settled", "refunded"] } }
+            ]
+        }).lean(),
         FoodTransaction.find({ restaurantId: rId })
             .populate('orderId', 'orderStatus deliveryState createdAt pricing')
             .sort({ createdAt: -1 })
@@ -2359,7 +2365,7 @@ export async function getRestaurantAnalytics(restaurantId) {
     const getPricing = (row) => row?.pricing || row?.orderId?.pricing || {};
     const getAmount = (row, key) => {
         const value = row?.amounts?.[key];
-        return value === undefined || value === null ? null : Number(value);
+        return (value === undefined || value === null || value === 0) ? null : Number(value);
     };
     const getRestaurantShare = (row) => {
         const explicitShare = getAmount(row, 'restaurantShare');
