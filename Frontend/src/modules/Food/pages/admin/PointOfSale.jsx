@@ -66,6 +66,7 @@ export default function PointOfSale() {
     totalOrders: 0,
     cancelledOrders: 0,
     completedOrders: 0,
+    inProgressOrders: 0,
     averageRating: 0,
     totalRatings: 0,
     commissionPercentage: 0,
@@ -104,6 +105,7 @@ export default function PointOfSale() {
         totalOrders: 0,
         cancelledOrders: 0,
         completedOrders: 0,
+        inProgressOrders: 0,
         averageRating: 0,
         totalRatings: 0,
         commissionPercentage: 0,
@@ -183,6 +185,7 @@ export default function PointOfSale() {
           totalOrders: Number(analytics.totalOrders) || 0,
           cancelledOrders: Number(analytics.cancelledOrders) || 0,
           completedOrders: Number(analytics.completedOrders) || 0,
+          inProgressOrders: Number(analytics.inProgressOrders) || 0,
           averageRating: Number(analytics.averageRating) || 0,
           totalRatings: Number(analytics.totalRatings) || 0,
           commissionPercentage: commissionPercentage,
@@ -211,6 +214,7 @@ export default function PointOfSale() {
           totalOrders: 0,
           cancelledOrders: 0,
           completedOrders: 0,
+          inProgressOrders: 0,
           averageRating: 0,
           totalRatings: 0,
           commissionPercentage: 0,
@@ -753,7 +757,7 @@ export default function PointOfSale() {
             {/* Order Statistics Summary */}
             <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
               <h3 className="text-lg font-semibold text-[#334257] mb-4">Order Statistics Summary</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                 <div className="text-center p-4 bg-blue-50 rounded-lg">
                   <p className="text-2xl font-bold text-blue-600">{formatNumber(analyticsData.totalOrders)}</p>
                   <p className="text-xs text-[#8a94aa] mt-1">Total Orders</p>
@@ -761,6 +765,10 @@ export default function PointOfSale() {
                 <div className="text-center p-4 bg-green-50 rounded-lg">
                   <p className="text-2xl font-bold text-green-600">{formatNumber(analyticsData.completedOrders)}</p>
                   <p className="text-xs text-[#8a94aa] mt-1">Completed</p>
+                </div>
+                <div className="text-center p-4 bg-orange-50 rounded-lg">
+                  <p className="text-2xl font-bold text-orange-600">{formatNumber(analyticsData.inProgressOrders)}</p>
+                  <p className="text-xs text-[#8a94aa] mt-1">In Progress</p>
                 </div>
                 <div className="text-center p-4 bg-red-50 rounded-lg">
                   <p className="text-2xl font-bold text-red-600">{formatNumber(analyticsData.cancelledOrders)}</p>

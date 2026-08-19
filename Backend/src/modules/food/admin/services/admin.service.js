@@ -2446,10 +2446,13 @@ export async function getRestaurantAnalytics(restaurantId) {
             ? commissionValue
             : (completedSubtotal > 0 ? (totalCommission / completedSubtotal) * 100 : 0);
 
+    const inProgressOrdersCount = orders.length - completedOrders.length - cancelledOrders.length;
+
     const analytics = {
         totalOrders: totalOrdersCount,
         cancelledOrders: cancelledOrders.length,
         completedOrders: completedOrders.length,
+        inProgressOrders: Math.max(0, inProgressOrdersCount),
         averageRating: Number(restaurant.rating || 0),
         totalRatings: Number(restaurant.totalRatings || 0),
         commissionPercentage: computedCommissionPercent,
