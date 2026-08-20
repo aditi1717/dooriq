@@ -12,6 +12,10 @@ import { FoodRestaurantOutletTimings } from '../models/outletTimings.model.js';
 import { toOutletTimingsClientShape } from './outletTimings.service.js';
 import { resolveRestaurantOpenStatus } from '../../orders/services/order.helpers.js';
 import { createTtlCache } from '../../../../utils/cache.js';
+import {
+    filterRestaurantsByRoadRadius,
+    getDefaultServingRadiusKm,
+} from '../../shared/restaurantVisibility.service.js';
 
 const normalizeName = (value) =>
     String(value || '')
@@ -1736,6 +1740,7 @@ export const uploadRestaurantMenuImages = async (restaurantId, files = []) => {
  */
 const RESTAURANT_PAGE_SIZE_DEFAULT = 20;
 const RESTAURANT_PAGE_SIZE_MAX = 50;
+const RESTAURANT_GEO_CANDIDATE_MAX = 300;
 
 export const listApprovedRestaurants = async (query = {}) => {
     const requestedLimit = parseInt(query.limit, 10);
@@ -1857,15 +1862,10 @@ export const listApprovedRestaurants = async (query = {}) => {
         }
     }
 
-    // Strict zone filter for user listing:
-    // if zoneId is provided, return only restaurants mapped to that zone.
-    const zoneIdRaw = String(query.zoneId || '').trim();
-    if (zoneIdRaw && mongoose.Types.ObjectId.isValid(zoneIdRaw)) {
-        filter.zoneId = new mongoose.Types.ObjectId(zoneIdRaw);
-    }
-
     const lat = toFiniteNumber(query.lat);
     const lng = toFiniteNumber(query.lng);
+    const wantsGeo = lat !== null && lng !== null;
+
     // Accept both radiusKm (preferred) and maxDistance (legacy frontend param).
     const radiusKm = toFiniteNumber(query.radiusKm) ?? toFiniteNumber(query.maxDistance);
     const sortBy = parseSortBy(query.sortBy);
@@ -1904,22 +1904,22 @@ export const listApprovedRestaurants = async (query = {}) => {
     // distance, and the client downloaded everything to sort it by distance
     // itself. That is why the feed needed `limit=1000` to feel correct.
     //
-    // $geoNear only matches documents that have the indexed location field, so
-    // restaurants without coordinates are collected separately and appended
-    // after the located ones rather than silently disappearing.
-    const wantsGeo = lat !== null && lng !== null;
+    // $geoNear gives us a cheap straight-line prefilter. The shared road-radius
+    // helper then verifies only those nearby candidates through the cached Maps
+    // route path.
     if (wantsGeo) {
+        const defaultRadius = await getDefaultServingRadiusKm();
+        const effectiveRadiusKm = radiusKm !== null ? Math.max(0.1, radiusKm) : defaultRadius;
+
         const geoNear = {
             $geoNear: {
                 near: { type: 'Point', coordinates: [lng, lat] },
                 distanceField: 'distanceMeters',
                 spherical: true,
-                query: filter
+                query: filter,
+                maxDistance: effectiveRadiusKm * 1000
             }
         };
-        if (radiusKm !== null) {
-            geoNear.$geoNear.maxDistance = Math.max(0.1, radiusKm) * 1000;
-        }
 
         const sortStage = (() => {
             if (sortBy === 'rating' || sortBy === 'rating-high') return { $sort: { rating: -1, distanceMeters: 1 } };
@@ -1942,60 +1942,40 @@ export const listApprovedRestaurants = async (query = {}) => {
             sortStage
         ];
 
-        // Restaurants with no usable coordinates cannot appear in a $geoNear
-        // result. Keep them visible by treating the feed as two ordered
-        // segments: located (nearest first), then unlocated.
-        const unlocatedFilter = {
-            ...filter,
-            $and: [
-                ...(filter.$and || []),
-                { $or: [{ location: null }, { 'location.coordinates': { $exists: false } }, { 'location.coordinates': { $size: 0 } }] }
-            ]
-        };
-
-        const [locatedTotalDocs, unlocatedTotal] = await Promise.all([
-            FoodRestaurant.aggregate([...basePipeline, { $count: 'count' }]),
-            radiusKm !== null ? Promise.resolve(0) : FoodRestaurant.countDocuments(unlocatedFilter)
-        ]);
-
-        const locatedTotal = locatedTotalDocs?.[0]?.count || 0;
-        const total = locatedTotal + unlocatedTotal;
-
-        // Work out how much of this page comes from each segment.
-        const locatedSkip = Math.min(skip, locatedTotal);
-        const locatedTake = Math.max(0, Math.min(limit, locatedTotal - locatedSkip));
-        const unlocatedSkip = Math.max(0, skip - locatedTotal);
-        const unlocatedTake = Math.max(0, limit - locatedTake);
-
-        // `projection` is an inclusion projection, so it drops anything not named
-        // in it - including the distanceInKm that $addFields just computed. Carry
-        // it through explicitly, otherwise the geo path returns no distance and
-        // the client silently falls back to recomputing it.
         const geoProjection = { ...projection, distanceInKm: 1 };
-
-        const [locatedDocs, unlocatedDocs] = await Promise.all([
-            locatedTake > 0
-                ? FoodRestaurant.aggregate([
-                    ...basePipeline,
-                    { $project: geoProjection },
-                    { $skip: locatedSkip },
-                    { $limit: locatedTake }
-                ])
-                : Promise.resolve([]),
-            unlocatedTake > 0
-                ? FoodRestaurant.find(unlocatedFilter)
-                    .select(Object.keys(projection).join(' '))
-                    .sort({ createdAt: -1 })
-                    .skip(unlocatedSkip)
-                    .limit(unlocatedTake)
-                    .lean()
-                : Promise.resolve([])
+        const locatedCandidates = await FoodRestaurant.aggregate([
+            ...basePipeline,
+            { $project: geoProjection },
+            { $limit: RESTAURANT_GEO_CANDIDATE_MAX }
         ]);
 
-        const restaurants = [
-            ...(locatedDocs || []),
-            ...(unlocatedDocs || []).map((r) => ({ ...r, distanceInKm: null }))
-        ].map(toRestaurantListItem);
+        const roadVisibleDocs = await filterRestaurantsByRoadRadius(
+            locatedCandidates || [],
+            { lat, lng },
+            {
+                radiusKm: effectiveRadiusKm,
+                includeFailedRoadChecks: false,
+            }
+        );
+
+        const sortedVisibleDocs = (() => {
+            const rows = [...roadVisibleDocs];
+            if (sortBy === 'rating' || sortBy === 'rating-high') return rows.sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0) || (Number(a.distanceScore) || Infinity) - (Number(b.distanceScore) || Infinity));
+            if (sortBy === 'rating-low') return rows.sort((a, b) => (Number(a.rating) || 0) - (Number(b.rating) || 0) || (Number(a.distanceScore) || Infinity) - (Number(b.distanceScore) || Infinity));
+            if (sortBy === 'price-low') return rows.sort((a, b) => (Number(a.featuredPrice) || Infinity) - (Number(b.featuredPrice) || Infinity) || (Number(a.distanceScore) || Infinity) - (Number(b.distanceScore) || Infinity));
+            if (sortBy === 'price-high') return rows.sort((a, b) => (Number(b.featuredPrice) || 0) - (Number(a.featuredPrice) || 0) || (Number(a.distanceScore) || Infinity) - (Number(b.distanceScore) || Infinity));
+            if (sortBy === 'newest') return rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+            if (sortBy === 'deliveryTime') return rows.sort((a, b) => (Number(a.estimatedDeliveryTimeMinutes) || Infinity) - (Number(b.estimatedDeliveryTimeMinutes) || Infinity) || (Number(a.distanceScore) || Infinity) - (Number(b.distanceScore) || Infinity));
+            return rows;
+        })();
+
+        const total = sortedVisibleDocs.length;
+        const restaurants = sortedVisibleDocs
+            .slice(skip, skip + limit)
+            .map((restaurant) => toRestaurantListItem({
+                ...restaurant,
+                distanceInKm: restaurant.roadDistanceKm ?? restaurant.distanceScore ?? restaurant.distanceInKm
+            }));
 
         // Fetch recommended items for each restaurant from FoodItem model
         const restaurantIds = restaurants.map(r => r._id);

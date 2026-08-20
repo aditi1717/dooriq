@@ -3,6 +3,10 @@ import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodCategory } from '../../admin/models/category.model.js';
 import mongoose from 'mongoose';
 import { createTtlCache } from '../../../../utils/cache.js';
+import {
+    filterRestaurantsByRoadRadius,
+    getDefaultServingRadiusKm,
+} from '../../shared/restaurantVisibility.service.js';
 
 /**
  * Upper bound on restaurants gathered before pagination. Keeps a broad search
@@ -30,15 +34,19 @@ export const invalidateSearchCache = () => searchCache.clear();
 
 // Page and coordinates are excluded: the cached value is the full ordered-by-
 // relevance match set, so every page and every location reuses one entry.
-const cacheKey = ({ q, categoryId, minRating, maxDeliveryTime, isVeg, zoneId }) =>
-    JSON.stringify({
+const cacheKey = ({ q, categoryId, minRating, maxDeliveryTime, isVeg, lat, lng }) => {
+    const roundedLat = lat ? Number(lat).toFixed(2) : null;
+    const roundedLng = lng ? Number(lng).toFixed(2) : null;
+    return JSON.stringify({
         q: String(q || '').trim().toLowerCase(),
         categoryId: categoryId || null,
         minRating: minRating || null,
         maxDeliveryTime: maxDeliveryTime || null,
         isVeg: isVeg === 'true',
-        zoneId: zoneId || null,
+        lat: roundedLat,
+        lng: roundedLng
     });
+};
 
 /**
  * Unified Search Service
@@ -51,47 +59,35 @@ export const searchUnified = async (query = {}, options = {}) => {
     const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
     const skip = (pageNum - 1) * limitNum;
 
-    // Cache the zone-level match set, then order and paginate per request so two
-    // users in different parts of the same zone each get nearest-first results.
+    // Cache the broad match set, then apply per-request road-radius filtering
+    // and pagination with the caller's current coordinates.
     const matched = await searchCache.get(cacheKey(query), () => searchUnifiedUncached(query));
 
     const all = matched?.restaurants || [];
     const userLat = Number(lat);
     const userLng = Number(lng);
-    const ordered =
-        Number.isFinite(userLat) && Number.isFinite(userLng)
-            ? sortByDistance(all, userLat, userLng)
-            : all;
+    const hasCoordinates = Number.isFinite(userLat) && Number.isFinite(userLng);
+    const origin = hasCoordinates ? { lat: userLat, lng: userLng } : null;
+
+    let filtered = all;
+    if (origin) {
+        const defaultRadius = await getDefaultServingRadiusKm();
+        filtered = await filterRestaurantsByRoadRadius(all, origin, {
+            radiusKm: defaultRadius,
+            includeFailedRoadChecks: false,
+        });
+    }
 
     return {
         success: true,
         data: {
-            restaurants: ordered.slice(skip, skip + limitNum),
-            total: ordered.length,
+            restaurants: filtered.slice(skip, skip + limitNum),
+            total: filtered.length,
             page: pageNum,
             limit: limitNum,
-            zoneFiltered: Boolean(matched?.zoneFiltered)
+            zoneFiltered: false
         }
     };
-};
-
-/** Haversine distance sort, applied outside the cache. */
-const sortByDistance = (restaurants, userLat, userLng) => {
-    const scored = restaurants.map((res) => {
-        const rLat = Number(res.location?.latitude);
-        const rLng = Number(res.location?.longitude);
-        if (!Number.isFinite(rLat) || !Number.isFinite(rLng)) return { ...res, distanceScore: 999 };
-        const dLat = ((rLat - userLat) * Math.PI) / 180;
-        const dLon = ((rLng - userLng) * Math.PI) / 180;
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos((userLat * Math.PI) / 180) * Math.cos((rLat * Math.PI) / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return { ...res, distanceScore: 6371 * c };
-    });
-    scored.sort((a, b) => (a.distanceScore ?? 999) - (b.distanceScore ?? 999));
-    return scored;
 };
 
 const searchUnifiedUncached = async (query = {}, options = {}) => {
@@ -101,7 +97,8 @@ const searchUnifiedUncached = async (query = {}, options = {}) => {
         minRating,
         maxDeliveryTime,
         isVeg,
-        zoneId
+        lat,
+        lng
     } = query;
 
     const term = String(q || '').trim();
@@ -113,18 +110,30 @@ const searchUnifiedUncached = async (query = {}, options = {}) => {
     // stays independent of the caller's position and page.
     const emptyResult = {
         restaurants: [],
-        zoneFiltered: !!(zoneId && mongoose.Types.ObjectId.isValid(zoneId))
+        zoneFiltered: false
     };
 
-    // 1. Structural filter (zone / rating / delivery time). These are indexed
+    // 1. Structural filter (rating / delivery time). These are indexed
     //    fields, so this is the cheap way to narrow the candidate set first.
     //    The old code instead loaded every active restaurant id in the database
     //    via a `distinct` scan on every keystroke and passed them all as a giant
     //    `$in` array - slow, and it grew without bound as restaurants were added.
     const restaurantFilter = { status: 'approved' };
 
-    if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
-        restaurantFilter.zoneId = new mongoose.Types.ObjectId(zoneId);
+    const userLat = Number(lat);
+    const userLng = Number(lng);
+    const wantsGeo = Number.isFinite(userLat) && Number.isFinite(userLng);
+
+    if (wantsGeo) {
+        restaurantFilter.location = {
+            $near: {
+                $geometry: {
+                    type: 'Point',
+                    coordinates: [userLng, userLat]
+                },
+                $maxDistance: 30000 // Limit search to 30km (30,000 meters)
+            }
+        };
     }
 
     if (vegOnly) {
@@ -264,7 +273,7 @@ const searchUnifiedUncached = async (query = {}, options = {}) => {
 
     return {
         restaurants: results,
-        zoneFiltered: !!(zoneId && mongoose.Types.ObjectId.isValid(zoneId))
+        zoneFiltered: false
     };
 };
 
@@ -281,14 +290,6 @@ export const getAdminCategories = async (query = {}) => {
             { restaurantId: { $eq: undefined } }
         ]
     };
-
-    if (query.zoneId && mongoose.Types.ObjectId.isValid(query.zoneId)) {
-        filter.$or = [
-            { zoneId: new mongoose.Types.ObjectId(query.zoneId) },
-            { zoneId: { $exists: false } },
-            { zoneId: null }
-        ];
-    }
 
     const categories = await FoodCategory.find(filter).sort({ sortOrder: 1, name: 1 }).lean();
     return categories;

@@ -9,11 +9,14 @@ import { Card, CardTitle, CardContent } from "@food/components/ui/card"
 import { Button } from "@food/components/ui/button"
 import { RestaurantGridSkeleton } from "@food/components/ui/loading-skeletons"
 import { useProfile } from "@food/context/ProfileContext"
-import { useZone } from "@food/hooks/useZone"
 import { useLocation } from "@food/hooks/useLocation"
 import { restaurantAPI } from "@food/api"
 import { API_BASE_URL } from "@food/api/config"
 import { useDelayedLoading } from "@food/hooks/useDelayedLoading"
+import {
+  buildRadiusListingParams,
+  formatListingDistance,
+} from "@food/utils/publicListing"
 
 const BACKEND_ORIGIN = (() => {
   try {
@@ -54,7 +57,6 @@ const pickRestaurantImage = (restaurant) => {
 export default function Restaurants() {
   const { addFavorite, removeFavorite, isFavorite } = useProfile()
   const { location: userLocation } = useLocation()
-  const { zoneId } = useZone(userLocation)
   const [restaurants, setRestaurants] = useState([])
   const [loading, setLoading] = useState(true)
   const showRestaurantsSkeleton = useDelayedLoading(loading)
@@ -65,11 +67,11 @@ export default function Restaurants() {
     const fetchRestaurants = async () => {
       try {
         setLoading(true)
-        if (!zoneId) {
+        const params = buildRadiusListingParams(userLocation, { _ts: Date.now() })
+        if (!params) {
           setRestaurants([])
           return
         }
-        const params = { zoneId, _ts: Date.now() }
         const response = await restaurantAPI.getAllRestaurants(params, { noCache: true })
         const list =
           response?.data?.data?.restaurants ||
@@ -95,7 +97,11 @@ export default function Restaurants() {
             rating: Number(restaurant?.rating || restaurant?.avgRating || 0),
             totalRatings: Number(restaurant?.totalRatings || restaurant?.ratingCount || restaurant?.reviews?.length || restaurant?.reviews || 0),
             deliveryTime: restaurant?.estimatedDeliveryTime || (restaurant?.estimatedDeliveryTimeMinutes ? `${restaurant.estimatedDeliveryTimeMinutes} mins` : "25-30 mins"),
-            distance: restaurant?.distance ? (typeof restaurant.distance === 'number' ? `${restaurant.distance.toFixed(1)} km` : restaurant.distance) : "1.2 km",
+            distance: formatListingDistance(
+              restaurant?.roadDistanceKm ??
+              restaurant?.distanceInKm ??
+              restaurant?.distance
+            ) || restaurant?.distance || "",
             priceRange: restaurant?.priceRange || "$$",
             image: pickRestaurantImage(restaurant),
           }
@@ -117,7 +123,7 @@ export default function Restaurants() {
     return () => {
       cancelled = true
     }
-  }, [zoneId])
+  }, [userLocation?.latitude, userLocation?.longitude])
 
   const hasRestaurants = useMemo(() => restaurants.length > 0, [restaurants.length])
 

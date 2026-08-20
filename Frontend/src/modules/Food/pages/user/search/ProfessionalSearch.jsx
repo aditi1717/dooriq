@@ -10,11 +10,11 @@ import { Card, CardContent } from "@food/components/ui/card"
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { useLocation as useGeoLocation } from "@food/hooks/useLocation"
-import { useZone } from "@food/hooks/useZone"
 import { searchAPI } from "@/services/api"
 import { motion, AnimatePresence } from "framer-motion"
 import { useProfile } from "@food/context/ProfileContext"
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
+import { buildRadiusListingParams } from "@food/utils/publicListing"
 
 // Helper to resolve media URLs consistently
 const getMediaUrl = (url) => {
@@ -77,7 +77,6 @@ export default function ProfessionalSearch() {
   const navigate = useNavigate()
   const goBack = useAppBackNavigation()
   const { location: userCoords } = useGeoLocation()
-  const { zoneId } = useZone(userCoords)
   
   const [query, setQuery] = useState(initialQuery)
   const debouncedQuery = useDebounce(query, 500)
@@ -121,7 +120,7 @@ export default function ProfessionalSearch() {
 
   const fetchCategories = async () => {
     try {
-      const res = await searchAPI.getAdminCategories({ zoneId })
+      const res = await searchAPI.getAdminCategories()
       if (res.data?.success) setCategories(res.data.data.categories)
     } catch (err) {
       console.error("Failed to fetch categories", err)
@@ -157,13 +156,16 @@ export default function ProfessionalSearch() {
       return
     }
 
-    const params = {
+    const params = buildRadiusListingParams(userCoords, {
       q: trimmed,
       categoryId: catId,
-      lat: userCoords?.latitude,
-      lng: userCoords?.longitude,
-      zoneId,
       isVeg: vegMode ? 'true' : 'false'
+    })
+    if (!params) {
+      searchAbortRef.current = null
+      setResults({ restaurants: [], dishes: [] })
+      setLoading(false)
+      return
     }
     const cacheKey = JSON.stringify(params)
 
@@ -204,7 +206,7 @@ export default function ProfessionalSearch() {
         setLoading(false)
       }
     }
-  }, [userCoords, zoneId, vegMode])
+  }, [userCoords, vegMode])
 
   useEffect(() => {
     performSearch(debouncedQuery, selectedCategoryId)

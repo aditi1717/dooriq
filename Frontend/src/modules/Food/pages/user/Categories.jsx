@@ -5,10 +5,9 @@ import { motion } from "framer-motion";
 import { adminAPI } from "@food/api";
 import { foodImages } from "@food/constants/images";
 import OptimizedImage from "@food/components/OptimizedImage";
-import { useLocation } from "@food/hooks/useLocation";
-import { useZone } from "@food/hooks/useZone";
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation";
 import { API_BASE_URL } from "@food/api/config";
+import { mapPublicCategories } from "@food/utils/publicListing";
 
 export default function Categories() {
   const navigate = useNavigate();
@@ -16,8 +15,6 @@ export default function Categories() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const { location } = useLocation();
-  const { zoneId } = useZone(location);
 
   const BACKEND_ORIGIN = useMemo(() => {
     try {
@@ -54,21 +51,17 @@ export default function Categories() {
     const fetchCategories = async () => {
       try {
         setLoading(true);
-        const response = await adminAPI.getPublicCategories(zoneId ? { zoneId } : {});
+        const response = await adminAPI.getPublicCategories();
         const list =
           response?.data?.data?.categories ||
           response?.data?.categories ||
           [];
 
         if (Array.isArray(list)) {
-          const transformed = list.map((cat, idx) => ({
-            id: String(cat?.id || cat?._id || cat?.slug || idx),
-            name: cat?.name || "",
-            slug: cat?.slug || String(cat?.name || "").toLowerCase().replace(/\s+/g, "-"),
-            image: normalizeImageUrl(cat?.image || cat?.imageUrl) || foodImages[idx % foodImages.length],
-            type: cat?.type || "",
+          setCategories(mapPublicCategories(list, {
+            fallbackImages: foodImages,
+            resolveImage: normalizeImageUrl,
           }));
-          setCategories(transformed);
         }
       } catch (error) {
         console.error("Error fetching categories:", error);
@@ -77,7 +70,7 @@ export default function Categories() {
       }
     };
     fetchCategories();
-  }, [zoneId, BACKEND_ORIGIN]);
+  }, [BACKEND_ORIGIN]);
 
   const filteredCategories = categories.filter((cat) =>
     (cat.name || "").toLowerCase().includes(searchQuery.toLowerCase())

@@ -101,7 +101,7 @@ async function loadBusinessSettings() {
     return { ...settings, powerScanning: normalizedPowerScanning };
 }
 
-async function getCachedBusinessSettings() {
+export async function getCachedBusinessSettings() {
     return businessSettingsCache.get(SETTINGS_CACHE_KEY, loadBusinessSettings);
 }
 
@@ -207,7 +207,7 @@ export async function updateOrderAcceptanceSettings(req, res, next) {
 export async function updateBusinessSettings(req, res, next) {
     try {
         const data = req.body.data ? JSON.parse(req.body.data) : {};
-        const { companyName, email, phoneCountryCode, phoneNumber, address, state, pincode, region, restaurantTdsPercentage, deliveryBoyTdsPercentage, launchCountdown } = data;
+        const { companyName, email, phoneCountryCode, phoneNumber, address, state, pincode, region, restaurantTdsPercentage, deliveryBoyTdsPercentage, launchCountdown, defaultServingRadiusKm } = data;
 
         // Validation
         if (!companyName || companyName.trim().length < 2 || companyName.trim().length > 50) {
@@ -242,6 +242,13 @@ export async function updateBusinessSettings(req, res, next) {
             }
         }
 
+        if (defaultServingRadiusKm !== undefined) {
+            const radius = Number(defaultServingRadiusKm);
+            if (isNaN(radius) || radius < 0.1 || radius > 500) {
+                return res.status(400).json({ success: false, message: 'Default serving radius must be a number between 0.1 and 500 km' });
+            }
+        }
+
         let settings = await FoodBusinessSettings.findOne();
         if (!settings) {
             settings = new FoodBusinessSettings();
@@ -262,6 +269,7 @@ export async function updateBusinessSettings(req, res, next) {
         if (restaurantTdsPercentage !== undefined) settings.restaurantTdsPercentage = Number(restaurantTdsPercentage);
         if (deliveryBoyTdsPercentage !== undefined) settings.deliveryBoyTdsPercentage = Number(deliveryBoyTdsPercentage);
         if (launchCountdown !== undefined) settings.launchCountdown = launchCountdown;
+        if (defaultServingRadiusKm !== undefined) settings.defaultServingRadiusKm = Number(defaultServingRadiusKm);
 
         // Handle file uploads
         if (req.files) {

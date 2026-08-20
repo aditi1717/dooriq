@@ -1,12 +1,16 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useEffect, useState, createContext, useContext, useRef, useCallback } from "react"
-import { ProfileProvider } from "@food/context/ProfileContext"
+import { ProfileProvider, useProfile } from "@food/context/ProfileContext"
 import LocationPrompt from "./LocationPrompt"
-import { CartProvider } from "@food/context/CartContext"
+import { CartProvider, useCart } from "@food/context/CartContext"
 import { OrdersProvider } from "@food/context/OrdersContext"
 import { WifiOff, RefreshCw, Clock, Lock, Sparkles, PartyPopper, ArrowRight } from "lucide-react"
 import confetti from "canvas-confetti"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
+import { useLocation as useGeoLocation } from "@food/hooks/useLocation"
+import { restaurantAPI } from "@food/api"
+import { buildRadiusListingParams } from "@food/utils/publicListing"
+import { toast } from "sonner"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -183,6 +187,115 @@ function LocationSelectorProvider({ children }) {
       {children}
     </LocationSelectorContext.Provider>
   )
+}
+
+function CartRadiusGuard() {
+  const { cart, clearCart } = useCart()
+  const { getDefaultAddress } = useProfile()
+  const { location: liveLocation } = useGeoLocation()
+  const [deliveryAddressMode, setDeliveryAddressMode] = useState(() => {
+    if (typeof window === "undefined") return "saved"
+    return window.localStorage.getItem("deliveryAddressMode") || "saved"
+  })
+  const lastCheckedKeyRef = useRef("")
+
+  useEffect(() => {
+    const readMode = () => {
+      if (typeof window === "undefined") return
+      const nextMode = window.localStorage.getItem("deliveryAddressMode") || "saved"
+      setDeliveryAddressMode(nextMode)
+    }
+
+    window.addEventListener("focus", readMode)
+    window.addEventListener("storage", readMode)
+    window.addEventListener("deliveryAddressModeChanged", readMode)
+    return () => {
+      window.removeEventListener("focus", readMode)
+      window.removeEventListener("storage", readMode)
+      window.removeEventListener("deliveryAddressModeChanged", readMode)
+    }
+  }, [])
+
+  useEffect(() => {
+    const cartItems = Array.isArray(cart) ? cart : []
+    if (cartItems.length === 0) return
+
+    const defaultAddress = getDefaultAddress?.() || null
+    const coords = defaultAddress?.location?.coordinates
+    const savedLocation = Array.isArray(coords) && coords.length >= 2
+      ? { latitude: Number(coords[1]), longitude: Number(coords[0]) }
+      : {
+        latitude: Number(defaultAddress?.latitude ?? defaultAddress?.lat),
+        longitude: Number(defaultAddress?.longitude ?? defaultAddress?.lng),
+      }
+
+    const useSavedAddress =
+      deliveryAddressMode === "saved" &&
+      Number.isFinite(savedLocation.latitude) &&
+      Number.isFinite(savedLocation.longitude)
+    const effectiveLocation = useSavedAddress ? savedLocation : liveLocation
+    const params = buildRadiusListingParams(effectiveLocation, { limit: 50 })
+    if (!params) return
+
+    const cartRestaurantId = String(cartItems[0]?.restaurantId || "").trim()
+    const cartRestaurantName = String(cartItems[0]?.restaurant || "").trim().toLowerCase()
+    if (!cartRestaurantId && !cartRestaurantName) return
+
+    const checkKey = JSON.stringify({
+      lat: Number(params.lat).toFixed(6),
+      lng: Number(params.lng).toFixed(6),
+      restaurantId: cartRestaurantId,
+      restaurantName: cartRestaurantName,
+    })
+    if (lastCheckedKeyRef.current === checkKey) return
+    lastCheckedKeyRef.current = checkKey
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const response = await restaurantAPI.getAllRestaurants(params, { noCache: true })
+        if (cancelled) return
+
+        const restaurants = response?.data?.data?.restaurants || response?.data?.restaurants || []
+        const isRestaurantVisible = restaurants.some((restaurant) => {
+          const ids = [
+            restaurant?._id,
+            restaurant?.id,
+            restaurant?.restaurantId,
+          ].filter(Boolean).map((id) => String(id))
+          const names = [
+            restaurant?.restaurantName,
+            restaurant?.name,
+          ].filter(Boolean).map((name) => String(name).trim().toLowerCase())
+
+          return (
+            (cartRestaurantId && ids.includes(cartRestaurantId)) ||
+            (cartRestaurantName && names.includes(cartRestaurantName))
+          )
+        })
+
+        if (!isRestaurantVisible) {
+          clearCart()
+          toast.info("Cart cleared because the restaurant is outside your selected delivery radius.")
+        }
+      } catch (error) {
+        debugWarn("Cart radius validation skipped:", error)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    cart,
+    clearCart,
+    deliveryAddressMode,
+    getDefaultAddress,
+    liveLocation?.latitude,
+    liveLocation?.longitude,
+  ])
+
+  return null
 }
 
 export default function UserLayout() {
@@ -469,6 +582,7 @@ export default function UserLayout() {
       <div className={`transition-all duration-300 ${isAppLocked ? "blur-md select-none pointer-events-none" : ""}`}>
         <CartProvider>
           <ProfileProvider>
+            <CartRadiusGuard />
             <OrdersProvider>
               <SearchOverlayProvider>
                 <LocationSelectorProvider>

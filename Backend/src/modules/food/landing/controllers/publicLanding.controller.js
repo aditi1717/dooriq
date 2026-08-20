@@ -94,8 +94,8 @@ export const getPublicHomePromotionBannersController = async (req, res, next) =>
 
 export const getPublicGourmetController = async (req, res, next) => {
     try {
-        const { zoneId } = req.query;
-        const docs = await getPublicGourmetRestaurants(zoneId);
+        const { zoneId, lat, lng } = req.query;
+        const docs = await getPublicGourmetRestaurants(zoneId, lat, lng);
         const restaurants = (docs || [])
             .filter((d) => d.restaurant) // Only include if restaurant data is populated (matches zone)
             .map((d) => ({
@@ -111,18 +111,56 @@ export const getPublicGourmetController = async (req, res, next) => {
 
 export const getPublicLandingSettingsController = async (req, res, next) => {
     try {
-        const { zoneId } = req.query;
+        const { zoneId, lat, lng } = req.query;
         const settings = await getLandingSettings();
         const ids = settings?.recommendedRestaurantIds || [];
         let recommendedRestaurants = [];
         if (Array.isArray(ids) && ids.length > 0) {
             const query = { _id: { $in: ids }, status: 'approved' };
-            if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
-                query.zoneId = new mongoose.Types.ObjectId(zoneId);
-            }
-            recommendedRestaurants = await FoodRestaurant.find(query)
-                .select('restaurantName area city profileImage coverImages menuImages slug rating cuisines pureVegRestaurant zoneId')
+            const restaurants = await FoodRestaurant.find(query)
+                .select('restaurantName area city profileImage coverImages menuImages slug rating cuisines pureVegRestaurant zoneId location')
                 .lean();
+
+            const userLat = lat !== undefined && lat !== null ? Number(lat) : null;
+            const userLng = lng !== undefined && lng !== null ? Number(lng) : null;
+            const wantsGeo = userLat !== null && !isNaN(userLat) && userLng !== null && !isNaN(userLng);
+
+            if (wantsGeo) {
+                // Fetch global default serving radius (default to 7 km)
+                let defaultRadius = 7;
+                try {
+                    const { getCachedBusinessSettings } = await import('../../admin/controllers/businessSettings.controller.js');
+                    const busSettings = await getCachedBusinessSettings();
+                    if (busSettings && typeof busSettings.defaultServingRadiusKm === 'number') {
+                        defaultRadius = busSettings.defaultServingRadiusKm;
+                    }
+                } catch (e) {
+                    console.error('Failed to load default serving radius from settings in Landing Settings:', e);
+                }
+
+                const calculateDistanceInKmLocal = (lat1, lon1, lat2, lon2) => {
+                    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+                    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+                    const a =
+                        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+                        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                    return 6371 * c;
+                };
+
+                recommendedRestaurants = restaurants.filter((r) => {
+                    const rLat = Number(r.location?.latitude);
+                    const rLng = Number(r.location?.longitude);
+                    if (isNaN(rLat) || isNaN(rLng)) return false;
+                    const distance = calculateDistanceInKmLocal(userLat, userLng, rLat, rLng);
+                    return distance <= defaultRadius;
+                });
+            } else if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
+                recommendedRestaurants = restaurants.filter((r) => String(r.zoneId) === String(zoneId));
+            } else {
+                recommendedRestaurants = restaurants;
+            }
         }
         const payload = {
             ...settings,

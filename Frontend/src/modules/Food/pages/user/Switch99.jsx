@@ -9,7 +9,6 @@ import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { useSearchOverlay, useLocationSelector } from "@food/components/user/UserLayout"
 import { useLocation } from "@food/hooks/useLocation"
-import { useZone } from "@food/hooks/useZone"
 import { useProfile } from "@food/context/ProfileContext"
 import { useCart } from "@food/context/CartContext"
 import PageNavbar from "@food/components/user/PageNavbar"
@@ -23,6 +22,10 @@ import { restaurantAPI, adminAPI } from "@food/api"
 import { isModuleAuthenticated } from "@food/utils/auth"
 import { flattenMenuItems, getMenuFromResponse } from "@food/utils/menuItems"
 import { calculateDistance, formatDistance } from "@food/utils/common"
+import {
+  buildRadiusListingParams,
+  mapPublicCategories,
+} from "@food/utils/publicListing"
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
 import {
   buildCartLineId,
@@ -114,7 +117,6 @@ export default function Under250() {
     return useSavedAddress ? defaultSavedAddressLocation : location
   }, [deliveryAddressMode, defaultSavedAddressLocation, location])
 
-  const { zoneId, zoneStatus, isInService, isOutOfService, refreshZone } = useZone(effectiveLocation)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -548,38 +550,23 @@ export default function Under250() {
   }, [])
 
   useEffect(() => {
-    if (
-      !Number.isFinite(effectiveLocation?.latitude) ||
-      !Number.isFinite(effectiveLocation?.longitude)
-    ) {
-      return
-    }
-
-    refreshZone()
-  }, [
-    deliveryAddressMode,
-    effectiveLocation?.latitude,
-    effectiveLocation?.longitude,
-    refreshZone,
-  ])
-
-  useEffect(() => {
     const fetchRestaurantsUnder250 = async () => {
       const fetchGeneration = ++fetchGenerationRef.current
       try {
         setLoadingRestaurants(true)
-        // Strict zone-only listing: do not fetch global restaurants when zone is unavailable.
-        if (!zoneId) {
+        // Radius-only listing: require usable coordinates, not zone scoping.
+        const params = buildRadiusListingParams(effectiveLocation)
+        if (!params) {
           setUnder250Restaurants([])
           return
         }
-        const response = await restaurantAPI.getAllRestaurants({ zoneId })
+        const userLat = Number(params.lat)
+        const userLng = Number(params.lng)
+        const response = await restaurantAPI.getAllRestaurants(params)
         const restaurantsRaw = Array.isArray(response?.data?.data?.restaurants)
           ? response.data.data.restaurants
           : []
         const candidateRestaurants = filterCandidateRestaurants(restaurantsRaw)
-        const userLat = Number(effectiveLocation?.latitude)
-        const userLng = Number(effectiveLocation?.longitude)
 
         const restaurantsWithUnder250Dishes = await mapWithConcurrency(
           candidateRestaurants,
@@ -599,6 +586,7 @@ export default function Under250() {
                   return {
                     ...item,
                     id: String(item?.id || item?._id || `${restaurantId}-${item?.name || "dish"}`),
+                    restaurantId: String(restaurantId),
                     price: Number(item?.price || 0),
                     isVeg,
                     image:
@@ -627,14 +615,21 @@ export default function Under250() {
                 restaurantLocation?.longitude ??
                 (Array.isArray(restaurantLocation?.coordinates) ? restaurantLocation.coordinates[0] : null)
               )
-              const distanceInKm = (
-                Number.isFinite(userLat) &&
-                Number.isFinite(userLng) &&
-                Number.isFinite(restaurantLat) &&
-                Number.isFinite(restaurantLng)
+              const backendDistanceKm = Number(
+                restaurant?.roadDistanceKm ??
+                restaurant?.distanceScore ??
+                restaurant?.distanceInKm
               )
-                ? calculateDistance(userLat, userLng, restaurantLat, restaurantLng)
-                : null
+              const distanceInKm = Number.isFinite(backendDistanceKm)
+                ? backendDistanceKm
+                : (
+                  Number.isFinite(userLat) &&
+                  Number.isFinite(userLng) &&
+                  Number.isFinite(restaurantLat) &&
+                  Number.isFinite(restaurantLng)
+                )
+                  ? calculateDistance(userLat, userLng, restaurantLat, restaurantLng)
+                  : null
               const fallbackDistance =
                 typeof restaurant?.distance === "number"
                   ? formatDistance(restaurant.distance)
@@ -689,7 +684,7 @@ export default function Under250() {
     }
 
     fetchRestaurantsUnder250()
-  }, [zoneId, filterCandidateRestaurants, mapWithConcurrency, isSwitch99EligibleItem])
+  }, [filterCandidateRestaurants, mapWithConcurrency, isSwitch99EligibleItem, effectiveLocation?.latitude, effectiveLocation?.longitude])
 
   // Fetch categories from backend (no static fallback list)
   useEffect(() => {
@@ -697,28 +692,12 @@ export default function Under250() {
 
     const fetchCategories = async () => {
       try {
-        const response = await adminAPI.getPublicCategories(zoneId ? { zoneId } : {})
+        const response = await adminAPI.getPublicCategories()
         const categoriesRaw = Array.isArray(response?.data?.data?.categories)
           ? response.data.data.categories
           : []
 
-        const mappedCategories = categoriesRaw
-          .map((cat, index) => {
-            const name = String(cat?.name || "").trim()
-            if (!name) return null
-
-            return {
-              id: String(cat?.id || cat?._id || cat?.slug || `cat-${index}`),
-              name,
-              slug: String(cat?.slug || name.toLowerCase().replace(/\s+/g, "-")),
-              image:
-                cat?.imageUrl ||
-                cat?.image ||
-                cat?.icon ||
-                "",
-            }
-          })
-          .filter(Boolean)
+        const mappedCategories = mapPublicCategories(categoriesRaw)
 
         if (!cancelled) {
           setCategories(mappedCategories)
@@ -734,7 +713,7 @@ export default function Under250() {
     return () => {
       cancelled = true
     }
-  }, [zoneId])
+  }, [])
 
   // Sync quantities from cart on mount
   useEffect(() => {
@@ -883,12 +862,6 @@ export default function Under250() {
       return
     }
 
-    // CRITICAL: Check if user is in service zone
-    if (isOutOfService) {
-      toast.error('You are outside the service zone. Please select a location within the service area.')
-      return
-    }
-
     const resolvedVariant = preferredVariant || getDefaultFoodVariant(item)
     const lineItemId = getLineItemIdForDish(item, resolvedVariant)
 
@@ -913,6 +886,7 @@ export default function Under250() {
       variantPrice: resolvedVariant?.price ?? item.price,
       image: item.image,
       restaurant: restaurant,
+      restaurantId: item.restaurantId || "",
       description: item.description || "",
       originalPrice: item.originalPrice || item.price,
       foodType: item.foodType,
@@ -1000,6 +974,7 @@ export default function Under250() {
     const itemWithRestaurant = {
       ...item,
       restaurant: restaurant.name,
+      restaurantId: restaurant.restaurantId || restaurant.id || "",
       restaurantSlug: restaurant.slug || restaurant.restaurantId || "",
       description: item.description || `${item.name} from ${restaurant.name}`,
       customisable: item.customisable || false,
@@ -1113,8 +1088,8 @@ export default function Under250() {
     }
   }
 
-  // Check if should show grayscale (only when user is out of service)
-  const shouldShowGrayscale = isOutOfService
+  // Radius-based listing decides visibility; do not gray the page by zone state.
+  const shouldShowGrayscale = false
 
   return (
 
@@ -1345,7 +1320,7 @@ export default function Under250() {
           sortedAndFilteredRestaurants.map((restaurant) => {
             const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
             const restaurantAvailability = getRestaurantAvailabilityStatus(restaurant, new Date(availabilityTick));
-            const isRestaurantClosed = isOutOfService || !restaurantAvailability.isOpen;
+            const isRestaurantClosed = !restaurantAvailability.isOpen;
             return (
               <section key={restaurant.id} className={`pt-4 sm:pt-6 md:pt-8 lg:pt-10 ${isRestaurantClosed ? 'grayscale opacity-75' : ''}`}>
                 {/* Restaurant Header */}

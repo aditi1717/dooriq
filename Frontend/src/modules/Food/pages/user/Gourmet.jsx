@@ -11,8 +11,11 @@ import OptimizedImage from "@food/components/OptimizedImage"
 import { RestaurantGridSkeleton } from "@food/components/ui/loading-skeletons"
 import { useDelayedLoading } from "@food/hooks/useDelayedLoading"
 import { useLocation } from "@food/hooks/useLocation"
-import { useZone } from "@food/hooks/useZone"
 import { useProfile } from "@food/context/ProfileContext"
+import {
+  buildRadiusListingParams,
+  formatListingDistance,
+} from "@food/utils/publicListing"
 
 // Import banner
 import gourmetBanner from "@food/assets/groumetpagebanner.png"
@@ -76,13 +79,7 @@ export default function Gourmet() {
     return useSavedAddress ? defaultSavedAddressLocation : location;
   }, [deliveryAddressMode, defaultSavedAddressLocation, location]);
 
-  const {
-    zoneId,
-    zoneStatus,
-    loading: zoneLoading,
-  } = useZone(effectiveLocation);
-  
-  const showGourmetSkeleton = useDelayedLoading(loading || zoneStatus === 'loading' || zoneLoading)
+  const showGourmetSkeleton = useDelayedLoading(loading)
 
   const backendOrigin = (() => {
     try {
@@ -109,18 +106,17 @@ export default function Gourmet() {
     setLoading(true);
 
     const fetchGourmetRestaurants = async () => {
-      if (!zoneId) {
-        if (zoneStatus !== 'loading' && !zoneLoading) {
-          setGourmetRestaurants([]);
-          setLoading(false);
-        }
+      const params = buildRadiusListingParams(effectiveLocation);
+      if (!params) {
+        setGourmetRestaurants([]);
+        setLoading(false);
         return;
       }
 
       try {
         setError(null)
         const response = await api.get('/food/hero-banners/gourmet/public', {
-          params: { zoneId }
+          params
         })
         
         if (cancelled) return;
@@ -143,7 +139,7 @@ export default function Gourmet() {
     return () => {
       cancelled = true;
     }
-  }, [zoneId, zoneStatus, zoneLoading])
+  }, [effectiveLocation?.latitude, effectiveLocation?.longitude])
 
   const toggleFavorite = (id) => {
     setFavorites(prev => {
@@ -218,31 +214,11 @@ export default function Gourmet() {
                   const restaurantId = restaurant._id || restaurant.restaurantId || restaurant.id
                   const isFavorite = favorites.has(restaurantId)
 
-                  // Calculate distance if coordinates are available
-                  const calculateDistance = (lat1, lng1, lat2, lng2) => {
-                    const R = 6371; // Earth's radius in kilometers
-                    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-                    const dLng = ((lng2 - lng1) * Math.PI) / 180;
-                    const a =
-                      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                      Math.cos((lat1 * Math.PI) / 180) *
-                        Math.cos((lat2 * Math.PI) / 180) *
-                        Math.sin(dLng / 2) *
-                        Math.sin(dLng / 2);
-                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                    return R * c; // Distance in kilometers
-                  };
-
-                  let distanceStr = '1.2 km'
-                  const restaurantLat = restaurant.location?.latitude || restaurant.location?.coordinates?.[1]
-                  const restaurantLng = restaurant.location?.longitude || restaurant.location?.coordinates?.[0]
-                  
-                  if (location?.latitude && location?.longitude && restaurantLat && restaurantLng) {
-                    const d = calculateDistance(location.latitude, location.longitude, restaurantLat, restaurantLng)
-                    distanceStr = `${d.toFixed(1)} km`
-                  } else if (restaurant.distance) {
-                    distanceStr = restaurant.distance
-                  }
+                  const distanceStr = formatListingDistance(
+                    restaurant.roadDistanceKm ??
+                    restaurant.distanceInKm ??
+                    restaurant.distance
+                  ) || restaurant.distance || ""
 
                   // Get restaurant cover image with priority: coverImages > menuImages > profileImage
                   const coverImages = restaurant.coverImages && restaurant.coverImages.length > 0

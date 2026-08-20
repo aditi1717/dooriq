@@ -61,6 +61,7 @@ const businessSettingsSchema = new mongoose.Schema(
         },
         restaurantTdsPercentage: { type: Number, default: 0, min: 0, max: 100 },
         deliveryBoyTdsPercentage: { type: Number, default: 0, min: 0, max: 100 },
+        defaultServingRadiusKm: { type: Number, default: 7 },
         launchCountdown: {
             isEnabled: { type: Boolean, default: false },
             timerTime: { type: String, default: '' },

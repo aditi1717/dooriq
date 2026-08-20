@@ -87,12 +87,15 @@ import {
   DropdownMenuTrigger,
 } from "@food/components/ui/dropdown-menu";
 import { useLocation } from "@food/hooks/useLocation";
-import { useZone } from "@food/hooks/useZone";
 import dooriqLogo from "@food/assets/dooriq-logo.png";
 import offerImage from "@food/assets/offerimage.png";
 import api, { publicGetOnce, restaurantAPI, adminAPI } from "@food/api";
 import { API_BASE_URL } from "@food/api/config";
 import OptimizedImage from "@food/components/OptimizedImage";
+import {
+  buildRadiusListingParams,
+  mapPublicCategories,
+} from "@food/utils/publicListing";
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability";
 import HomeHeader from "@food/components/user/home/HomeHeader";
 import QuickSection from "@food/components/user/home/QuickSection";
@@ -463,7 +466,6 @@ const RestaurantCard = React.memo(({
   restaurant,
   index,
   availabilityTick,
-  isOutOfService,
   favorite,
   onToggleFavorite,
   BACKEND_ORIGIN,
@@ -546,7 +548,7 @@ const RestaurantCard = React.memo(({
       <div className="h-full group">
         <Card
           className={`overflow-hidden gap-0 border-0 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] border-background transition-all duration-500 py-0 rounded-[28px] flex flex-col h-full w-full relative shadow-sm hover:shadow-xl ${
-            isOutOfService || !availability.isOpen
+            !availability.isOpen
               ? "grayscale opacity-75"
               : ""
           }`}>
@@ -1547,26 +1549,22 @@ export default function Home() {
     return useSavedAddress ? defaultSavedAddressLocation : location;
   }, [deliveryAddressMode, defaultSavedAddressLocation, location]);
 
-  const {
-    zoneId,
-    zoneStatus,
-    isInService,
-    isOutOfService,
-    loading: zoneLoading,
-    error: zoneError,
-    refreshZone,
-  } = useZone(effectiveLocation);
-
   // Fetch explore icons and landing settings from public APIs
   useEffect(() => {
     let cancelled = false;
     setLoadingLandingConfig(true);
     
-    // Construct the settings endpoint with zoneId if available
-    const settingsEndpoint = zoneId 
-      ? `/food/landing/settings/public?zoneId=${zoneId}`
-      : "/food/landing/settings/public";
-
+    // Homepage settings should follow user coordinates + admin radius, not zone scoping.
+    let settingsEndpoint = "/food/landing/settings/public";
+    const queryParams = [];
+    if (effectiveLocation?.latitude && effectiveLocation?.longitude) {
+      queryParams.push(`lat=${effectiveLocation.latitude}`);
+      queryParams.push(`lng=${effectiveLocation.longitude}`);
+    }
+    if (queryParams.length > 0) {
+      settingsEndpoint += `?${queryParams.join("&")}`;
+    }
+ 
     Promise.all([
       publicGetOnce("/food/explore-icons/public")
         .catch(() => ({ data: { data: {} } })),
@@ -1608,26 +1606,26 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [zoneId]);
+  }, [effectiveLocation?.latitude, effectiveLocation?.longitude]);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("Added to collection");
   const [showManageCollections, setShowManageCollections] = useState(false);
   const [selectedRestaurantSlug, setSelectedRestaurantSlug] = useState(null);
 
-  // Fetch categories (zone-aware) for the homepage category rail.
+  // Fetch categories without zone scoping so homepage discovery stays radius-led.
   useEffect(() => {
     let cancelled = false
     const run = async () => {
-      const zoneKey = String(zoneId || "global")
+      const categoryCacheKey = "global"
       try {
-        // Dedupe repeated calls (StrictMode + zone settling). Cache per zoneKey and share in-flight request.
-        const cached = publicCategoriesCacheRef.current.get(zoneKey)
+        // Dedupe repeated calls (StrictMode). Cache one public category set and share in-flight request.
+        const cached = publicCategoriesCacheRef.current.get(categoryCacheKey)
         if (cached) {
           if (!cancelled) setRealCategories(cached)
           return
         }
 
-        const inFlight = publicCategoriesInFlightRef.current.get(zoneKey)
+        const inFlight = publicCategoriesInFlightRef.current.get(categoryCacheKey)
         if (inFlight) {
           const categories = await inFlight
           if (!cancelled) setRealCategories(categories)
@@ -1636,31 +1634,23 @@ export default function Home() {
 
         setLoadingRealCategories(true)
         const promise = (async () => {
-          const res = await adminAPI.getPublicCategories(zoneId ? { zoneId } : {})
+          const res = await adminAPI.getPublicCategories()
           const list =
             res?.data?.data?.categories ||
             res?.data?.categories ||
             []
-          const categories = Array.isArray(list)
-            ? list.map((cat, idx) => ({
-                id: String(cat?.id || cat?._id || cat?.slug || idx),
-                name: cat?.name || "",
-                slug: cat?.slug || String(cat?.name || "").toLowerCase().replace(/\s+/g, "-"),
-                image:
-                  normalizeImageUrl(cat?.image || cat?.imageUrl) ||
-                  foodImages[idx % foodImages.length] ||
-                  foodImages[0],
-                type: cat?.type || "",
-              }))
-            : []
+          const categories = mapPublicCategories(list, {
+            fallbackImages: foodImages,
+            resolveImage: normalizeImageUrl,
+          })
 
-          publicCategoriesCacheRef.current.set(zoneKey, categories)
+          publicCategoriesCacheRef.current.set(categoryCacheKey, categories)
           return categories
         })()
 
-        publicCategoriesInFlightRef.current.set(zoneKey, promise)
+        publicCategoriesInFlightRef.current.set(categoryCacheKey, promise)
         const categories = await promise
-        publicCategoriesInFlightRef.current.delete(zoneKey)
+        publicCategoriesInFlightRef.current.delete(categoryCacheKey)
 
         if (!cancelled) setRealCategories(categories)
       } catch (err) {
@@ -1674,7 +1664,7 @@ export default function Home() {
     return () => {
       cancelled = true
     }
-  }, [zoneId, normalizeImageUrl])
+  }, [normalizeImageUrl])
 
   // Memoize cartCount to prevent recalculation on every render - use cart directly
   const cartCount = useMemo(
@@ -1706,24 +1696,6 @@ export default function Home() {
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
-
-  useEffect(() => {
-    if (
-      !Number.isFinite(effectiveLocation?.latitude) ||
-      !Number.isFinite(effectiveLocation?.longitude)
-    ) {
-      return;
-    }
-
-    // Force a zone sync when effective delivery source changes
-    // (saved/current toggle, saved default address change, location source updates).
-    refreshZone();
-  }, [
-    deliveryAddressMode,
-    effectiveLocation?.latitude,
-    effectiveLocation?.longitude,
-    refreshZone,
-  ]);
 
   const cityName = effectiveLocation?.city || "Select";
   const stateName = effectiveLocation?.state || "Location";
@@ -1866,15 +1838,6 @@ export default function Home() {
         // Build query parameters from filters
         const params = { page };
 
-        // Always send user coordinates when available so backend can compute distance/sort.
-        if (
-          Number.isFinite(effectiveLocation?.latitude) &&
-          Number.isFinite(effectiveLocation?.longitude)
-        ) {
-          params.lat = effectiveLocation.latitude;
-          params.lng = effectiveLocation.longitude;
-        }
-
         // Sort by
         if (filters.sortBy) {
           params.sortBy = filters.sortBy;
@@ -1934,16 +1897,16 @@ export default function Home() {
           if (vegModeOption === "pure-veg") params.pureVeg = "true";
         }
 
-        // Strict zone-only listing for user home.
-        // If zone is not detected yet, don't fetch global restaurants.
-        if (!zoneId) {
+        // Radius-only homepage: if we have no usable user coordinates yet,
+        // don't guess a global feed.
+        const radiusParams = buildRadiusListingParams(effectiveLocation, params);
+        if (!radiusParams) {
           setRestaurantsData([]);
           return;
         }
-        params.zoneId = zoneId;
 
-        debugLog("Fetching restaurants with params:", params);
-        const response = await restaurantAPI.getRestaurants(params);
+        debugLog("Fetching restaurants with params:", radiusParams);
+        const response = await restaurantAPI.getRestaurants(radiusParams);
         debugLog("Restaurants API response:", response.data);
 
         // If a newer request started, ignore this response to avoid races/flicker.
@@ -2155,7 +2118,6 @@ export default function Home() {
       buildRestaurantImageCandidates,
       effectiveLocation?.latitude,
       effectiveLocation?.longitude,
-      zoneId,
       vegMode,
       vegModeOption,
     ],
@@ -2583,12 +2545,7 @@ export default function Home() {
     setHeroSearch("");
   }, [closeSearch]);
 
-  const shouldShowOutOfZoneScreen = useMemo(() => {
-    const hasCoords =
-      Number.isFinite(Number(effectiveLocation?.latitude)) &&
-      Number.isFinite(Number(effectiveLocation?.longitude));
-    return hasCoords && zoneStatus === "OUT_OF_SERVICE" && !zoneLoading;
-  }, [effectiveLocation?.latitude, effectiveLocation?.longitude, zoneStatus, zoneLoading]);
+  const shouldShowOutOfZoneScreen = false;
 
   // Removed GSAP animations - using CSS and ScrollReveal components instead for better performance
   // Auto-scroll removed - manual scroll only
@@ -2923,7 +2880,7 @@ export default function Home() {
           exploreItems={landingExploreMore}
         />
 
-        <PromotionBannerCarousel zoneId={zoneId} />
+        <PromotionBannerCarousel />
 
         {CategoryRailHeader}
 
@@ -3116,7 +3073,6 @@ export default function Home() {
                       restaurant={restaurant}
                       index={index}
                       availabilityTick={availabilityTick}
-                      isOutOfService={isOutOfService}
                       favorite={favorite}
                       onToggleFavorite={handleToggleFavorite}
                       BACKEND_ORIGIN={BACKEND_ORIGIN}

@@ -1,8 +1,11 @@
 import { FoodGourmetRestaurant } from '../models/gourmetRestaurant.model.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
-import mongoose from 'mongoose';
+import {
+    filterRestaurantsByRoadRadius,
+    getDefaultServingRadiusKm,
+} from '../../shared/restaurantVisibility.service.js';
 
-export const getPublicGourmetRestaurants = async (zoneId) => {
+export const getPublicGourmetRestaurants = async (_zoneId, lat = null, lng = null) => {
     const docs = await FoodGourmetRestaurant.find({ isActive: true })
         .sort({ priority: 1, createdAt: -1 })
         .lean();
@@ -10,15 +13,28 @@ export const getPublicGourmetRestaurants = async (zoneId) => {
     const restaurantIds = docs.map((d) => d.restaurantId);
     
     const query = { _id: { $in: restaurantIds }, status: 'approved' };
-    if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
-        query.zoneId = new mongoose.Types.ObjectId(zoneId);
-    }
 
     const restaurants = await FoodRestaurant.find(query)
         .select('restaurantName area city profileImage rating cuisines slug pureVegRestaurant location estimatedDeliveryTime zoneId')
         .lean();
 
-    const restaurantMap = new Map(restaurants.map((r) => [r._id.toString(), r]));
+    const userLat = lat !== null ? Number(lat) : null;
+    const userLng = lng !== null ? Number(lng) : null;
+    const wantsGeo = userLat !== null && !isNaN(userLat) && userLng !== null && !isNaN(userLng);
+
+    let filteredRestaurants = restaurants;
+    if (wantsGeo) {
+        filteredRestaurants = await filterRestaurantsByRoadRadius(
+            restaurants,
+            { lat: userLat, lng: userLng },
+            {
+                radiusKm: await getDefaultServingRadiusKm(),
+                includeFailedRoadChecks: false,
+            }
+        );
+    }
+
+    const restaurantMap = new Map(filteredRestaurants.map((r) => [r._id.toString(), r]));
 
     return docs.map((item) => {
         const r = restaurantMap.get(item.restaurantId.toString());
@@ -37,6 +53,8 @@ export const getPublicGourmetRestaurants = async (zoneId) => {
                 pureVegRestaurant: r.pureVegRestaurant,
                 location: r.location,
                 estimatedDeliveryTime: r.estimatedDeliveryTime,
+                roadDistanceKm: r.roadDistanceKm,
+                distanceInKm: r.distanceScore,
                 zoneId: r.zoneId
             } : null
         };

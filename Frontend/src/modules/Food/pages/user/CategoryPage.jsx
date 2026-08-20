@@ -19,11 +19,15 @@ import { restaurantAPI, adminAPI } from "@food/api"
 import { API_BASE_URL } from "@food/api/config"
 import { useProfile } from "@food/context/ProfileContext"
 import { useLocation } from "@food/hooks/useLocation"
-import { useZone } from "@food/hooks/useZone"
 import { useDelayedLoading } from "@food/hooks/useDelayedLoading"
 import { getMenuFromResponse } from "@food/utils/menuItems"
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
-import { fetchDrivingDistancesMatrix } from "@food/utils/roadDistance"
+import {
+  buildCategoryKeywords,
+  buildRadiusListingParams,
+  formatListingDistance,
+  mapPublicCategories,
+} from "@food/utils/publicListing"
 
 // Filter options
 const filterOptions = [
@@ -38,51 +42,11 @@ const filterOptions = [
 
 const CATEGORY_PAGE_FILTERS_STORAGE_KEY = "food-category-page-filters-v1"
 
-const formatCardDistance = (distanceInKm) => {
-  if (!Number.isFinite(Number(distanceInKm))) return null
-  const distance = Number(distanceInKm)
-  return distance >= 1 ? `${distance.toFixed(1)} km` : `${Math.round(distance * 1000)} m`
-}
-
-const getRoadDistancePoint = (entity) => {
-  if (!entity || typeof entity !== "object") return null
-
-  const queue = [entity]
-  const visited = new Set()
-  while (queue.length > 0) {
-    const source = queue.shift()
-    if (!source || typeof source !== "object" || visited.has(source)) continue
-    visited.add(source)
-
-    if (Array.isArray(source.coordinates) && source.coordinates.length >= 2) {
-      const [lng, lat] = source.coordinates
-      if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
-        return { lat: Number(lat), lng: Number(lng) }
-      }
-    }
-
-    const lat = Number(source.latitude ?? source.lat)
-    const lng = Number(source.longitude ?? source.lng)
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      return { lat, lng }
-    }
-
-    if (source.location && typeof source.location === "object") {
-      queue.push(source.location)
-    }
-  }
-
-  return null
-}
-
-
-
 export default function CategoryPage() {
   const { category } = useParams()
   const navigate = useNavigate()
   const { vegMode } = useProfile()
   const { location } = useLocation()
-  const { zoneId, isOutOfService } = useZone(location)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState(category?.toLowerCase() || 'all')
   const [activeFilters, setActiveFilters] = useState(new Set())
@@ -647,39 +611,20 @@ export default function CategoryPage() {
     const fetchCategories = async () => {
       try {
         setLoadingCategories(true)
-        const response = await adminAPI.getPublicCategories(zoneId ? { zoneId } : {})
+        const response = await adminAPI.getPublicCategories()
 
         if (isCancelled) return;
 
         if (response.data && response.data.success && response.data.data && response.data.data.categories) {
           const categoriesArray = response.data.data.categories
 
-          // Transform API categories to match expected format
           const transformedCategories = [
             { id: 'all', name: "All", image: null, slug: 'all' },
-            ...categoriesArray.map((cat) => ({
-              id: cat.slug || cat.id,
-              name: cat.name,
-              image: cat.image || foodImages[0],
-              slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, '-'),
-              type: cat.type,
-            }))
+            ...mapPublicCategories(categoriesArray, { fallbackImages: foodImages })
           ]
 
           setCategories(transformedCategories)
-
-          // Generate category keywords dynamically from category names
-          const keywordsMap = {}
-          categoriesArray.forEach((cat) => {
-            const categoryId = cat.slug || cat.id
-            const categoryName = cat.name.toLowerCase()
-
-            // Generate keywords from category name
-            const words = categoryName.split(/[\s-]+/).filter(w => w.length > 0)
-            keywordsMap[categoryId] = [categoryName, ...words]
-          })
-
-          setCategoryKeywords(keywordsMap)
+          setCategoryKeywords(buildCategoryKeywords(transformedCategories))
         } else {
           // Keep default "All" category on error
           setCategories([{ id: 'all', name: "All", image: null, slug: 'all' }])
@@ -699,7 +644,7 @@ export default function CategoryPage() {
     return () => {
       isCancelled = true;
     }
-  }, [zoneId])
+  }, [])
 
   // Helper function to check if menu has dishes matching category keywords
   const getCategoryKeywords = (categoryId) => {
@@ -883,14 +828,14 @@ export default function CategoryPage() {
     const fetchRestaurants = async () => {
       try {
         setLoadingRestaurants(true)
-        // Strict zone check: if no zoneId, don't fetch/show anything
-        if (!zoneId) {
+        // Radius-only category page: require user coordinates, not zone scoping.
+        const params = buildRadiusListingParams(location)
+        if (!params) {
           setRestaurantsData([])
           setLoadingRestaurants(false)
           return
         }
-        
-        const params = { zoneId }
+
         const response = await restaurantAPI.getAllRestaurants(params)
 
         if (response.data && response.data.success && response.data.data && response.data.data.restaurants) {
@@ -932,6 +877,12 @@ export default function CategoryPage() {
               if (isDefaultValue(deliveryTime, 'deliveryTime')) deliveryTime = null
               if (isDefaultValue(distance, 'distance')) distance = null
               if (isDefaultValue(offer, 'offer')) offer = null
+              const backendDistance = formatListingDistance(
+                restaurant.roadDistanceKm ??
+                restaurant.distanceScore ??
+                restaurant.distanceInKm ??
+                restaurant.distance
+              )
 
               const coverImages = restaurant.coverImages && restaurant.coverImages.length > 0
                 ? restaurant.coverImages.map(img => normalizeImageUrl(img.url || img)).filter(Boolean)
@@ -962,7 +913,7 @@ export default function CategoryPage() {
                 rating: Number(restaurant.rating || restaurant.avgRating || 0),
                 totalRatings: Number(restaurant.totalRatings || restaurant.reviews || restaurant.ratingCount || 0),
                 deliveryTime: deliveryTime || (restaurant.estimatedDeliveryTimeMinutes ? `${restaurant.estimatedDeliveryTimeMinutes} mins` : "25-30 mins"),
-                distance: distance || (restaurant.distance ? (typeof restaurant.distance === 'number' ? `${restaurant.distance.toFixed(1)} km` : restaurant.distance) : "1.2 km"),
+                distance: backendDistance || distance || "",
                 priceRange: restaurant.priceRange || "$$",
                 offer: offer || "Flat 50% OFF",
                 featuredDish: restaurant.featuredDish || "Special Dish",
@@ -975,8 +926,6 @@ export default function CategoryPage() {
                 deliveryTimings: restaurant.deliveryTimings,
                 openingTime: restaurant.openingTime,
                 closingTime: restaurant.closingTime,
-                // Zone info for strict frontend filtering
-                zoneId: restaurant.zoneId || restaurant.zone?._id || restaurant.zone || null,
               }
             })
 
@@ -1099,52 +1048,7 @@ export default function CategoryPage() {
     }
 
     fetchRestaurants()
-  }, [zoneId, isOutOfService])
-
-  useEffect(() => {
-    if (!location?.latitude || !location?.longitude) return
-    if (!Array.isArray(restaurantsData) || restaurantsData.length === 0) return
-
-    let cancelled = false
-
-    const applyRoadDistances = async () => {
-      const origin = { lat: Number(location.latitude), lng: Number(location.longitude) }
-      const destinations = restaurantsData.map((restaurant) => getRoadDistancePoint(restaurant.location))
-      const roadDistances = await fetchDrivingDistancesMatrix(origin, destinations)
-      if (cancelled || !Array.isArray(roadDistances) || roadDistances.length === 0) return
-
-      startTransition(() => {
-        setRestaurantsData((prev) => {
-          if (!Array.isArray(prev) || prev.length === 0) return prev
-
-          let hasChanges = false
-          const updated = prev.map((restaurant, index) => {
-            const roadKm = Number(roadDistances[index])
-            if (!Number.isFinite(roadKm)) return restaurant
-
-            const nextDistance = formatCardDistance(roadKm)
-            if (restaurant.distance === nextDistance && Number(restaurant.distanceInKm) === roadKm) {
-              return restaurant
-            }
-
-            hasChanges = true
-            return {
-              ...restaurant,
-              distance: nextDistance,
-              distanceInKm: roadKm,
-            }
-          })
-
-          return hasChanges ? updated : prev
-        })
-      })
-    }
-
-    applyRoadDistances()
-    return () => {
-      cancelled = true
-    }
-  }, [location?.latitude, location?.longitude, restaurantsData])
+  }, [location?.latitude, location?.longitude])
 
   // Update selected category when URL changes
   useEffect(() => {
@@ -1340,17 +1244,8 @@ export default function CategoryPage() {
       }
     }
 
-    // Strict zone filter: double check that restaurant belongs to current zone
-    filtered = filtered.filter(row => {
-      const restaurantZoneId = row.zoneId || null;
-      if (zoneId && restaurantZoneId && String(restaurantZoneId) !== String(zoneId)) {
-        return false;
-      }
-      return true;
-    })
-
     return applyFiltersAndSorting(filtered)
-  }, [selectedCategory, activeFilters, deferredSearchQuery, restaurantsData, categoryKeywords, vegMode, approvedFoodsData, sortBy, availabilityTick, zoneId])
+  }, [selectedCategory, activeFilters, deferredSearchQuery, restaurantsData, categoryKeywords, vegMode, approvedFoodsData, sortBy, availabilityTick])
 
   const filteredAllRestaurants = useMemo(() => {
     const sourceData = restaurantsData.length > 0 ? restaurantsData : []
@@ -1399,17 +1294,8 @@ export default function CategoryPage() {
       }
     }
 
-    // Strict zone filter: double check that restaurant belongs to current zone
-    filtered = filtered.filter(row => {
-      const restaurantZoneId = row.zoneId || null;
-      if (zoneId && restaurantZoneId && String(restaurantZoneId) !== String(zoneId)) {
-        return false;
-      }
-      return true;
-    })
-
     return applyFiltersAndSorting(filtered)
-  }, [selectedCategory, activeFilters, deferredSearchQuery, restaurantsData, categoryKeywords, vegMode, approvedFoodsData, sortBy, availabilityTick, zoneId])
+  }, [selectedCategory, activeFilters, deferredSearchQuery, restaurantsData, categoryKeywords, vegMode, approvedFoodsData, sortBy, availabilityTick])
 
   const showRestaurantSkeleton = useDelayedLoading(
     isLoadingFilterResults || loadingRestaurants || (isEnrichingMenus && selectedCategory !== 'all' && filteredRecommended.length === 0),
@@ -1428,7 +1314,7 @@ export default function CategoryPage() {
   }
 
   // Check if should show grayscale (user out of service)
-  const shouldShowGrayscale = isOutOfService
+  const shouldShowGrayscale = false
   const isCategoryView = selectedCategory && selectedCategory !== 'all'
 
   return (
