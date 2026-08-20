@@ -1258,10 +1258,10 @@ export default function OrderTracking() {
           setOrder(prev => ({ ...prev, note: deliveryInstructions }));
         }
       } else {
-        toast.error(response.data?.message || "Failed to update instructions");
+        toast.error(response.data?.message || response.data?.error || "Failed to update instructions");
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to update instructions");
+      toast.error(err.response?.data?.message || err.response?.data?.error || "Failed to update instructions");
     } finally {
       setIsUpdatingInstructions(false);
     }

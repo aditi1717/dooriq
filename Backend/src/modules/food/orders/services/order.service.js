@@ -1586,9 +1586,14 @@ export async function updateOrderInstructions(orderId, userId, instructions) {
   });
   if (!order) throw new NotFoundError("Order not found");
   
-  const allowedStatuses = ['created', 'confirmed', 'preparing'];
-  if (!allowedStatuses.includes(order.orderStatus)) {
-    throw new ValidationError("Instructions can no longer be updated for this order");
+  const finalStatuses = [
+    'delivered',
+    'cancelled_by_user',
+    'cancelled_by_restaurant',
+    'cancelled_by_admin',
+  ];
+  if (finalStatuses.includes(order.orderStatus)) {
+    throw new ValidationError("Delivery instructions cannot be changed after the order is completed or cancelled");
   }
 
   order.note = String(instructions || "").trim();

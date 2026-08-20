@@ -11,6 +11,7 @@ import useNotificationInbox from "@food/hooks/useNotificationInbox";
 
 // Components
 import LiveMap from '@/modules/DeliveryV2/components/map/LiveMap';
+import FlutterLocationBridge from '@/modules/DeliveryV2/components/FlutterLocationBridge';
 import { NewOrderModal } from '@/modules/DeliveryV2/components/modals/NewOrderModal';
 import { PickupActionModal } from '@/modules/DeliveryV2/components/modals/PickupActionModal';
 import { DeliveryVerificationModal } from '@/modules/DeliveryV2/components/modals/DeliveryVerificationModal';
@@ -278,6 +279,176 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     };
   }, [activeOrder, activePolyline, distanceToTarget, emitLocation, eta, isOnline, reachDrop, reachPickup, tripStatus]);
 
+  const publishTrackedLocation = useCallback((location, options = {}) => {
+    const latest = latestGpsStateRef.current;
+    const lat = Number(location?.lat);
+    const lng = Number(location?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !latest.isOnline) {
+      return;
+    }
+
+    const now = Number.isFinite(Number(location?.timestamp)) ? Number(location.timestamp) : Date.now();
+    const heading = Number.isFinite(Number(location?.heading)) ? Number(location.heading) : 0;
+    const speed = Number.isFinite(Number(location?.speed)) ? Number(location.speed) : 0;
+    const accuracy = Number.isFinite(Number(location?.accuracy)) ? Number(location.accuracy) : null;
+    const orderId = getTrackingKey(latest.activeOrder);
+
+    deliveryAPI.updateLocation(lat, lng, true, {
+      heading,
+      speed,
+      accuracy,
+      source: options.source || 'web',
+    }).catch(() => { });
+
+    const deliveryPartnerId = deliveryPartnerIdRef.current || getStoredDeliveryPartnerId();
+    deliveryPartnerIdRef.current = deliveryPartnerId;
+    if (deliveryPartnerId) {
+      writeDeliveryLocation({
+        deliveryId: deliveryPartnerId,
+        lat,
+        lng,
+        heading,
+        speed,
+        accuracy,
+        isOnline: true,
+        activeOrderId: orderId || null,
+        timestamp: now
+      }).catch(() => { });
+    }
+
+    if (!orderId) {
+      return;
+    }
+
+    const payload = {
+      lat,
+      lng,
+      heading,
+      speed,
+      accuracy,
+      orderId,
+      orderMongoId: orderId,
+      orderFriendlyId: latest.activeOrder?.order_id || latest.activeOrder?.orderId || null,
+      status: 'on_the_way',
+      polyline: latest.activePolyline
+    };
+
+    latest.emitLocation?.(payload);
+
+    writeOrderTracking(orderId, {
+      lat,
+      lng,
+      heading,
+      speed,
+      accuracy,
+      polyline: latest.activePolyline,
+      status: latest.tripStatus,
+      eta: latest.eta,
+      timestamp: now
+    }).catch(() => { });
+  }, []);
+
+  const ingestLocationUpdate = useCallback((location, options = {}) => {
+    const latest = latestGpsStateRef.current;
+    const lat = Number(location?.lat);
+    const lng = Number(location?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return false;
+    }
+
+    const now = Number.isFinite(Number(location?.timestamp)) ? Number(location.timestamp) : Date.now();
+    let normalizedHeading = Number.isFinite(Number(location?.heading)) ? Number(location.heading) : null;
+    if (normalizedHeading === null && lastCoordRef.current) {
+      const moved = getHaversineDistance(lat, lng, lastCoordRef.current.lat, lastCoordRef.current.lng);
+      if (moved >= 5) {
+        normalizedHeading = calculateHeading(
+          lastCoordRef.current.lat,
+          lastCoordRef.current.lng,
+          lat,
+          lng,
+        );
+      }
+    }
+    if (normalizedHeading === null) {
+      normalizedHeading = lastHeadingRef.current ?? 0;
+    }
+    lastHeadingRef.current = normalizedHeading;
+
+    const normalizedSpeed = Number.isFinite(Number(location?.speed)) ? Number(location.speed) : 0;
+    const accuracy = Number.isFinite(Number(location?.accuracy)) ? Number(location.accuracy) : null;
+
+    setRiderLocation({ lat, lng, heading: normalizedHeading });
+
+    if (normalizedSpeed > 0) {
+      rollingSpeedRef.current = [...rollingSpeedRef.current.slice(-4), normalizedSpeed];
+    }
+
+    const withinArrivalRange =
+      Number.isFinite(latest.distanceToTarget) && latest.distanceToTarget <= 100;
+
+    if (
+      latest.isOnline &&
+      latest.activeOrder &&
+      withinArrivalRange &&
+      !lastAutoArrivalRef.current[latest.tripStatus]
+    ) {
+      if (latest.tripStatus === 'PICKING_UP') {
+        lastAutoArrivalRef.current[latest.tripStatus] = true;
+        latest.reachPickup?.().catch(() => { lastAutoArrivalRef.current[latest.tripStatus] = false; });
+      } else if (latest.tripStatus === 'PICKED_UP') {
+        lastAutoArrivalRef.current[latest.tripStatus] = true;
+        latest.reachDrop?.().catch(() => { lastAutoArrivalRef.current[latest.tripStatus] = false; });
+      }
+    }
+
+    if (latest.distanceToTarget > 200) {
+      lastAutoArrivalRef.current[latest.tripStatus] = false;
+    }
+
+    const distMoved = lastCoordRef.current
+      ? getHaversineDistance(lat, lng, lastCoordRef.current.lat, lastCoordRef.current.lng)
+      : 1000;
+
+    lastCoordRef.current = { lat, lng };
+    lastFixAtRef.current = now;
+
+    if (!latest.isOnline) {
+      return true;
+    }
+
+    if (!options.force && distMoved < 25 && (now - lastLocationSentAt.current < 7000)) {
+      return true;
+    }
+
+    lastLocationSentAt.current = now;
+    publishTrackedLocation(
+      {
+        lat,
+        lng,
+        heading: normalizedHeading,
+        speed: normalizedSpeed,
+        accuracy,
+        timestamp: now,
+      },
+      options,
+    );
+
+    return true;
+  }, [publishTrackedLocation, setRiderLocation]);
+
+  const handleFlutterLocation = useCallback((location, options = {}) => {
+    const hasActiveOrder = Boolean(latestGpsStateRef.current.activeOrder);
+    if (!hasActiveOrder) {
+      return false;
+    }
+    setIsGpsOff(false);
+    return ingestLocationUpdate(location, {
+      ...options,
+      source: options.source || 'flutter',
+      force: true,
+    });
+  }, [ingestLocationUpdate]);
+
   const isLoggingOut = useRef(false);
   const handleLogout = useCallback(() => {
     if (isLoggingOut.current) return;
@@ -348,49 +519,10 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
             const now = Date.now();
             if (now - lastSimUpdateSentAt.current >= 2000) { // Reduced to 2s to match backend throttle
               lastSimUpdateSentAt.current = now;
-              const payload = {
-                lat,
-                lng,
-                heading,
-                orderId: getTrackingKey(activeOrder),
-                orderMongoId: getTrackingKey(activeOrder),
-                orderFriendlyId: activeOrder?.order_id || activeOrder?.orderId || null,
-                status: 'on_the_way',
-                polyline: activePolyline // Include polyline in every stream update for resilience
-              };
-              // A. HTTP Backup
-              deliveryAPI.updateLocation(lat, lng, true, { heading }).catch(() => { });
-
-              // B. ADMIN LIVE TRACKING NODE
-              const deliveryPartnerId = deliveryPartnerIdRef.current || getStoredDeliveryPartnerId();
-              deliveryPartnerIdRef.current = deliveryPartnerId;
-              if (deliveryPartnerId) {
-                writeDeliveryLocation({
-                  deliveryId: deliveryPartnerId,
-                  lat,
-                  lng,
-                  heading,
-                  speed: 0,
-                  isOnline: true,
-                  activeOrderId: payload.orderId || null,
-                  timestamp: now
-                }).catch(() => { });
-              }
-
-              // C. SOCKET LIVE (SILKY SMOOTH)
-              if (payload.orderId) emitLocation(payload);
-
-              // D. FIREBASE REALTIME DB (Persistent Route for Customer Map)
-              if (payload.orderId) {
-                writeOrderTracking(payload.orderId, {
-                  lat,
-                  lng,
-                  heading,
-                  polyline: activePolyline,
-                  status: tripStatus,
-                  eta: eta // Publish live ETA to Firebase
-                }).catch(() => { });
-              }
+              publishTrackedLocation(
+                { lat, lng, heading, speed: 0, accuracy: null, timestamp: now },
+                { source: 'simulation', force: true },
+              );
             }
           }
           return nextProgress;
@@ -398,7 +530,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       }, 50); // 20 FPS movement
     }
     return () => clearInterval(interval);
-  }, [isSimMode, simPath, simIndex, activeOrder, emitLocation, activePolyline, eta, tripStatus]);
+  }, [isSimMode, publishTrackedLocation, simIndex, simPath]);
 
   // Fetch Emergency numbers and Profile (Restored logic)
   useEffect(() => {
@@ -681,7 +813,14 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setIsGpsOff(false);
-        handlePosition(pos, { force: true });
+        ingestLocationUpdate({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          heading: pos.coords.heading,
+          speed: pos.coords.speed,
+          accuracy: pos.coords.accuracy,
+          timestamp: Date.now(),
+        }, { source: 'browser-initial', force: true });
       },
       (err) => handleGpsError(err),
       {
@@ -694,7 +833,14 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         setIsGpsOff(false);
-        handlePosition(pos);
+        ingestLocationUpdate({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          heading: pos.coords.heading,
+          speed: pos.coords.speed,
+          accuracy: pos.coords.accuracy,
+          timestamp: Date.now(),
+        }, { source: 'browser-watch' });
       },
       (error) => handleGpsError(error),
       {
@@ -707,7 +853,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [isSimMode, setRiderLocation]);
+  }, [handleGpsError, ingestLocationUpdate, isSimMode]);
 
   // 3.5. Background Ping / Heartbeat
   // If watchPosition stops firing (e.g. app in background or device stationary),
@@ -737,31 +883,19 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
       if (now - lastLocationSentAt.current >= 15000 && lastCoordRef.current && fixIsUsable) {
         lastLocationSentAt.current = now;
-        deliveryAPI.updateLocation(
-          lastCoordRef.current.lat,
-          lastCoordRef.current.lng,
-          true,
-          { heading: 0, speed: 0, accuracy: null }
-        ).catch(() => { });
-        const deliveryPartnerId = deliveryPartnerIdRef.current || getStoredDeliveryPartnerId();
-        deliveryPartnerIdRef.current = deliveryPartnerId;
-        if (deliveryPartnerId) {
-          writeDeliveryLocation({
-            deliveryId: deliveryPartnerId,
-            lat: lastCoordRef.current.lat,
-            lng: lastCoordRef.current.lng,
-            heading: 0,
-            speed: 0,
-            isOnline: true,
-            activeOrderId: getTrackingKey(activeOrder) || null,
-            timestamp: now
-          }).catch(() => { });
-        }
+        publishTrackedLocation({
+          lat: lastCoordRef.current.lat,
+          lng: lastCoordRef.current.lng,
+          heading: lastHeadingRef.current ?? 0,
+          speed: 0,
+          accuracy: null,
+          timestamp: now,
+        }, { source: 'heartbeat', force: true });
       }
     }, 10000); // Check every 10 seconds
 
     return () => clearInterval(pingInterval);
-  }, [activeOrder, isOnline]);
+  }, [isOnline, publishTrackedLocation]);
 
   useEffect(() => {
     if (!isOnline || !newOrder || activeOrder) {
@@ -914,6 +1048,12 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
   return (
     <div className={`relative h-screen w-full text-gray-900 overflow-hidden flex flex-col ${currentTab === 'pocket' ? 'bg-[#f8f9fa]' : 'bg-white'}`}>
+      <FlutterLocationBridge
+        enabled={Boolean(isOnline && activeOrder && !isSimMode)}
+        orderId={getTrackingKey(activeOrder)}
+        deliveryPartnerId={deliveryPartnerIdRef.current || getStoredDeliveryPartnerId()}
+        onLocation={handleFlutterLocation}
+      />
       {/* ─── 1. TOP HEADER (Ultra Premium Minimalist) ─── */}
       {currentTab === 'feed' && (
         <div className="absolute top-0 inset-x-0 z-[200] safe-top pointer-events-none">
