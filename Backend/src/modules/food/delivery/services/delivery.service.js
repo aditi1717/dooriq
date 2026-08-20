@@ -507,10 +507,11 @@ export const updateDeliveryAvailability = async (userId, payload, requestMeta = 
     if (hasValidLocation) {
         const normalizedSource = String(source || 'delivery-app').trim() || 'delivery-app';
         const isFlutterBridge = /flutter/i.test(normalizedSource);
+        const isSimulation = /simulation/i.test(normalizedSource);
 
         logger.info({
             event: 'delivery_location_update_saved',
-            bridge: isFlutterBridge ? 'flutter' : 'web',
+            bridge: isFlutterBridge ? 'flutter' : (isSimulation ? 'simulation' : 'web'),
             source: normalizedSource,
             deliveryPartnerId: String(userId),
             availabilityStatus: partner.availabilityStatus,

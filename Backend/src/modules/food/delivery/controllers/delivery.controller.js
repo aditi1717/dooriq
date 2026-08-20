@@ -5,6 +5,7 @@ import { getDeliveryCashLimitSettings, getDeliveryEmergencyHelp } from '../../ad
 import { DeliveryBonusTransaction } from '../../admin/models/deliveryBonusTransaction.model.js';
 import { validateDeliveryRegisterDto, validateDeliveryProfileUpdateDto, validateDeliveryBankDetailsDto } from '../validators/delivery.validator.js';
 import { sendResponse } from '../../../../utils/response.js';
+import { logger } from '../../../../utils/logger.js';
 import { getDeliveryReferralStats } from '../services/deliveryReferral.service.js';
 import {
     createOrderEmergencyRequest,
@@ -152,6 +153,29 @@ export const getOrderEmergencyRequestController = async (req, res, next) => {
 export const updateAvailabilityController = async (req, res, next) => {
     try {
         const userId = req.user?.userId;
+        const source = String(req.body?.source || 'delivery-app').trim() || 'delivery-app';
+        const latitude = Number(req.body?.latitude);
+        const longitude = Number(req.body?.longitude);
+
+        logger.info({
+            event: 'delivery_location_update_received',
+            bridge: /flutter/i.test(source) ? 'flutter' : (/simulation/i.test(source) ? 'simulation' : 'web'),
+            source,
+            deliveryPartnerId: String(userId || ''),
+            authRole: req.user?.role || '',
+            hasValidCoordinates:
+                Number.isFinite(latitude) &&
+                Number.isFinite(longitude) &&
+                latitude >= -90 &&
+                latitude <= 90 &&
+                longitude >= -180 &&
+                longitude <= 180,
+            latitude: Number.isFinite(latitude) ? Number(latitude.toFixed(6)) : null,
+            longitude: Number.isFinite(longitude) ? Number(longitude.toFixed(6)) : null,
+            path: req.originalUrl || req.url,
+            userAgent: req.get?.('user-agent') || '',
+        });
+
         const data = await updateDeliveryAvailability(userId, req.body || {}, {
             method: req.method,
             path: req.originalUrl || req.url,
