@@ -263,13 +263,11 @@ export const initSocket = async (server) => {
                 if (trackingQueue && redis) {
                     const coordString = JSON.stringify({ lat, lng, timestamp: now });
                     
-                    // 1. Immediately buffer the newest location in high-speed Redis Hash (HOT storage)
-                    await Promise.all([
-                        redis.hSet('rider:locations:hot', String(userId), coordString),
-                        redis.hSet('order:locations:hot', trackingKey, coordString)
-                    ]);
+                    // Keep rider availability hot for dispatch. Order tracking
+                    // coordinates stay in Firebase RTDB only.
+                    await redis.hSet('rider:locations:hot', String(userId), coordString);
 
-                    // 2. Schedule a deferred MongoDB write (COLD storage)
+                    // Schedule a deferred rider availability MongoDB write.
                     // jobId debulks updates: if a job is already waiting, BullMQ ignores the new add()
                     // Delay (30s) ensures we don't spam MongoDB while the rider is moving fast
                     const syncJobId = `sync:loc:${trackingKey}`;
