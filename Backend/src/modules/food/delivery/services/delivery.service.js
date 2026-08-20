@@ -12,6 +12,9 @@ import { getIO } from '../../../../config/socket.js';
 import { notifyAdminsSafely } from '../../../../core/notifications/firebase.service.js';
 import { logger } from '../../../../utils/logger.js';
 
+const isDevelopmentEnvironment = () =>
+    String(process.env.NODE_ENV || '').trim().toLowerCase() === 'development';
+
 export const registerDeliveryPartner = async (payload, files) => {
     const { 
         name, phone, email, countryCode, address, city, state, 
@@ -465,6 +468,20 @@ export const getSupportTicketByIdAndPartner = async (ticketId, deliveryPartnerId
  */
 export const updateDeliveryAvailability = async (userId, payload, requestMeta = {}) => {
     const { status, latitude, longitude, source } = payload || {};
+    const normalizedSource = String(source || 'delivery-app').trim() || 'delivery-app';
+    const isSimulation = /simulation/i.test(normalizedSource);
+
+    if (isSimulation && !isDevelopmentEnvironment()) {
+        logger.warn({
+            event: 'delivery_location_simulation_blocked',
+            source: normalizedSource,
+            deliveryPartnerId: String(userId || ''),
+            nodeEnv: process.env.NODE_ENV || '',
+            path: requestMeta.path || '',
+        });
+        throw new ValidationError('Simulation mode is disabled in production');
+    }
+
     let validStatus = 'offline';
     if (status === 'online' || status === true) validStatus = 'online';
     else if (status === 'offline' || status === false) validStatus = 'offline';
@@ -505,9 +522,7 @@ export const updateDeliveryAvailability = async (userId, payload, requestMeta = 
     }
 
     if (hasValidLocation) {
-        const normalizedSource = String(source || 'delivery-app').trim() || 'delivery-app';
         const isFlutterBridge = /flutter/i.test(normalizedSource);
-        const isSimulation = /simulation/i.test(normalizedSource);
 
         logger.info({
             event: 'delivery_location_update_saved',

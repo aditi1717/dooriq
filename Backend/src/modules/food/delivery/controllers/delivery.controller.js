@@ -4,7 +4,7 @@ import { createDeliveryCashDepositOrder, getDeliveryPartnerWalletEnhanced, reque
 import { getDeliveryCashLimitSettings, getDeliveryEmergencyHelp } from '../../admin/services/admin.service.js';
 import { DeliveryBonusTransaction } from '../../admin/models/deliveryBonusTransaction.model.js';
 import { validateDeliveryRegisterDto, validateDeliveryProfileUpdateDto, validateDeliveryBankDetailsDto } from '../validators/delivery.validator.js';
-import { sendResponse } from '../../../../utils/response.js';
+import { sendError, sendResponse } from '../../../../utils/response.js';
 import { logger } from '../../../../utils/logger.js';
 import { getDeliveryReferralStats } from '../services/deliveryReferral.service.js';
 import {
@@ -12,6 +12,9 @@ import {
     getOrderEmergencyRequestByPartner,
     listOrderEmergencyRequestsByPartner
 } from '../services/orderEmergencyRequest.service.js';
+
+const isDevelopmentEnvironment = () =>
+    String(process.env.NODE_ENV || '').trim().toLowerCase() === 'development';
 
 export const registerDeliveryPartnerController = async (req, res, next) => {
     try {
@@ -156,10 +159,24 @@ export const updateAvailabilityController = async (req, res, next) => {
         const source = String(req.body?.source || 'delivery-app').trim() || 'delivery-app';
         const latitude = Number(req.body?.latitude);
         const longitude = Number(req.body?.longitude);
+        const isSimulation = /simulation/i.test(source);
+
+        if (isSimulation && !isDevelopmentEnvironment()) {
+            logger.warn({
+                event: 'delivery_location_simulation_blocked',
+                source,
+                deliveryPartnerId: String(userId || ''),
+                authRole: req.user?.role || '',
+                nodeEnv: process.env.NODE_ENV || '',
+                path: req.originalUrl || req.url,
+                userAgent: req.get?.('user-agent') || '',
+            });
+            return sendError(res, 403, 'Simulation mode is disabled in production');
+        }
 
         logger.info({
             event: 'delivery_location_update_received',
-            bridge: /flutter/i.test(source) ? 'flutter' : (/simulation/i.test(source) ? 'simulation' : 'web'),
+            bridge: /flutter/i.test(source) ? 'flutter' : (isSimulation ? 'simulation' : 'web'),
             source,
             deliveryPartnerId: String(userId || ''),
             authRole: req.user?.role || '',
@@ -176,7 +193,7 @@ export const updateAvailabilityController = async (req, res, next) => {
             userAgent: req.get?.('user-agent') || '',
         });
         console.log('[DELIVERY_LOCATION_DEBUG_RECEIVED]', JSON.stringify({
-            bridge: /flutter/i.test(source) ? 'flutter' : (/simulation/i.test(source) ? 'simulation' : 'web'),
+            bridge: /flutter/i.test(source) ? 'flutter' : (isSimulation ? 'simulation' : 'web'),
             source,
             deliveryPartnerId: String(userId || ''),
             authRole: req.user?.role || '',
