@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AuthRedirect from "@food/components/AuthRedirect"
 import Loader from "@food/components/Loader";
 import { applyModuleBranding, getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings";
+import { deliveryAPI } from "@food/api";
 
 // Auth Pages (Lazy loaded)
 const Welcome = lazy(() => import("./pages/auth/Welcome"))
@@ -43,6 +44,43 @@ const DeliveryV2Router = () => {
       }
     } catch {}
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    window.updateLocation = async (lat, lng) => {
+      const latitude = Number(lat);
+      const longitude = Number(lng);
+
+      if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude) ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180
+      ) {
+        console.warn('[DeliveryFlutterBridge] Ignored invalid background location:', lat, lng);
+        return false;
+      }
+
+      try {
+        await deliveryAPI.updateLocation(latitude, longitude, true, {
+          source: 'flutter-background',
+        });
+        return true;
+      } catch (error) {
+        console.error('[DeliveryFlutterBridge] Failed to update background location:', error);
+        return false;
+      }
+    };
+
+    return () => {
+      if (window.updateLocation) {
+        delete window.updateLocation;
+      }
+    };
+  }, []);
 
   // Safely enforce light mode for the Delivery app to prevent User dark mode bleeding
   useEffect(() => {
