@@ -133,6 +133,9 @@ export default function DeliveryLiveTracking() {
   const [mapError, setMapError] = useState("")
   const [listError, setListError] = useState("")
   const [selectedAddress, setSelectedAddress] = useState("")
+  const [isPageVisible, setIsPageVisible] = useState(() =>
+    typeof document === "undefined" ? true : document.visibilityState !== "hidden",
+  )
 
   const fetchDeliverymen = async () => {
     try {
@@ -156,10 +159,17 @@ export default function DeliveryLiveTracking() {
   }
 
   useEffect(() => {
-    fetchDeliverymen()
+    const handleVisibilityChange = () => {
+      setIsPageVisible(document.visibilityState !== "hidden")
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
   }, [])
 
   useEffect(() => {
+    if (!isPageVisible) return undefined
+
     const unsubscribe = subscribeAllDeliveryLocations(
       (deliveryNode) => {
         const nextLocations = Object.entries(deliveryNode || {}).reduce((acc, [deliveryId, payload]) => {
@@ -176,7 +186,13 @@ export default function DeliveryLiveTracking() {
     return () => {
       if (typeof unsubscribe === "function") unsubscribe()
     }
-  }, [])
+  }, [isPageVisible])
+
+  useEffect(() => {
+    if (isPageVisible) {
+      fetchDeliverymen()
+    }
+  }, [isPageVisible])
 
   useEffect(() => {
     let cancelled = false

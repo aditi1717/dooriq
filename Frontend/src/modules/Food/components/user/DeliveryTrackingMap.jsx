@@ -11,7 +11,7 @@ import { Navigation } from 'lucide-react';
 import { MAPS_SCRIPT_ID } from '@food/utils/googleMapsLoader';
 import { buildVisibleRouteFromRiderPosition, decodePolyline } from '@food/utils/liveTrackingPolyline';
 
-const LOCATION_UPDATE_INTERVAL_MS = 60 * 1000;
+const LOCATION_UPDATE_INTERVAL_MS = 30 * 1000;
 
 const MAP_LIBRARIES = [];
 
