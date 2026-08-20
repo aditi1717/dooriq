@@ -152,7 +152,13 @@ export const getOrderEmergencyRequestController = async (req, res, next) => {
 export const updateAvailabilityController = async (req, res, next) => {
     try {
         const userId = req.user?.userId;
-        const data = await updateDeliveryAvailability(userId, req.body || {});
+        const data = await updateDeliveryAvailability(userId, req.body || {}, {
+            method: req.method,
+            path: req.originalUrl || req.url,
+            ip: req.ip,
+            userAgent: req.get?.('user-agent') || '',
+            authRole: req.user?.role || '',
+        });
         return sendResponse(res, 200, 'Availability updated successfully', data);
     } catch (error) {
         next(error);

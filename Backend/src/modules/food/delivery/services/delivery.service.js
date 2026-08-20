@@ -463,7 +463,7 @@ export const getSupportTicketByIdAndPartner = async (ticketId, deliveryPartnerId
  * validation per heartbeat. An atomic `findOneAndUpdate` touches only the five
  * fields that change and needs a single round-trip.
  */
-export const updateDeliveryAvailability = async (userId, payload) => {
+export const updateDeliveryAvailability = async (userId, payload, requestMeta = {}) => {
     const { status, latitude, longitude, source } = payload || {};
     let validStatus = 'offline';
     if (status === 'online' || status === true) validStatus = 'online';
@@ -505,9 +505,26 @@ export const updateDeliveryAvailability = async (userId, payload) => {
     }
 
     if (hasValidLocation) {
-        logger.info(
-            `[DeliveryLocation] 15s heartbeat saved | partner=${String(userId)} | status=${partner.availabilityStatus} | source=${source || 'delivery-app'} | lat=${lat.toFixed(6)} | lng=${lng.toFixed(6)} | at=${new Date().toISOString()}`
-        );
+        const normalizedSource = String(source || 'delivery-app').trim() || 'delivery-app';
+        const isFlutterBridge = /flutter/i.test(normalizedSource);
+
+        logger.info({
+            event: 'delivery_location_update_saved',
+            bridge: isFlutterBridge ? 'flutter' : 'web',
+            source: normalizedSource,
+            deliveryPartnerId: String(userId),
+            availabilityStatus: partner.availabilityStatus,
+            latitude: Number(lat.toFixed(6)),
+            longitude: Number(lng.toFixed(6)),
+            receivedAt: new Date().toISOString(),
+            request: {
+                method: requestMeta.method || '',
+                path: requestMeta.path || '',
+                ip: requestMeta.ip || '',
+                userAgent: requestMeta.userAgent || '',
+                authRole: requestMeta.authRole || '',
+            },
+        });
     }
 
     return { availabilityStatus: partner.availabilityStatus };
