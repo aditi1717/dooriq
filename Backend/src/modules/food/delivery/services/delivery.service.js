@@ -526,6 +526,16 @@ export const updateDeliveryAvailability = async (userId, payload, requestMeta = 
                 authRole: requestMeta.authRole || '',
             },
         });
+        console.log('[DELIVERY_LOCATION_DEBUG_SAVED]', JSON.stringify({
+            bridge: isFlutterBridge ? 'flutter' : (isSimulation ? 'simulation' : 'web'),
+            source: normalizedSource,
+            deliveryPartnerId: String(userId),
+            availabilityStatus: partner.availabilityStatus,
+            latitude: Number(lat.toFixed(6)),
+            longitude: Number(lng.toFixed(6)),
+            path: requestMeta.path || '',
+            at: new Date().toISOString(),
+        }));
     }
 
     return { availabilityStatus: partner.availabilityStatus };

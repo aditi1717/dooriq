@@ -175,6 +175,24 @@ export const updateAvailabilityController = async (req, res, next) => {
             path: req.originalUrl || req.url,
             userAgent: req.get?.('user-agent') || '',
         });
+        console.log('[DELIVERY_LOCATION_DEBUG_RECEIVED]', JSON.stringify({
+            bridge: /flutter/i.test(source) ? 'flutter' : (/simulation/i.test(source) ? 'simulation' : 'web'),
+            source,
+            deliveryPartnerId: String(userId || ''),
+            authRole: req.user?.role || '',
+            status: req.body?.status,
+            latitude: Number.isFinite(latitude) ? Number(latitude.toFixed(6)) : null,
+            longitude: Number.isFinite(longitude) ? Number(longitude.toFixed(6)) : null,
+            hasValidCoordinates:
+                Number.isFinite(latitude) &&
+                Number.isFinite(longitude) &&
+                latitude >= -90 &&
+                latitude <= 90 &&
+                longitude >= -180 &&
+                longitude <= 180,
+            path: req.originalUrl || req.url,
+            at: new Date().toISOString(),
+        }));
 
         const data = await updateDeliveryAvailability(userId, req.body || {}, {
             method: req.method,
