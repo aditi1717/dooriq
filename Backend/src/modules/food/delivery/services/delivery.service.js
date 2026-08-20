@@ -10,6 +10,7 @@ import { getDeliveryCashLimitSettings } from '../../admin/services/admin.service
 import { isMobilePlatform } from '../../../../utils/platform.js';
 import { getIO } from '../../../../config/socket.js';
 import { notifyAdminsSafely } from '../../../../core/notifications/firebase.service.js';
+import { logger } from '../../../../utils/logger.js';
 
 export const registerDeliveryPartner = async (payload, files) => {
     const { 
@@ -463,7 +464,7 @@ export const getSupportTicketByIdAndPartner = async (ticketId, deliveryPartnerId
  * fields that change and needs a single round-trip.
  */
 export const updateDeliveryAvailability = async (userId, payload) => {
-    const { status, latitude, longitude } = payload || {};
+    const { status, latitude, longitude, source } = payload || {};
     let validStatus = 'offline';
     if (status === 'online' || status === true) validStatus = 'online';
     else if (status === 'offline' || status === false) validStatus = 'offline';
@@ -501,6 +502,12 @@ export const updateDeliveryAvailability = async (userId, payload) => {
 
     if (!partner) {
         throw new ValidationError('Delivery partner not found');
+    }
+
+    if (hasValidLocation) {
+        logger.info(
+            `[DeliveryLocation] 15s heartbeat saved | partner=${String(userId)} | status=${partner.availabilityStatus} | source=${source || 'delivery-app'} | lat=${lat.toFixed(6)} | lng=${lng.toFixed(6)} | at=${new Date().toISOString()}`
+        );
     }
 
     return { availabilityStatus: partner.availabilityStatus };
