@@ -113,6 +113,11 @@ export const PocketBalanceV2 = () => {
      withdrawalLimit: 100,
      withdrawableAmount: 0,
      canWithdraw: false,
+     completedDeliveries: 0,
+     referralUnlocked: true,
+     referralUnlockRequiredOrders: 20,
+     referralOrdersRemaining: 0,
+     lockedReferralEarnings: 0,
      deliveryBoyTdsPercentage: 0
   });
   const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
@@ -158,7 +163,7 @@ export const PocketBalanceV2 = () => {
         const stats =
           (statsRes.status === "fulfilled" && statsRes.value?.data?.data?.stats) ||
           {};
-        const referralEarnings = toNum(stats.totalReferralEarnings);
+        const referralEarnings = toNum(wallet.referralEarnings ?? wallet.referral_earnings ?? stats.totalReferralEarnings);
         
         const totalEarned = toNum(wallet.totalEarned ?? wallet.total_earned);
         const totalBonus = toNum(wallet.totalBonus ?? wallet.total_bonus);
@@ -174,8 +179,16 @@ export const PocketBalanceV2 = () => {
           ? Math.max(0, toNum(wallet.pocketBalance ?? wallet.pocket_balance))
           : Math.max(0, availableWalletBalance, computedPocketBalance, transactionDerivedBalance);
         const withdrawalLimit = toNum(wallet.deliveryWithdrawalLimit ?? wallet.delivery_withdrawal_limit) || 100;
-        const withdrawableAmount = Math.max(0, pocketBalance);
+        const withdrawableAmount = Math.max(0, toNum(wallet.withdrawableAmount ?? wallet.withdrawable_amount ?? pocketBalance));
         const earningsToShow = totalEarned || toNum(summary.totalEarnings) || 0;
+        const lockedReferralEarnings = toNum(wallet.lockedReferralEarnings ?? wallet.locked_referral_earnings);
+        const referralUnlockRequiredOrders = toNum(wallet.referralUnlockRequiredOrders ?? wallet.referral_unlock_required_orders) || 20;
+        const completedDeliveries = toNum(wallet.completedDeliveries ?? wallet.completed_deliveries);
+        const referralOrdersRemaining = Math.max(
+          0,
+          toNum(wallet.referralOrdersRemaining ?? wallet.referral_orders_remaining ?? (referralUnlockRequiredOrders - completedDeliveries))
+        );
+        const referralUnlocked = Boolean(wallet.referralUnlocked ?? wallet.referral_unlocked ?? referralOrdersRemaining <= 0);
 
         setWalletState({
            pocketBalance: pocketBalance,
@@ -195,6 +208,11 @@ export const PocketBalanceV2 = () => {
            withdrawalLimit,
            withdrawableAmount,
            canWithdraw: withdrawableAmount >= withdrawalLimit,
+           completedDeliveries,
+           referralUnlocked,
+           referralUnlockRequiredOrders,
+           referralOrdersRemaining,
+           lockedReferralEarnings,
            deliveryBoyTdsPercentage: wallet.deliveryBoyTdsPercentage ?? 0
         });
       } catch (err) {
@@ -220,6 +238,10 @@ export const PocketBalanceV2 = () => {
      }
 
      if (amount > walletState.withdrawableAmount) {
+        if (!walletState.referralUnlocked && walletState.lockedReferralEarnings > 0) {
+          toast.error(`Referral earnings unlock after ${walletState.referralUnlockRequiredOrders} completed orders. Complete ${walletState.referralOrdersRemaining} more order${walletState.referralOrdersRemaining === 1 ? "" : "s"}.`);
+          return;
+        }
         toast.error(`Amount cannot exceed ₹${walletState.withdrawableAmount.toFixed(2)}`);
         return;
      }
@@ -358,6 +380,16 @@ export const PocketBalanceV2 = () => {
                            subLabel="Rewards earned by referring new delivery partners"
                          />
                       </div>
+                      {!walletState.referralUnlocked && walletState.lockedReferralEarnings > 0 && (
+                        <div className="mb-2 rounded-[20px] border border-amber-100 bg-amber-50 px-4 py-3">
+                          <p className="text-[11px] font-black text-amber-900 tracking-tight">
+                            Referral withdrawal locked
+                          </p>
+                          <p className="mt-1 text-[10px] font-bold uppercase tracking-widest leading-relaxed text-amber-700">
+                            Complete {walletState.referralOrdersRemaining} more order{walletState.referralOrdersRemaining === 1 ? "" : "s"} to unlock {formatCurrency(walletState.lockedReferralEarnings)} referral earnings.
+                          </p>
+                        </div>
+                      )}
                       <DetailRow label="Amount withdrawn" value={formatCurrency(walletState.totalWithdrawn)} />
                       {walletState.pendingRequestAmount > 0 && (
                         <div className="py-4 border-b border-gray-100/60">

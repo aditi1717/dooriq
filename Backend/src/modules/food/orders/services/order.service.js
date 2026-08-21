@@ -62,6 +62,32 @@ let commissionRulesCache = null;
 let commissionRulesLoadedAt = 0;
 const ORDER_ACCEPTANCE_WINDOW_SECONDS = 240;
 
+function normalizePaymentMethodAvailability(settings = {}) {
+  const paymentMethods = settings?.paymentMethods || {};
+  return {
+    cashOnDelivery: paymentMethods.cashOnDelivery !== undefined ? Boolean(paymentMethods.cashOnDelivery) : true,
+    wallet: paymentMethods.wallet !== undefined ? Boolean(paymentMethods.wallet) : true,
+    online: paymentMethods.online !== undefined ? Boolean(paymentMethods.online) : true,
+  };
+}
+
+function assertPaymentMethodEnabled(paymentMethod, settings = {}) {
+  const availability = normalizePaymentMethodAvailability(settings);
+  const method = String(paymentMethod || "").toLowerCase();
+
+  if ((method === "cash" || method === "cod" || method === "cash_on_delivery") && !availability.cashOnDelivery) {
+    throw new ValidationError("Cash on Delivery is currently disabled");
+  }
+
+  if (method === "wallet" && !availability.wallet) {
+    throw new ValidationError("Wallet payment is currently disabled");
+  }
+
+  if ((method === "razorpay" || method === "card") && !availability.online) {
+    throw new ValidationError("Online payment is currently disabled");
+  }
+}
+
 function normalizeAcceptanceWindowSeconds(minutes) {
   const numeric = Number(minutes);
   if (!Number.isFinite(numeric)) return ORDER_ACCEPTANCE_WINDOW_SECONDS;
@@ -627,6 +653,8 @@ export async function createOrder(userId, dto) {
 
     const paymentMethod =
       dto.paymentMethod === "card" ? "razorpay" : dto.paymentMethod;
+    const businessSettings = await FoodBusinessSettings.findOne().lean();
+    assertPaymentMethodEnabled(paymentMethod, businessSettings);
     const isCash = paymentMethod === "cash";
     const isWallet = paymentMethod === "wallet";
 

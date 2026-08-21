@@ -17,7 +17,7 @@ import { orderAPI, restaurantAPI, adminAPI, userAPI, API_ENDPOINTS } from "@food
 import { API_BASE_URL } from "@food/api/config"
 import { initRazorpayPayment } from "@food/utils/razorpay"
 import { toast } from "sonner"
-import { getCompanyNameAsync } from "@food/utils/businessSettings"
+import { getCachedSettings, getCompanyNameAsync, loadBusinessSettings } from "@food/utils/businessSettings"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
@@ -162,6 +162,14 @@ export default function Cart() {
   const [manualCouponCode, setManualCouponCode] = useState(() => loadStoredCartCoupon()?.couponCode || "")
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("cash")
   const [isCodEnabled, setIsCodEnabled] = useState(true)
+  const [paymentMethodAvailability, setPaymentMethodAvailability] = useState(() => {
+    const settings = getCachedSettings()
+    return {
+      cashOnDelivery: settings?.paymentMethods?.cashOnDelivery ?? true,
+      wallet: settings?.paymentMethods?.wallet ?? true,
+      online: settings?.paymentMethods?.online ?? true,
+    }
+  })
   const [showPaymentSheet, setShowPaymentSheet] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
   const [isLoadingWallet, setIsLoadingWallet] = useState(false)
@@ -222,6 +230,7 @@ export default function Cart() {
 
   const [sendCutlery, setSendCutlery] = useState(true)
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
+  const [showOrderConfirm, setShowOrderConfirm] = useState(false)
   const [showBillDetails, setShowBillDetails] = useState(true)
   const [showPlacingOrder, setShowPlacingOrder] = useState(false)
   const [isScheduled, setIsScheduled] = useState(false)
@@ -390,25 +399,72 @@ export default function Cart() {
 
   useEffect(() => {
     const loadFeatureSettings = async () => {
+      const applyBusinessPaymentSettings = (businessSettings) => {
+        if (businessSettings?.paymentMethods) {
+          setPaymentMethodAvailability({
+            cashOnDelivery: businessSettings.paymentMethods.cashOnDelivery ?? true,
+            wallet: businessSettings.paymentMethods.wallet ?? true,
+            online: businessSettings.paymentMethods.online ?? true,
+          })
+          return true
+        }
+        return false
+      }
+
       try {
-        const res = await restaurantAPI.getFeatureSettingsPublic()
-        const rows = Array.isArray(res?.data?.data) ? res.data.data : []
+        const [featureResult, businessSettingsResult] = await Promise.allSettled([
+          restaurantAPI.getFeatureSettingsPublic(),
+          loadBusinessSettings()
+        ])
+
+        const featureRes = featureResult.status === "fulfilled" ? featureResult.value : null
+        const rows = Array.isArray(featureRes?.data?.data) ? featureRes.data.data : []
         const codFeature = rows.find((row) => row.key === "cod_control")
         if (codFeature) {
           setIsCodEnabled(Boolean(codFeature.isEnabled))
         }
+
+        const freshSettings = businessSettingsResult.status === "fulfilled"
+          ? businessSettingsResult.value
+          : null
+        if (!applyBusinessPaymentSettings(freshSettings)) {
+          applyBusinessPaymentSettings(getCachedSettings())
+        }
       } catch (_error) {
-        // Keep default enabled if public feature API fails.
+        applyBusinessPaymentSettings(getCachedSettings())
       }
     }
+
+    const handleSettingsUpdate = () => {
+      const settings = getCachedSettings()
+      if (settings?.paymentMethods) {
+        setPaymentMethodAvailability({
+          cashOnDelivery: settings.paymentMethods.cashOnDelivery ?? true,
+          wallet: settings.paymentMethods.wallet ?? true,
+          online: settings.paymentMethods.online ?? true,
+        })
+      }
+    }
+
     loadFeatureSettings()
+    window.addEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    return () => window.removeEventListener("businessSettingsUpdated", handleSettingsUpdate)
   }, [])
 
+  const enabledPaymentMethods = useMemo(() => ({
+    cash: Boolean(isCodEnabled && paymentMethodAvailability.cashOnDelivery),
+    wallet: Boolean(paymentMethodAvailability.wallet),
+    razorpay: Boolean(paymentMethodAvailability.online),
+  }), [isCodEnabled, paymentMethodAvailability])
+
+  const availablePaymentMethodCount = Object.values(enabledPaymentMethods).filter(Boolean).length
+
   useEffect(() => {
-    if (!isCodEnabled && selectedPaymentMethod === "cash") {
-      setSelectedPaymentMethod("wallet")
+    if (!enabledPaymentMethods[selectedPaymentMethod]) {
+      const nextMethod = ["wallet", "razorpay", "cash"].find((method) => enabledPaymentMethods[method]) || ""
+      setSelectedPaymentMethod(nextMethod)
     }
-  }, [isCodEnabled, selectedPaymentMethod])
+  }, [enabledPaymentMethods, selectedPaymentMethod])
 
 
   const availableTimeSlots = useMemo(() => {
@@ -1371,7 +1427,9 @@ export default function Cart() {
       ? "Wallet"
       : selectedPaymentMethod === "razorpay"
         ? "Online Payment"
-        : "Cash on Delivery"
+        : selectedPaymentMethod === "cash"
+          ? "Cash on Delivery"
+          : "No payment method"
 
   // Restaurant name from data or cart
   const restaurantName = restaurantData?.name || cart[0]?.restaurant || "Restaurant"
@@ -1745,7 +1803,7 @@ export default function Cart() {
   }
 
 
-  const handlePlaceOrder = async () => {
+  const handlePlaceOrder = async ({ confirmed = false } = {}) => {
     if (isRestaurantClosed) {
       toast.error("This restaurant is currently closed. You cannot place orders at this time.")
       return
@@ -1772,6 +1830,21 @@ export default function Cart() {
 
     if (cart.length === 0) {
       alert("Your cart is empty")
+      return
+    }
+
+    if (!selectedPaymentMethod || !enabledPaymentMethods[selectedPaymentMethod]) {
+      toast.error("Selected payment method is currently unavailable")
+      return
+    }
+
+    if (selectedPaymentMethod === "wallet" && walletBalance < total) {
+      toast.error(`Insufficient wallet balance. Required: ${RUPEE_SYMBOL}${total.toFixed(0)}, Available: ${RUPEE_SYMBOL}${walletBalance.toFixed(0)}`)
+      return
+    }
+
+    if (!confirmed) {
+      setShowOrderConfirm(true)
       return
     }
 
@@ -2006,6 +2079,12 @@ export default function Cart() {
         alert('Error: Restaurant information mismatch detected. Please refresh the page and try again.');
         setIsPlacingOrder(false);
         return;
+      }
+
+      if (!selectedPaymentMethod || !enabledPaymentMethods[selectedPaymentMethod]) {
+        toast.error("Selected payment method is currently unavailable")
+        setIsPlacingOrder(false)
+        return
       }
 
       const orderPayload = {
@@ -2936,8 +3015,18 @@ export default function Cart() {
 
             {/* Pay Using - Slim Pro UI */}
             <div
-              className="flex items-center justify-between p-2 bg-gray-50 dark:bg-[#222222] rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-[#282828] active:scale-[0.98] transition-all duration-200 shadow-sm"
-              onClick={() => setShowPaymentSheet(true)}
+              className={`flex items-center justify-between p-2 bg-gray-50 dark:bg-[#222222] rounded-xl border border-gray-100 dark:border-gray-800 transition-all duration-200 shadow-sm ${
+                availablePaymentMethodCount > 0
+                  ? "cursor-pointer hover:bg-gray-100 dark:hover:bg-[#282828] active:scale-[0.98]"
+                  : "opacity-70 cursor-not-allowed"
+              }`}
+              onClick={() => {
+                if (availablePaymentMethodCount <= 0) {
+                  toast.error("No payment method is currently available")
+                  return
+                }
+                setShowPaymentSheet(true)
+              }}
             >
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-orange-100/80 dark:bg-orange-900/40 flex items-center justify-center flex-shrink-0">
@@ -2945,8 +3034,10 @@ export default function Cart() {
                     <Wallet className="h-5 w-5 text-[#EB590E]" />
                   ) : selectedPaymentMethod === "razorpay" ? (
                     <Zap className="h-5 w-5 text-[#EB590E]" />
-                  ) : (
+                  ) : selectedPaymentMethod === "cash" ? (
                     <Banknote className="h-5 w-5 text-[#EB590E]" />
+                  ) : (
+                    <CreditCard className="h-5 w-5 text-[#EB590E]" />
                   )}
                 </div>
                 <div className="leading-tight">
@@ -2967,7 +3058,7 @@ export default function Cart() {
               </div>
 
               <div className="flex items-center gap-0.5 text-[#EB590E] font-bold text-[11px] uppercase tracking-widest bg-orange-50 dark:bg-orange-900/20 px-2.5 py-1 rounded-lg">
-                CHANGE <ChevronRight className="h-3.5 w-3.5" />
+                {availablePaymentMethodCount > 0 ? "CHANGE" : "OFF"} <ChevronRight className="h-3.5 w-3.5" />
               </div>
             </div>
 
@@ -2988,7 +3079,7 @@ export default function Cart() {
             {/* Place Order Button */}
             <button
               onClick={handlePlaceOrder}
-              disabled={isPlacingOrder || isRestaurantClosed || (selectedPaymentMethod === "wallet" && walletBalance < total)}
+              disabled={isPlacingOrder || isRestaurantClosed || availablePaymentMethodCount === 0 || !selectedPaymentMethod || (selectedPaymentMethod === "wallet" && walletBalance < total)}
               className="w-full text-white px-6 h-12 md:h-14 rounded-2xl font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between transition-transform active:scale-[0.98]"
               style={{
                 background: isRestaurantClosed
@@ -2999,7 +3090,7 @@ export default function Cart() {
                   : "0 12px 24px rgba(var(--module-theme-rgb,250,2,114),0.28)",
               }}
             >
-              {(selectedPaymentMethod === "razorpay" || selectedPaymentMethod === "wallet" || selectedPaymentMethod === "cash") && (
+              {availablePaymentMethodCount > 0 && (selectedPaymentMethod === "razorpay" || selectedPaymentMethod === "wallet" || selectedPaymentMethod === "cash") && (
                 <div className="text-left flex flex-col justify-center border-r-[1.5px] border-white/20 pr-4">
                   <span className="text-xs md:text-sm font-semibold text-white/90">{RUPEE_SYMBOL}{total.toFixed(2)}</span>
                   <span className="text-[9px] md:text-[10px] uppercase font-bold tracking-wider text-white/80 mt-[-2px]">Total</span>
@@ -3010,6 +3101,8 @@ export default function Cart() {
                   ? "Processing..."
                   : isRestaurantClosed
                     ? "Restaurant Closed"
+                    : availablePaymentMethodCount === 0 || !selectedPaymentMethod
+                      ? "Payment Unavailable"
                     : !hasSavedAddress
                       ? "Select Address"
                       : "Place Order"}
@@ -3021,6 +3114,83 @@ export default function Cart() {
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showOrderConfirm && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isPlacingOrder && setShowOrderConfirm(false)}
+              className="fixed inset-0 bg-black/55 backdrop-blur-sm z-[58]"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 360 }}
+              className="fixed bottom-0 left-0 right-0 z-[59] bg-white dark:bg-[#1a1a1a] rounded-t-[2rem] shadow-2xl border-t border-gray-100 dark:border-gray-800"
+              style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+            >
+              <div className="max-w-lg mx-auto p-5">
+                <div className="w-10 h-1 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-5" />
+                <div className="flex items-start justify-between gap-4 mb-5">
+                  <div>
+                    <p className="text-[10px] font-black text-[#EB590E] uppercase tracking-[0.18em] mb-2">Confirm Order</p>
+                    <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Place this order?</h3>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-1">Please confirm before we send it to the restaurant.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => !isPlacingOrder && setShowOrderConfirm(false)}
+                    className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 flex items-center justify-center"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="rounded-2xl bg-gray-50 dark:bg-[#222222] border border-gray-100 dark:border-gray-800 p-4 space-y-3 mb-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Payment</span>
+                    <span className="text-sm font-black text-gray-900 dark:text-white">{selectedPaymentLabel}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Items</span>
+                    <span className="text-sm font-black text-gray-900 dark:text-white">{getCartCount()} item{getCartCount() === 1 ? "" : "s"}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 pt-3 border-t border-gray-200/70 dark:border-gray-700">
+                    <span className="text-sm font-black text-gray-900 dark:text-white">Total Pay</span>
+                    <span className="text-lg font-black text-[#EB590E]">{RUPEE_SYMBOL}{total.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => !isPlacingOrder && setShowOrderConfirm(false)}
+                    disabled={isPlacingOrder}
+                    className="h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-black uppercase tracking-wider disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowOrderConfirm(false)
+                      handlePlaceOrder({ confirmed: true })
+                    }}
+                    disabled={isPlacingOrder}
+                    className="h-12 rounded-2xl bg-[#EB590E] text-white text-sm font-black uppercase tracking-wider shadow-lg shadow-orange-500/20 disabled:opacity-60"
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
           {/* Placing Order Modal */}
           {showPlacingOrder && (
@@ -3287,7 +3457,7 @@ export default function Cart() {
                           color: 'bg-orange-50 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400',
                           selectedColor: 'bg-orange-500 text-white'
                         }
-                      ].filter((option) => isCodEnabled || option.id !== "cash").map((option) => (
+                      ].filter((option) => enabledPaymentMethods[option.id]).map((option) => (
                         <button
                           key={option.id}
                           onClick={() => {

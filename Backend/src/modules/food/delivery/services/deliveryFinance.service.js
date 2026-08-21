@@ -11,6 +11,8 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured, verifyPaymentSignature } from '../../orders/helpers/razorpay.helper.js';
 import { FoodBusinessSettings } from '../../admin/models/businessSettings.model.js';
 
+const REFERRAL_WITHDRAWAL_UNLOCK_DELIVERIES = 20;
+
 /**
  * Enhanced wallet fetch for delivery partners.
  * Integrates:
@@ -28,7 +30,20 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
     const partner = await FoodDeliveryPartner.findById(partnerId).lean();
     if (!partner) throw new ValidationError('Delivery partner not found');
 
-    const [cashLimitSettings, earningsAgg, cashCollectedAgg, cashDepositsAgg, bonusAgg, withdrawalAgg, withdrawalsList, depositList, bonusesList, walletDoc] = await Promise.all([
+    const [
+        cashLimitSettings,
+        earningsAgg,
+        cashCollectedAgg,
+        cashDepositsAgg,
+        bonusAgg,
+        referralBonusAgg,
+        completedDeliveriesCount,
+        withdrawalAgg,
+        withdrawalsList,
+        depositList,
+        bonusesList,
+        walletDoc
+    ] = await Promise.all([
         getDeliveryCashLimitSettings(),
         // 1. Total Earnings from Delivered Orders
         FoodOrder.aggregate([
@@ -61,6 +76,15 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
             { $match: { deliveryPartnerId: partnerId } },
             { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } }
         ]),
+        // Referral bonuses are withdrawable only after the rider completes enough deliveries.
+        DeliveryBonusTransaction.aggregate([
+            { $match: { deliveryPartnerId: partnerId, reference: { $regex: /referral/i } } },
+            { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } }
+        ]),
+        FoodOrder.countDocuments({
+            'dispatch.deliveryPartnerId': partnerId,
+            orderStatus: 'delivered'
+        }),
         // 5. Withdrawal Aggregates (Approved vs Pending)
         FoodDeliveryWithdrawal.aggregate([
             { $match: { deliveryPartnerId: partnerId } },
@@ -93,6 +117,8 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
     const totalDepositedCash = Number(cashDepositsAgg?.[0]?.depositedCash) || 0;
     const computedCashInHand = Math.max(0, grossCashCollected - totalDepositedCash);
     const aggTotalBonus = Number(bonusAgg?.[0]?.total) || 0;
+    const referralEarnings = Math.max(0, Number(referralBonusAgg?.[0]?.total) || 0);
+    const completedDeliveries = Number(completedDeliveriesCount) || 0;
     const aggTotalWithdrawn = Number(withdrawalAgg?.[0]?.totalWithdrawn) || 0;
     const pendingWithdrawals = Number(withdrawalAgg?.[0]?.pendingWithdrawals) || 0;
 
@@ -108,15 +134,19 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
     const totalBonus = Math.max(aggTotalBonus, walletTotalBonus);
     const totalWithdrawn = Math.max(aggTotalWithdrawn, walletTotalSettled);
     const cashInHand = Math.max(computedCashInHand, walletCashInHand);
+    const referralUnlocked = completedDeliveries >= REFERRAL_WITHDRAWAL_UNLOCK_DELIVERIES;
+    const referralOrdersRemaining = Math.max(0, REFERRAL_WITHDRAWAL_UNLOCK_DELIVERIES - completedDeliveries);
+    const lockedReferralEarnings = referralUnlocked ? 0 : Math.min(referralEarnings, totalBonus);
 
     const totalCashLimit = Number(cashLimitSettings.deliveryCashLimit) || 0;
     const deliveryWithdrawalLimit = Number(cashLimitSettings.deliveryWithdrawalLimit) || 100;
 
     // Pocket Balance = (Earnings + Bonus) - Total Withdrawn (approved) - Pending Withdrawals.
     // Keep max with wallet ledger balance to honor admin/manual wallet adjustments.
-    const computedPocketBalance = Math.max(0, (totalEarned + totalBonus) - (totalWithdrawn + pendingWithdrawals));
+    const unlockedGrossBalance = Math.max(0, (totalEarned + totalBonus) - lockedReferralEarnings);
+    const computedPocketBalance = Math.max(0, unlockedGrossBalance - (totalWithdrawn + pendingWithdrawals));
     const effectiveLockedAmount = Math.max(walletLockedAmount, pendingWithdrawals);
-    const availableWalletBalance = Math.max(0, walletBalance - effectiveLockedAmount);
+    const availableWalletBalance = Math.max(0, walletBalance - effectiveLockedAmount - lockedReferralEarnings);
     const pocketBalance = Math.max(computedPocketBalance, availableWalletBalance);
 
     // Fetch transactions for UI (Orders, Bonuses, Withdrawals)
@@ -185,6 +215,13 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
         lockedAmount: effectiveLockedAmount,
         totalEarned,
         totalBonus,
+        completedDeliveries,
+        referralEarnings,
+        referralUnlocked,
+        referralUnlockRequiredOrders: REFERRAL_WITHDRAWAL_UNLOCK_DELIVERIES,
+        referralOrdersRemaining,
+        lockedReferralEarnings,
+        withdrawableAmount: pocketBalance,
         totalCashLimit,
         availableCashLimit: Math.max(0, totalCashLimit - cashInHand),
         deliveryWithdrawalLimit,
@@ -203,10 +240,17 @@ export const requestDeliveryWithdrawal = async (deliveryPartnerId, payload) => {
     if (!Number.isFinite(amount) || amount < 1) throw new ValidationError('Invalid amount');
 
     const wallet = await getDeliveryPartnerWalletEnhanced(deliveryPartnerId);
+    const getReferralLockMessage = () => (
+        `Referral earnings unlock after ${wallet.referralUnlockRequiredOrders} completed orders. ` +
+        `Complete ${wallet.referralOrdersRemaining} more order${wallet.referralOrdersRemaining === 1 ? '' : 's'} to withdraw referral earnings.`
+    );
     if (amount < wallet.deliveryWithdrawalLimit) {
         throw new ValidationError(`Minimum withdrawal amount is ₹${wallet.deliveryWithdrawalLimit}`);
     }
     if (amount > wallet.pocketBalance) {
+        if (!wallet.referralUnlocked && wallet.lockedReferralEarnings > 0) {
+            throw new ValidationError(getReferralLockMessage());
+        }
         throw new ValidationError('Insufficient balance for this withdrawal');
     }
 
@@ -241,6 +285,9 @@ export const requestDeliveryWithdrawal = async (deliveryPartnerId, payload) => {
     const availableBalance = Math.max(0, targetLedgerBalance - effectiveLockedBefore);
 
     if (amount > availableBalance) {
+        if (!wallet.referralUnlocked && wallet.lockedReferralEarnings > 0) {
+            throw new ValidationError(getReferralLockMessage());
+        }
         throw new ValidationError('Insufficient balance for this withdrawal');
     }
 

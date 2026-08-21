@@ -21,6 +21,12 @@ const POWER_SCANNING_DEFAULT = {
     delivery: { themeColor: '#00B761', fontFamily: 'Poppins' }
 };
 
+const PAYMENT_METHOD_DEFAULTS = {
+    cashOnDelivery: true,
+    wallet: true,
+    online: true
+};
+
 const POWER_SCANNING_FONT_OPTIONS = [
     'Arial', 'Poppins', 'Outfit', 'Inter', 'Roboto', 'Montserrat',
     'Nunito', 'Open Sans', 'Lato', 'Manrope', 'Raleway',
@@ -73,6 +79,20 @@ const ensurePowerScanningOnSettings = (settingsDocOrPlain = null) => {
     };
 };
 
+const normalizePaymentMethods = (payload = {}) => ({
+    cashOnDelivery: payload?.cashOnDelivery !== undefined ? Boolean(payload.cashOnDelivery) : PAYMENT_METHOD_DEFAULTS.cashOnDelivery,
+    wallet: payload?.wallet !== undefined ? Boolean(payload.wallet) : PAYMENT_METHOD_DEFAULTS.wallet,
+    online: payload?.online !== undefined ? Boolean(payload.online) : PAYMENT_METHOD_DEFAULTS.online
+});
+
+const ensurePaymentMethodsOnSettings = (settingsDocOrPlain = null) => {
+    const current = settingsDocOrPlain || {};
+    return {
+        ...current,
+        paymentMethods: normalizePaymentMethods(current?.paymentMethods || {})
+    };
+};
+
 /**
  * Load the singleton settings document, creating it if this is a fresh install.
  * Uses an upsert rather than findOne-then-create so concurrent cluster workers
@@ -90,15 +110,20 @@ async function loadBusinessSettings() {
     const persisted = settings?.powerScanning || {};
     const normalizedPowerScanning = buildPowerScanningPayload(persisted, persisted || POWER_SCANNING_DEFAULT);
 
+    const normalizedPaymentMethods = normalizePaymentMethods(settings?.paymentMethods || {});
     const isMissingAnyModule = !persisted?.user || !persisted?.restaurant || !persisted?.delivery;
-    if (isMissingAnyModule) {
+    const isMissingPaymentMethods = !settings?.paymentMethods ||
+        settings.paymentMethods.cashOnDelivery === undefined ||
+        settings.paymentMethods.wallet === undefined ||
+        settings.paymentMethods.online === undefined;
+    if (isMissingAnyModule || isMissingPaymentMethods) {
         await FoodBusinessSettings.updateOne(
             { _id: settings._id },
-            { $set: { powerScanning: normalizedPowerScanning } }
+            { $set: { powerScanning: normalizedPowerScanning, paymentMethods: normalizedPaymentMethods } }
         );
     }
 
-    return { ...settings, powerScanning: normalizedPowerScanning };
+    return { ...settings, powerScanning: normalizedPowerScanning, paymentMethods: normalizedPaymentMethods };
 }
 
 export async function getCachedBusinessSettings() {
@@ -107,7 +132,7 @@ export async function getCachedBusinessSettings() {
 
 export async function getBusinessSettings(req, res, next) {
     try {
-        const payload = ensurePowerScanningOnSettings(await getCachedBusinessSettings());
+        const payload = ensurePaymentMethodsOnSettings(ensurePowerScanningOnSettings(await getCachedBusinessSettings()));
         return sendResponse(res, 200, 'Business settings fetched successfully', payload);
     } catch (error) {
         next(error);
@@ -207,7 +232,7 @@ export async function updateOrderAcceptanceSettings(req, res, next) {
 export async function updateBusinessSettings(req, res, next) {
     try {
         const data = req.body.data ? JSON.parse(req.body.data) : {};
-        const { companyName, email, phoneCountryCode, phoneNumber, address, state, pincode, region, restaurantTdsPercentage, deliveryBoyTdsPercentage, launchCountdown, defaultServingRadiusKm } = data;
+        const { companyName, email, phoneCountryCode, phoneNumber, address, state, pincode, region, restaurantTdsPercentage, deliveryBoyTdsPercentage, launchCountdown, defaultServingRadiusKm, paymentMethods } = data;
 
         // Validation
         if (!companyName || companyName.trim().length < 2 || companyName.trim().length > 50) {
@@ -268,6 +293,7 @@ export async function updateBusinessSettings(req, res, next) {
         if (region) settings.region = region;
         if (restaurantTdsPercentage !== undefined) settings.restaurantTdsPercentage = Number(restaurantTdsPercentage);
         if (deliveryBoyTdsPercentage !== undefined) settings.deliveryBoyTdsPercentage = Number(deliveryBoyTdsPercentage);
+        if (paymentMethods !== undefined) settings.paymentMethods = normalizePaymentMethods(paymentMethods);
         if (launchCountdown !== undefined) settings.launchCountdown = launchCountdown;
         if (defaultServingRadiusKm !== undefined) settings.defaultServingRadiusKm = Number(defaultServingRadiusKm);
 
