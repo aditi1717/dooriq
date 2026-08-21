@@ -37,6 +37,7 @@ import { FoodDeliveryWithdrawal } from '../../delivery/models/foodDeliveryWithdr
 import { FoodDeliveryWallet } from '../../delivery/models/deliveryWallet.model.js';
 import { FoodDeliveryCashDeposit } from '../../delivery/models/foodDeliveryCashDeposit.model.js';
 import { FoodUnregisteredRestaurant } from '../../restaurant/models/unregisteredRestaurant.model.js';
+import { FoodUserWallet } from '../../user/models/userWallet.model.js';
 import { FoodAdmin } from '../../../../core/admin/admin.model.js';
 import { getAdminRestaurantSubscriptionHistory as getAdminRestaurantSubscriptionHistoryFromRestaurant } from '../../restaurant/services/subscriptionHistory.service.js';
 import { ADMIN_FULL_PERMISSIONS, isValidPermissionPayload, sanitizeAdminPermissions } from '../../../../constants/permissions.js';
@@ -1294,6 +1295,35 @@ export async function getTaxReportDetail(restaurantId, query = {}) {
 }
 
 // ----- Customers / Users (admin) -----
+const buildCustomerWalletSummary = (wallet = null) => {
+    const totalWallet = Math.max(0, Number(wallet?.balance) || 0);
+    const referralWallet = Math.max(0, Number(wallet?.referralEarnings) || 0);
+    const razorpayWallet = Math.max(0, totalWallet - referralWallet);
+    const tx = Array.isArray(wallet?.transactions)
+        ? [...wallet.transactions].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        : [];
+    return {
+        razorpayWallet,
+        referralWallet,
+        balance: razorpayWallet,
+        referralEarnings: referralWallet,
+        totalWallet,
+        coinBalance: Math.max(0, Number(wallet?.coinBalance) || 0),
+        updatedAt: wallet?.updatedAt || null,
+        transactions: tx.map((t) => ({
+            id: String(t._id),
+            _id: t._id,
+            type: t.type,
+            amount: Number(t.amount) || 0,
+            status: t.status || 'Completed',
+            description: t.description || '',
+            date: t.createdAt,
+            createdAt: t.createdAt,
+            metadata: t.metadata || {}
+        }))
+    };
+};
+
 export async function getCustomers(query = {}) {
     const limit = Math.min(Math.max(parseInt(query.limit, 10) || 50, 1), 1000);
     const page = Math.max(parseInt(query.page, 10) || 1, 1);
@@ -1378,8 +1408,16 @@ export async function getCustomers(query = {}) {
         ])
     );
 
+    const wallets = userIds.length > 0
+        ? await FoodUserWallet.find({ userId: { $in: userIds } })
+            .select('userId balance referralEarnings coinBalance updatedAt')
+            .lean()
+        : [];
+    const walletMap = new Map((wallets || []).map((wallet) => [String(wallet.userId), wallet]));
+
     let customers = docs.map((u) => {
         const stats = orderStatsMap.get(String(u._id)) || { totalOrder: 0, totalOrderAmount: 0 };
+        const wallet = buildCustomerWalletSummary(walletMap.get(String(u._id)));
         return ({
         id: u._id,
         _id: u._id,
@@ -1393,6 +1431,10 @@ export async function getCustomers(query = {}) {
         isVerified: u.isVerified === true,
         totalOrder: stats.totalOrder,
         totalOrderAmount: stats.totalOrderAmount,
+        wallet,
+        walletBalance: wallet.totalWallet,
+        razorpayWallet: wallet.razorpayWallet,
+        referralWallet: wallet.referralWallet,
         joiningDate: u.createdAt,
         createdAt: u.createdAt
         });
@@ -1408,7 +1450,12 @@ export async function getCustomers(query = {}) {
 
 export async function getCustomerById(id) {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
-    const u = await FoodUser.findById(id).select('-__v').lean();
+    const [u, walletDoc] = await Promise.all([
+        FoodUser.findById(id).select('-__v').lean(),
+        FoodUserWallet.findOne({ userId: new mongoose.Types.ObjectId(id) })
+            .select('userId balance referralEarnings coinBalance transactions updatedAt')
+            .lean()
+    ]);
     if (!u) return null;
     const customerObjectId = new mongoose.Types.ObjectId(id);
     const orderStats = await FoodOrder.aggregate([
@@ -1427,6 +1474,7 @@ export async function getCustomerById(id) {
         }
     ]);
     const stats = orderStats?.[0] || {};
+    const wallet = buildCustomerWalletSummary(walletDoc);
     const sanitizeUrl = (s) => {
         if (!s) return '';
         const str = String(s).trim();
@@ -1446,10 +1494,99 @@ export async function getCustomerById(id) {
         totalOrders: Number(stats.totalOrders || 0),
         totalOrder: Number(stats.totalOrders || 0),
         totalOrderAmount: Number(stats.totalOrderAmount || 0),
+        wallet,
+        walletBalance: wallet.totalWallet,
+        razorpayWallet: wallet.razorpayWallet,
+        referralWallet: wallet.referralWallet,
         joiningDate: u.createdAt,
         createdAt: u.createdAt,
         updatedAt: u.updatedAt
     };
+}
+
+export async function updateCustomerWallet(id, payload = {}) {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+    const userId = new mongoose.Types.ObjectId(id);
+    const user = await FoodUser.findById(userId).select('_id').lean();
+    if (!user) return null;
+
+    let wallet = await FoodUserWallet.findOne({ userId });
+    if (!wallet) {
+        wallet = new FoodUserWallet({ userId, balance: 0, referralEarnings: 0, transactions: [] });
+    }
+
+    const previousReferralWallet = Number(wallet.referralEarnings) || 0;
+    const previousRazorpayWallet = Math.max(0, (Number(wallet.balance) || 0) - previousReferralWallet);
+
+    const hasRazorpayWallet = payload.razorpayWallet !== undefined || payload.balance !== undefined;
+    const hasReferralWallet = payload.referralWallet !== undefined || payload.referralEarnings !== undefined;
+
+    if (!hasRazorpayWallet && !hasReferralWallet) {
+        throw new ValidationError('Wallet amount is required');
+    }
+
+    const nextRazorpayWallet = hasRazorpayWallet 
+        ? Number(payload.razorpayWallet ?? payload.balance) 
+        : previousRazorpayWallet;
+    const nextReferralWallet = hasReferralWallet 
+        ? Number(payload.referralWallet ?? payload.referralEarnings) 
+        : previousReferralWallet;
+
+    if (nextRazorpayWallet < 0) {
+        throw new ValidationError('Razorpay wallet amount must be zero or more');
+    }
+    if (nextReferralWallet < 0) {
+        throw new ValidationError('Referral wallet amount must be zero or more');
+    }
+
+    const roundedRazorpay = Number(nextRazorpayWallet.toFixed(2));
+    const roundedReferral = Number(nextReferralWallet.toFixed(2));
+
+    const diffRazorpay = Number((roundedRazorpay - previousRazorpayWallet).toFixed(2));
+    const diffReferral = Number((roundedReferral - previousReferralWallet).toFixed(2));
+
+    wallet.balance = Number((roundedRazorpay + roundedReferral).toFixed(2));
+    wallet.referralEarnings = roundedReferral;
+
+    const transactions = [];
+
+    if (diffRazorpay !== 0) {
+        transactions.push({
+            type: diffRazorpay > 0 ? 'addition' : 'deduction',
+            amount: Math.abs(diffRazorpay),
+            status: 'Completed',
+            description: 'Admin updated Razorpay wallet balance',
+            metadata: {
+                source: 'admin_customer_wallet_update',
+                bucket: 'razorpay_wallet',
+                previousAmount: previousRazorpayWallet,
+                nextAmount: roundedRazorpay
+            }
+        });
+    }
+
+    if (diffReferral !== 0) {
+        transactions.push({
+            type: diffReferral > 0 ? 'addition' : 'deduction',
+            amount: Math.abs(diffReferral),
+            status: 'Completed',
+            description: 'Admin updated referral wallet balance',
+            metadata: {
+                source: 'admin_customer_wallet_update',
+                bucket: 'referral_wallet',
+                previousAmount: previousReferralWallet,
+                nextAmount: roundedReferral
+            }
+        });
+    }
+
+    if (transactions.length > 0) {
+        wallet.transactions.unshift(...transactions);
+        wallet.transactions = wallet.transactions.slice(0, 100);
+    }
+
+    await wallet.save();
+    return buildCustomerWalletSummary(wallet.toObject());
 }
 
 export async function updateCustomerStatus(id, isActive) {

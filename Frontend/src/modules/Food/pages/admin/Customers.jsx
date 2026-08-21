@@ -22,6 +22,12 @@ export default function Customers() {
   const [userDetails, setUserDetails] = useState(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [showUserDetails, setShowUserDetails] = useState(false)
+  const [walletEditing, setWalletEditing] = useState(false)
+  const [walletSaving, setWalletSaving] = useState(false)
+  const [walletForm, setWalletForm] = useState({
+    razorpayWallet: "",
+    referralWallet: "",
+  })
   const [filters, setFilters] = useState({
     orderDate: "",
     joiningDate: "",
@@ -148,6 +154,25 @@ export default function Customers() {
     }
   }
 
+  const formatCurrency = (value) =>
+    `Rs. ${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  const getWalletSummary = (source = {}) => {
+    const wallet = source.wallet || {}
+    const totalWallet = Number(wallet.totalWallet ?? source.walletBalance ?? wallet.balance ?? source.balance ?? 0) || 0
+    const referralWallet = Number(wallet.referralWallet ?? wallet.referralEarnings ?? source.referralWallet ?? source.referralEarnings ?? 0) || 0
+    const razorpayWallet = Math.max(0, totalWallet - referralWallet)
+    return { razorpayWallet, referralWallet, totalWallet }
+  }
+
+  const syncWalletForm = (source = {}) => {
+    const wallet = getWalletSummary(source)
+    setWalletForm({
+      razorpayWallet: String(wallet.razorpayWallet),
+      referralWallet: String(wallet.referralWallet),
+    })
+  }
+
   // Fetch customers from API
   useEffect(() => {
     let cancelled = false
@@ -245,6 +270,8 @@ export default function Customers() {
 
       if (data?.user) {
         setUserDetails(data.user)
+        syncWalletForm(data.user)
+        setWalletEditing(false)
       } else {
         toast.error('Failed to load user details')
         setShowUserDetails(false)
@@ -255,6 +282,58 @@ export default function Customers() {
       setShowUserDetails(false)
     } finally {
       setLoadingDetails(false)
+    }
+  }
+
+  const handleSaveWallet = async () => {
+    if (!userDetails?._id && !userDetails?.id) return
+    const razorpayWallet = Number(walletForm.razorpayWallet)
+    const referralWallet = Number(walletForm.referralWallet)
+
+    if (!Number.isFinite(razorpayWallet) || razorpayWallet < 0) {
+      toast.error("Enter a valid Razorpay wallet amount")
+      return
+    }
+    if (!Number.isFinite(referralWallet) || referralWallet < 0) {
+      toast.error("Enter a valid referral wallet amount")
+      return
+    }
+
+    try {
+      setWalletSaving(true)
+      const customerId = userDetails._id || userDetails.id
+      const response = await adminAPI.updateCustomerWallet(customerId, {
+        razorpayWallet,
+        referralWallet,
+      })
+      const wallet = response?.data?.data?.wallet || response?.data?.wallet
+      const nextUserDetails = {
+        ...userDetails,
+        wallet,
+        walletBalance: wallet?.totalWallet ?? (razorpayWallet + referralWallet),
+        razorpayWallet: wallet?.razorpayWallet ?? razorpayWallet,
+        referralWallet: wallet?.referralWallet ?? referralWallet,
+      }
+      setUserDetails(nextUserDetails)
+      syncWalletForm(nextUserDetails)
+      setCustomers(prev => prev.map(customer => {
+        const id = String(customer._id || customer.id || customer.sl)
+        if (id !== String(customerId)) return customer
+        return {
+          ...customer,
+          wallet,
+          walletBalance: wallet?.totalWallet ?? (razorpayWallet + referralWallet),
+          razorpayWallet: wallet?.razorpayWallet ?? razorpayWallet,
+          referralWallet: wallet?.referralWallet ?? referralWallet,
+        }
+      }))
+      setWalletEditing(false)
+      toast.success("Customer wallet updated")
+    } catch (error) {
+      debugError("Error updating customer wallet:", error)
+      toast.error(error?.response?.data?.message || "Failed to update wallet")
+    } finally {
+      setWalletSaving(false)
     }
   }
 
@@ -461,6 +540,7 @@ export default function Customers() {
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Contact Information</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Total Order</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Total Order Amount</th>
+                  <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Wallet Amount</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Joining Date</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Active/Inactive</th>
                   <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">Actions</th>
@@ -469,13 +549,13 @@ export default function Customers() {
               <tbody className="bg-white divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-8 text-center">
+                    <td colSpan={9} className="px-6 py-8 text-center">
                       <div className="text-sm text-slate-500">Loading customers...</div>
                     </td>
                   </tr>
                 ) : filteredCustomers.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-8 text-center">
+                    <td colSpan={9} className="px-6 py-8 text-center">
                       <div className="text-sm text-slate-500">No customers found</div>
                     </td>
                   </tr>
@@ -523,6 +603,12 @@ export default function Customers() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-sm font-medium text-slate-900">Rs. {(customer.totalOrderAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-emerald-700">{formatCurrency(getWalletSummary(customer).totalWallet)}</span>
+                          <span className="text-[11px] text-slate-500">Top-up {formatCurrency(getWalletSummary(customer).razorpayWallet)}</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-sm text-slate-700">{formatDateTime(customer.joiningDate)}</span>
@@ -691,6 +777,126 @@ export default function Customers() {
                   <p className="text-base font-bold text-purple-600">{formatDateTime(userDetails.joiningDate)}</p>
                 </div>
               </div>
+
+              {/* Wallet Section */}
+              <div className="bg-emerald-50 rounded-xl p-4 sm:p-5 border border-emerald-100">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+                  <div>
+                    <h4 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <IndianRupee className="w-4 h-4 text-emerald-700" />
+                      Customer Wallet
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-1">Split between Razorpay/top-up wallet and referral wallet.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {walletEditing ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            syncWalletForm(userDetails)
+                            setWalletEditing(false)
+                          }}
+                          disabled={walletSaving}
+                          className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700 disabled:opacity-60"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveWallet}
+                          disabled={walletSaving}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 text-xs font-bold text-white disabled:opacity-60"
+                        >
+                          {walletSaving ? "Saving..." : "Save"}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          syncWalletForm(userDetails)
+                          setWalletEditing(true)
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-white border border-emerald-200 text-xs font-bold text-emerald-700"
+                      >
+                        Edit Wallet
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                    <p className="text-xs font-semibold text-slate-600 mb-1">Total Wallet</p>
+                    <p className="text-xl font-bold text-emerald-700">{formatCurrency(getWalletSummary(userDetails).totalWallet)}</p>
+                  </div>
+
+                  <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                    <p className="text-xs font-semibold text-slate-600 mb-1">Razorpay / Top-up Wallet</p>
+                    {walletEditing ? (
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={walletForm.razorpayWallet}
+                        onChange={(e) => setWalletForm(prev => ({ ...prev, razorpayWallet: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    ) : (
+                      <p className="text-lg font-bold text-slate-900">{formatCurrency(getWalletSummary(userDetails).razorpayWallet)}</p>
+                    )}
+                  </div>
+
+                  <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                    <p className="text-xs font-semibold text-slate-600 mb-1">Referral Wallet</p>
+                    {walletEditing ? (
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={walletForm.referralWallet}
+                        onChange={(e) => setWalletForm(prev => ({ ...prev, referralWallet: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    ) : (
+                      <p className="text-lg font-bold text-slate-900">{formatCurrency(getWalletSummary(userDetails).referralWallet)}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Wallet Transaction History Section */}
+              {userDetails.wallet && userDetails.wallet.transactions && userDetails.wallet.transactions.length > 0 && (
+                <div>
+                  <h4 className="text-base font-bold text-slate-900 mb-2 flex items-center gap-2">
+                    <CalendarIcon className="w-4 h-4 text-emerald-700" />
+                    Wallet Transaction History
+                  </h4>
+                  <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-100 max-h-60 overflow-y-auto">
+                    {userDetails.wallet.transactions.map((tx, idx) => {
+                      const isAddition = tx.type === 'addition';
+                      const isRefund = tx.type === 'refund';
+                      return (
+                        <div key={idx} className="p-3 flex items-center justify-between gap-3 text-sm">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-800 truncate">{tx.description || (isAddition ? 'Funds Added' : 'Payment')}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">{formatDateTime(tx.createdAt || tx.date)}</p>
+                          </div>
+                          <div className="flex-shrink-0 text-right">
+                            <p className={`font-bold ${isAddition ? 'text-green-600' : isRefund ? 'text-blue-600' : 'text-red-600'}`}>
+                              {isAddition ? '+' : isRefund ? 'Refund: ' : '-'}{formatCurrency(tx.amount)}
+                            </p>
+                            <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-medium">
+                              {tx.status || 'Completed'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Addresses Section */}
               {userDetails.addresses && userDetails.addresses.length > 0 && (

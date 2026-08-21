@@ -59,6 +59,20 @@ export async function updateCustomerStatus(req, res, next) {
     }
 }
 
+export async function updateCustomerWallet(req, res, next) {
+    try {
+        const { id } = req.params;
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid customer id' });
+        }
+        const wallet = await adminService.updateCustomerWallet(id, req.body || {});
+        if (!wallet) return res.status(404).json({ success: false, message: 'Customer not found' });
+        res.status(200).json({ success: true, message: 'Customer wallet updated successfully', data: { wallet } });
+    } catch (error) {
+        next(error);
+    }
+}
+
 // ----- Safety / Emergency Reports -----
 export async function getSafetyEmergencyReports(req, res, next) {
     try {

@@ -706,6 +706,10 @@ export const adminAPI = {
     apiClient.get(`/food/admin/customers/${String(id)}`, {
       contextModule: "admin",
     }),
+  updateCustomerWallet: (id, body = {}) =>
+    apiClient.patch(`/food/admin/customers/${String(id)}/wallet`, body ?? {}, {
+      contextModule: "admin",
+    }),
   updateCustomerStatus: (id, isActive) =>
     apiClient.patch(
       `/food/admin/customers/${String(id)}/status`,

@@ -153,15 +153,24 @@ export const deductWalletBalance = async (userId, amountInr, description = 'Orde
         throw new ValidationError('Insufficient wallet balance');
     }
 
+    const previousBalance = Number(wallet.balance) || 0;
+    const previousReferral = Number(wallet.referralEarnings) || 0;
+    const referralDeduct = Math.min(previousReferral, amount);
+
     wallet.transactions.unshift({
         type: 'deduction',
         amount,
         status: 'Completed',
         description,
-        metadata: { source: 'order_payment', ...(metadata || {}) }
+        metadata: { 
+            source: 'order_payment', 
+            referralDeduct,
+            ...(metadata || {}) 
+        }
     });
 
-    wallet.balance = Number(wallet.balance) - amount;
+    wallet.balance = Number((previousBalance - amount).toFixed(2));
+    wallet.referralEarnings = Number((previousReferral - referralDeduct).toFixed(2));
     await wallet.save();
 
     return { wallet: await getUserWallet(userId) };
@@ -174,6 +183,8 @@ export const refundWalletBalance = async (userId, amountInr, description = 'Orde
     }
 
     const wallet = await ensureWallet(userId);
+    const referralRefund = Number(metadata?.referralDeduct) || 0;
+
     wallet.transactions.unshift({
         type: 'refund',
         amount,
@@ -182,7 +193,10 @@ export const refundWalletBalance = async (userId, amountInr, description = 'Orde
         metadata: { source: 'order_refund', ...(metadata || {}) }
     });
 
-    wallet.balance = Number(wallet.balance) + amount;
+    wallet.balance = Number((Number(wallet.balance) + amount).toFixed(2));
+    if (referralRefund > 0) {
+        wallet.referralEarnings = Number((Number(wallet.referralEarnings || 0) + referralRefund).toFixed(2));
+    }
     await wallet.save();
 
     return { wallet: await getUserWallet(userId) };
