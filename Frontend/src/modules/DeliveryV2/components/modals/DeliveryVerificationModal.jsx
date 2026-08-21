@@ -181,7 +181,7 @@ const OtpModal = ({ order, onVerified, onClose }) => {
 
 const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
   const [showQrModal, setShowQrModal] = useState(false);
-  const [collectQrLink, setCollectQrLink] = useState(null);
+  const [collectQrDetails, setCollectQrDetails] = useState(null);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
   const initialPaymentMethod = (
     order?.payment?.method ||
@@ -193,23 +193,20 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
   const isInitialPaid = ['paid', 'captured', 'authorized'].includes(String(order.payment?.status || "").toLowerCase());
   const [paymentStatus, setPaymentStatus] = useState(isInitialPaid ? 'paid' : 'idle');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isCashAccepted, setIsCashAccepted] = useState(false);
-  const [isSwitchingToCash, setIsSwitchingToCash] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(initialPaymentMethod);
   const pollingRef = useRef(null);
 
   const orderId = order.orderId || order._id || 'ORD';
   const amountToCollect = order.pricing?.total || order.amountToCollect || 0;
-  const currentQrLink =
-    collectQrLink ||
-    order?.payment?.qr?.shortUrl ||
-    order?.transaction?.payment?.qr?.shortUrl ||
-    order?.payment?.qr?.imageUrl ||
-    order?.transaction?.payment?.qr?.imageUrl ||
+  const currentQr =
+    collectQrDetails ||
+    order?.payment?.qr ||
+    order?.transaction?.payment?.qr ||
     null;
-  const currentQrImageSrc = currentQrLink
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=420x420&data=${encodeURIComponent(currentQrLink)}`
-    : null;
+  const currentQrImageSrc =
+    currentQr?.image_url ||
+    currentQr?.imageUrl ||
+    null;
 
   const paymentMethod = selectedPaymentMethod;
   const isCod = ['cash', 'cod', 'cash_on_delivery', 'razorpay_qr'].includes(paymentMethod);
@@ -222,7 +219,11 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
       const payload = res?.data?.data ?? res?.data ?? {};
       const status = String(payload?.payment?.status || "").toLowerCase();
       console.log('[PaymentSync] polled status:', status, payload?.payment);
-      if (['paid', 'partially_paid', 'captured', 'authorized'].includes(status)) {
+      const qr = payload?.payment?.qr || null;
+      if (qr) {
+        setCollectQrDetails(qr);
+      }
+      if (['paid', 'captured'].includes(status)) {
         setPaymentStatus('paid');
         setSelectedPaymentMethod(String(payload?.payment?.method || paymentMethod || 'cod').toLowerCase());
         if (pollingRef.current) {
@@ -231,11 +232,14 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
         }
         setShowQrModal(false);
         toast.success("Payment Received!");
+      } else if (['failed', 'expired', 'closed'].includes(String(qr?.status || status).toLowerCase())) {
+        setPaymentStatus('expired');
+        toast.error("Payment QR expired. Generate a new QR.");
       }
     } catch (e) {
       console.error('[PaymentSync] poll failed:', e?.response?.data || e?.message);
     }
-  }, [orderId]);
+  }, [orderId, paymentMethod]);
 
   const handleManualCheck = async () => {
     setIsSyncing(true);
@@ -243,17 +247,9 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
     setTimeout(() => setIsSyncing(false), 800);
   };
 
-  const handleOpenPaymentApp = () => {
-    if (!currentUpiLink) {
-      toast.error("UPI payment link not available");
-      return;
-    }
-    window.location.href = currentUpiLink;
-  };
-
   // Only poll when QR payment is actively pending
   useEffect(() => {
-    if (paymentStatus === 'pending' && !isCashAccepted) {
+    if (paymentStatus === 'pending') {
       // Immediate check, then every 4 seconds
       checkPaymentSync();
       if (pollingRef.current) clearInterval(pollingRef.current);
@@ -283,7 +279,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
       }
     }
     return undefined;
-  }, [paymentStatus, isCashAccepted, checkPaymentSync]);
+  }, [paymentStatus, checkPaymentSync]);
 
 
   const generateQr = async () => {
@@ -293,13 +289,20 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
         name: order.userName || 'Customer',
         phone: order.userPhone || ''
       });
-      const link = res?.data?.data?.shortUrl || res?.data?.shortUrl || res?.data?.data?.imageUrl || res?.data?.imageUrl || null;
-      if (link) {
-        setCollectQrLink(link);
+      const payload = res?.data?.data ?? res?.data ?? {};
+      const qr = payload?.payment?.qr || payload;
+      const imageUrl = qr?.image_url || qr?.imageUrl || payload?.image_url || payload?.imageUrl || null;
+      if (imageUrl) {
+        setCollectQrDetails({
+          ...qr,
+          image_url: imageUrl,
+          imageUrl,
+          qrId: qr?.qrId || payload?.qrId,
+          status: qr?.status || payload?.status || 'active',
+        });
         setSelectedPaymentMethod('razorpay_qr');
         setPaymentStatus('pending');
         setShowQrModal(true);
-        setIsCashAccepted(false); // Reset cash if they try QR
       } else {
         toast.error("Could not generate QR");
       }
@@ -310,24 +313,8 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
     }
   };
 
-  const handleTakeCash = async () => {
-    setIsSwitchingToCash(true);
-    try {
-      await deliveryAPI.switchToCash(orderId);
-      setSelectedPaymentMethod('cash');
-      setIsCashAccepted(true);
-      setPaymentStatus('idle');
-      setShowQrModal(false);
-      toast.success("Switched to Cash Collection");
-    } catch (err) {
-      toast.error("Failed to switch to cash");
-    } finally {
-      setIsSwitchingToCash(false);
-    }
-  };
-
   const isPaid = paymentStatus === 'paid';
-  const canComplete = isPaid || isCashAccepted;
+  const canComplete = isPaid;
 
   return (
     <>
@@ -345,8 +332,8 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
           <div className="flex-1 overflow-y-auto no-scrollbar p-8 pt-4">
             <div className="flex justify-between items-center mb-8">
                <div className="flex items-center gap-4">
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${isPaid ? 'bg-emerald-100 text-emerald-600' : isCashAccepted ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'}`}>
-                   {isCashAccepted ? <CheckCircle2 className="w-8 h-8" /> : <IndianRupee className="w-8 h-8" />}
+                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${isPaid ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                   <IndianRupee className="w-8 h-8" />
                  </div>
                  <div>
                    <h2 className="text-2xl font-black text-gray-900 tracking-tight">Collect Payment</h2>
@@ -380,7 +367,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
 
                <div className="relative z-10">
                  <p className="text-amber-700 text-[10px] font-black uppercase tracking-[0.25em] mb-2">
-                    {isPaid ? "Payment Already Settled" : isCashAccepted ? "Collect Cash" : "Amount to Collect"}
+                    {isPaid ? "Payment Already Settled" : "Amount to Collect"}
                  </p>
                  <div className="flex items-baseline gap-1 mb-3">
                     <span className="text-2xl font-bold text-amber-950/60">₹</span>
@@ -398,12 +385,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
                      <CheckCircle2 className="w-3.5 h-3.5" />
                      Payment Received
                    </div>
-                 ) : isCashAccepted && (
-                   <div className="inline-flex items-center gap-2 bg-blue-500 text-white pl-3 pr-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20">
-                     <IndianRupee className="w-3.5 h-3.5" />
-                     Collecting Cash
-                   </div>
-                 )}
+                 ) : null}
                </div>
 
 
@@ -411,30 +393,13 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
                  <div className="space-y-4 relative z-10">
                    <button 
                      onClick={generateQr}
-                     disabled={isGeneratingQr || isSwitchingToCash}
-                     className={`w-full py-5 bg-white border-2 text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-3 shadow-xl shadow-amber-900/5 active:scale-95 transition-all rounded-2xl ${isCashAccepted ? 'border-gray-100 text-gray-400 opacity-50' : 'border-amber-200 text-amber-800'}`}
+                     disabled={isGeneratingQr}
+                     className="w-full py-5 bg-white border-2 text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-3 shadow-xl shadow-amber-900/5 active:scale-95 transition-all rounded-2xl border-amber-200 text-amber-800"
                    >
                      {isGeneratingQr ? <Loader2 className="w-5 h-5 animate-spin" /> : <QrCode className="w-5 h-5" />}
                      Show Payment QR
                    </button>
 
-
-                   {/* Take Cash button — shows confirmed state after selection */}
-                   {isCashAccepted ? (
-                     <div className="w-full py-4 bg-blue-50 border-2 border-blue-400 rounded-2xl flex items-center justify-center gap-3">
-                       <CheckCircle2 className="w-5 h-5 text-blue-600" />
-                       <span className="text-blue-700 font-black text-[11px] uppercase tracking-[0.15em]">Cash Collection Mode</span>
-                     </div>
-                   ) : (
-                     <button 
-                       onClick={handleTakeCash}
-                       disabled={isGeneratingQr || isSwitchingToCash}
-                       className="w-full py-5 bg-white border-2 border-gray-200 text-gray-700 text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all rounded-2xl"
-                     >
-                       {isSwitchingToCash ? <Loader2 className="w-5 h-5 animate-spin" /> : <IndianRupee className="w-5 h-5" />}
-                       Take Cash
-                     </button>
-                   )}
 
                  </div>
                )}
@@ -444,8 +409,8 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
           <div className="p-8 pt-0 pb-12 bg-white border-t border-gray-50">
             <div className="pt-6">
               <ActionSlider 
-                key={`action-payment-${isPaid}-${isCashAccepted}`}
-                label={isPaid ? "Slide to Complete" : isCashAccepted ? "Slide to Complete" : "Payment Required"} 
+                key={`action-payment-${isPaid}`}
+                label={isPaid ? "Slide to Complete" : "Payment Required"} 
                 successLabel="Delivered! ✓"
                 disabled={!canComplete}
                 onConfirm={async () => {
@@ -455,7 +420,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
                         throw e;
                     }
                 }}
-                color={isPaid ? "bg-emerald-600" : isCashAccepted ? "bg-blue-600" : "bg-gray-400"}
+                color={isPaid ? "bg-emerald-600" : "bg-gray-400"}
               />
             </div>
           </div>
@@ -478,12 +443,16 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
               <h3 className="text-gray-950 font-bold text-xl mb-2">Scan to Pay</h3>
               <p className="text-gray-500 text-sm mb-8 font-medium">Order Total: ₹{amountToCollect.toFixed(2)}</p>
               
-              <div className="w-full bg-gray-50 rounded-3xl border-2 border-gray-100 mb-8 p-4 sm:p-5">
-                 <div className="w-full aspect-square rounded-[1.5rem] bg-white border border-gray-100 shadow-inner flex items-center justify-center overflow-hidden">
+              <div className="w-full bg-white rounded-3xl border-2 border-gray-100 mb-8 p-4 sm:p-5">
+                 <div className="w-full aspect-square bg-white flex items-center justify-center overflow-hidden">
                    <img 
                      src={currentQrImageSrc} 
-                     alt="Razorpay QR"
-                     className="w-full h-full object-contain p-2"
+                     alt="Payment QR"
+                     className="w-full h-full object-contain"
+                     style={{
+                       transform: 'scale(3.35) translateY(-4.5%)',
+                       transformOrigin: 'center center',
+                     }}
                    />
                  </div>
                  <button 

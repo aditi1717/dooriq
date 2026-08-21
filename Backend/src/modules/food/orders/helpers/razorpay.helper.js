@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import axios from 'axios';
 
 let Razorpay;
 try {
@@ -52,61 +51,43 @@ export function createPaymentLink({ amountPaise, currency = 'INR', description, 
     });
 }
 
-function razorpayAuth() {
-    if (!KEY_ID || !KEY_SECRET) {
-        throw new Error('Razorpay not configured');
-    }
-    return {
-        auth: {
-            username: KEY_ID,
-            password: KEY_SECRET,
-        },
-    };
-}
-
 export async function createRazorpayQrCode({
     amountPaise,
     name,
     description,
+    closeBy,
+    notes = {},
 }) {
     const payment_amount = Math.round(Number(amountPaise) || 0);
     if (!payment_amount || payment_amount < 1) {
         throw new Error('amountPaise is required');
     }
-    const response = await axios.post(
-        'https://api.razorpay.com/v1/payments/qr_codes',
-        {
-            type: 'upi_qr',
-            name: name || 'Collect Payment',
-            usage: 'single_use',
-            fixed_amount: true,
-            payment_amount,
-            description: description || 'COD collection QR',
-        },
-        razorpayAuth(),
-    );
-    return response.data;
+    const instance = getRazorpayInstance();
+    if (!instance) throw new Error('Razorpay not configured');
+    return instance.qrCode.create({
+        type: 'upi_qr',
+        name: name || 'Collect Payment',
+        usage: 'single_use',
+        fixed_amount: true,
+        payment_amount,
+        close_by: closeBy || Math.floor(Date.now() / 1000) + 30 * 60,
+        description: description || 'COD collection QR',
+        notes,
+    });
 }
 
 export async function fetchRazorpayQrCode(qrId) {
     if (!qrId) throw new Error('qrId is required');
-    const response = await axios.get(
-        `https://api.razorpay.com/v1/payments/qr_codes/${String(qrId)}`,
-        razorpayAuth(),
-    );
-    return response.data;
+    const instance = getRazorpayInstance();
+    if (!instance) throw new Error('Razorpay not configured');
+    return instance.qrCode.fetch(String(qrId));
 }
 
 export async function fetchRazorpayQrPayments(qrId, params = {}) {
     if (!qrId) throw new Error('qrId is required');
-    const response = await axios.get(
-        `https://api.razorpay.com/v1/payments/qr_codes/${String(qrId)}/payments`,
-        {
-            ...razorpayAuth(),
-            params,
-        },
-    );
-    return response.data;
+    const instance = getRazorpayInstance();
+    if (!instance) throw new Error('Razorpay not configured');
+    return instance.qrCode.fetchAllPayments(String(qrId), params);
 }
 
 export function verifyPaymentSignature(orderId, paymentId, signature) {

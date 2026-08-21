@@ -85,9 +85,11 @@ const paymentSchema = new mongoose.Schema(
         qr: {
             qrId: { type: String },
             imageUrl: { type: String },
+            image_url: { type: String },
             paymentLinkId: { type: String },
             shortUrl: { type: String },
             status: { type: String },
+            amount: { type: Number, default: 0 },
             expiresAt: { type: Date }
         },
         // ✅ NEW: Added refund object to track refund status without breaking existing flow

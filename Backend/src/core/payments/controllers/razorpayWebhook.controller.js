@@ -1,9 +1,103 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { FoodOrder } from '../../../modules/food/orders/models/order.model.js';
+import { FoodTransaction } from '../../../modules/food/orders/models/foodTransaction.model.js';
 import * as foodTransactionService from '../../../modules/food/orders/services/foodTransaction.service.js';
 import { config } from '../../../config/env.js';
 import { logger } from '../../../utils/logger.js';
+
+const toPaise = (amount) => Math.round(Number(amount || 0) * 100);
+
+async function markQrOrderPaidFromPayment(paymentObj = {}) {
+    const rzPaymentId = paymentObj.id;
+    const qrId =
+        paymentObj.qr_code_id ||
+        paymentObj.qrCodeId ||
+        paymentObj.notes?.qrId ||
+        paymentObj.notes?.qr_id ||
+        '';
+    const notedOrderId = paymentObj.notes?.orderMongoId || paymentObj.notes?.orderId || '';
+
+    const identity = [];
+    if (qrId) {
+        identity.push({ 'payment.qr.qrId': qrId }, { 'payment.qr.paymentLinkId': qrId });
+    }
+    if (notedOrderId && mongoose.Types.ObjectId.isValid(notedOrderId)) {
+        identity.push({ _id: new mongoose.Types.ObjectId(notedOrderId) });
+    }
+    if (notedOrderId) {
+        identity.push({ orderId: String(notedOrderId) });
+    }
+    if (identity.length === 0) return null;
+
+    const existingOrder = await FoodOrder.findOne({
+        $or: identity,
+        'payment.status': { $ne: 'paid' },
+    }).lean();
+    if (!existingOrder) return null;
+
+    const expectedAmountPaise = toPaise(
+        existingOrder.payment?.amountDue ||
+        existingOrder.payment?.qr?.amount ||
+        existingOrder.pricing?.total ||
+        0,
+    );
+    const receivedAmountPaise = Number(paymentObj.amount || 0);
+    const isCaptured = String(paymentObj.status || '').toLowerCase() === 'captured';
+    if (!isCaptured || receivedAmountPaise < expectedAmountPaise) {
+        logger.warn(
+            `Webhook [payment.captured]: Ignored QR payment ${rzPaymentId}; captured=${isCaptured}, received=${receivedAmountPaise}, expected=${expectedAmountPaise}`,
+        );
+        return null;
+    }
+
+    const order = await FoodOrder.findOneAndUpdate(
+        {
+            _id: existingOrder._id,
+            'payment.status': { $ne: 'paid' },
+        },
+        {
+            $set: {
+                'payment.method': 'razorpay_qr',
+                'payment.status': 'paid',
+                'payment.razorpay.paymentId': rzPaymentId,
+                'payment.qr.status': 'paid',
+                ...(qrId ? { 'payment.qr.qrId': qrId, 'payment.qr.paymentLinkId': qrId } : {}),
+            },
+        },
+        { new: true },
+    );
+
+    if (!order) return null;
+
+    await FoodTransaction.updateOne(
+        { orderId: order._id },
+        {
+            $set: {
+                paymentMethod: 'razorpay_qr',
+                status: 'captured',
+                'payment.method': 'razorpay_qr',
+                'payment.status': 'paid',
+                'payment.razorpay.paymentId': rzPaymentId,
+                'payment.qr.status': 'paid',
+                ...(qrId ? { 'payment.qr.qrId': qrId, 'payment.qr.paymentLinkId': qrId } : {}),
+                'gateway.razorpayPaymentId': rzPaymentId,
+            },
+        },
+    );
+
+    try {
+        await foodTransactionService.updateTransactionStatus(order._id, 'captured', {
+            status: 'captured',
+            razorpayPaymentId: rzPaymentId,
+            note: 'COD QR payment verified via Razorpay webhook',
+        });
+    } catch (ledgerErr) {
+        logger.error(`Webhook QR Ledger Error (Order ${order.orderId}): ${ledgerErr.message}`);
+    }
+
+    return order;
+}
 
 /**
  * ✅ NEW: Centralized Razorpay Webhook Handler (Core Layer)
@@ -38,6 +132,12 @@ export const handleRazorpayWebhook = async (req, res) => {
             const paymentObj = payload.payment.entity;
             const rzOrderId = paymentObj.order_id;
             const rzPaymentId = paymentObj.id;
+
+            const qrOrder = await markQrOrderPaidFromPayment(paymentObj);
+            if (qrOrder) {
+                logger.info(`Webhook [payment.captured]: Synced COD QR Order ${qrOrder.orderId} (Status=paid)`);
+                return res.status(200).json({ status: 'ok' });
+            }
 
             // Atomic update to mark as paid if not already
             const order = await FoodOrder.findOneAndUpdate(

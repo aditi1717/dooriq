@@ -164,16 +164,6 @@ function emitOrderUpdate(order, deliveryPartnerId) {
   }
 }
 
-
-
-// Lazy wrapper to avoid circular ESM init race condition
-async function syncRazorpayQrPayment(orderDoc) {
-  return paymentService.syncRazorpayQrPayment(orderDoc);
-}
-
-
-
-
 export async function getCurrentTripDelivery(deliveryPartnerId) {
   if (!deliveryPartnerId) {
     throw new ValidationError('Delivery partner ID required');
@@ -1129,8 +1119,12 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
 
   logger.info(`[DeliveryComplete] Order ${order._id} payment: ${payMethod}, status: ${prevPayStatus}`);
 
+  if (['cash', 'cod', 'cash_on_delivery'].includes(payMethod)) {
+    throw new ValidationError('Generate and verify the payment QR before completing this COD delivery');
+  }
+
   if (payMethod === 'razorpay_qr') {
-    const syncedPayment = await syncRazorpayQrPayment(order);
+    const syncedPayment = await paymentService.syncRazorpayQrPayment(order);
     if (String(syncedPayment?.status || '').toLowerCase() !== 'paid') {
       throw new ValidationError('QR payment not verified yet');
     }
@@ -1158,12 +1152,6 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
     to: 'delivered',
     note: 'Delivery completed successfully',
   });
-
-  // Mark payment as paid for COD orders upon delivery
-  if (payMethod === 'cash' && order.payment && order.payment.status === 'cod_pending') {
-    order.payment.status = 'paid';
-    logger.info(`[DeliveryComplete] COD order ${order._id} marked as paid upon delivery.`);
-  }
 
   await order.save();
 
