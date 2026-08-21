@@ -39,6 +39,7 @@ export default function OrdersTable({
   onRejectOrder,
   onCancelOrder,
   onChangeStatus,
+  onDeassignAndResend,
   onResendNotification,
   actionLoadingOrderId,
   statusChangingOrderId,
@@ -94,6 +95,35 @@ export default function OrdersTable({
       !order?.dispatch?.deliveryPartnerId &&
       !order?.deliveryState?.pickedUpAt &&
       !["en_route_to_delivery", "at_drop", "delivered", "completed"].includes(phase)
+    )
+  }
+
+  const canReassignDeliveryPartner = (order) => {
+    const backendStatus = String(order?.status || "").trim().toLowerCase()
+    const displayStatus = String(order?.orderStatus || "").trim().toLowerCase()
+    const dispatchStatus = String(order?.dispatch?.status || "").trim().toLowerCase()
+    const phase = String(order?.deliveryState?.currentPhase || "").trim().toLowerCase()
+    const hasPartner = hasAssignedDeliveryPartner(order)
+    const terminalStatuses = [
+      "delivered",
+      "completed",
+      "cancelled",
+      "canceled",
+      "cancelled_by_user",
+      "cancelled_by_restaurant",
+      "cancelled_by_admin",
+      "cancelled by user",
+      "cancelled by restaurant",
+      "cancelled by admin",
+    ]
+
+    return (
+      hasPartner &&
+      dispatchStatus === "accepted" &&
+      !terminalStatuses.includes(backendStatus) &&
+      !terminalStatuses.includes(displayStatus) &&
+      !order?.deliveryState?.pickedUpAt &&
+      !["en_route_to_delivery", "at_delivery", "at_drop", "delivered", "completed"].includes(phase)
     )
   }
 
@@ -452,6 +482,23 @@ export default function OrdersTable({
                             <Volume2 className="h-3.5 w-3.5" />
                           )}
                           <span>Resend</span>
+                        </button>
+                      ) : null}
+                      {onDeassignAndResend && canReassignDeliveryPartner(order) ? (
+                        <button
+                          onClick={() => onDeassignAndResend(order)}
+                          disabled={
+                            actionLoadingOrderId === (order.id || order.orderId)
+                          }
+                          className="inline-flex items-center justify-center gap-1 rounded px-3 py-1.5 text-xs font-medium text-white transition-colors bg-amber-600 hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          title="Remove current delivery partner and resend to eligible partners"
+                        >
+                          {actionLoadingOrderId === (order.id || order.orderId) ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          )}
+                          <span>Reassign</span>
                         </button>
                       ) : null}
                     </div>
