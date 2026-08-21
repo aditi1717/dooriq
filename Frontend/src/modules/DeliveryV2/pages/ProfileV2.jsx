@@ -6,7 +6,6 @@ import {
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { deliveryAPI } from "@food/api"
-import DeleteAccountModal from "@food/components/DeleteAccountModal";
 import { toast } from "sonner"
 import { clearModuleAuth } from "@food/utils/auth"
 import useDeliveryBackNavigation from "../hooks/useDeliveryBackNavigation";
@@ -19,7 +18,6 @@ export const ProfileV2 = () => {
   const [referralReward, setReferralReward] = useState(0)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [logoutSubmitting, setLogoutSubmitting] = useState(false)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
 
   // Fetch profile data
@@ -91,18 +89,6 @@ export const ProfileV2 = () => {
     } catch (e) {}
   }
 
-  const handleConfirmDelete = async () => {
-    try {
-      await deliveryAPI.deleteAccount();
-      toast.success("Account deleted successfully");
-      clearModuleAuth("delivery");
-      localStorage.removeItem("app:isOnline");
-      window.dispatchEvent(new Event("deliveryAuthChanged"));
-      navigate("/food/delivery/login", { replace: true });
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to delete account");
-    }
-  };
 
   const handleLogout = async () => {
     if (logoutSubmitting) return
@@ -292,20 +278,7 @@ export const ProfileV2 = () => {
 
         {/* Danger Zone Section */}
         <div className="space-y-3 pt-2">
-          <h3 className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-3 px-2">Danger Zone</h3>
-          
-          <div 
-            onClick={() => setDeleteModalOpen(true)}
-            className="bg-white rounded-[24px] p-5 flex items-center justify-between cursor-pointer border border-red-50 hover:bg-red-50/50 active:bg-red-50 transition-colors"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-500">
-                 <Trash2 className="w-5 h-5" />
-              </div>
-              <span className="text-sm font-bold text-red-600">Delete Account</span>
-            </div>
-            <ArrowRight className="w-4 h-4 text-red-200" />
-          </div>
+          <h3 className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-3 px-2">Account</h3>
 
           <div 
             onClick={() => setShowLogoutConfirm(true)}
@@ -356,17 +329,8 @@ export const ProfileV2 = () => {
            </div>
          )}
       </AnimatePresence>
-
-      <DeleteAccountModal 
-        isOpen={deleteModalOpen} 
-        onClose={() => setDeleteModalOpen(false)} 
-        onConfirm={handleConfirmDelete} 
-        walletAmount={walletBalance} 
-        moduleName="delivery" 
-      />
     </div>
   );
 };
 
 export default ProfileV2;
-

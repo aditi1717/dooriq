@@ -55,7 +55,6 @@ const debugError = (...args) => { };
 const USER_SESSION_PREFERENCE_KEYS = ["userVegMode", "food-under-250-filters"];
 
 import { registerWebPushForCurrentModule } from "@food/utils/firebaseMessaging";
-import DeleteAccountModal from "@food/components/DeleteAccountModal";
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation";
 
 export default function Profile() {
@@ -85,7 +84,6 @@ export default function Profile() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [referralReward, setReferralReward] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   // Trigger web push registration when profile mounts to ensure FCM token is saved
   useEffect(() => {
@@ -407,26 +405,6 @@ export default function Profile() {
     }
   };
 
-  const handleConfirmDelete = async () => {
-    try {
-      await userAPI.deleteCurrentUserAccount();
-      toast.success("Account deleted successfully");
-      
-      clearModuleAuth("user");
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("user_authenticated");
-      localStorage.removeItem("user_user");
-      localStorage.removeItem("user");
-      localStorage.removeItem("cart");
-      USER_SESSION_PREFERENCE_KEYS.forEach((key) => localStorage.removeItem(key));
-      
-      window.dispatchEvent(new Event("userAuthChanged"));
-      navigate("/food/user/auth/login", { replace: true });
-    } catch (error) {
-      console.error("Failed to delete account:", error);
-      toast.error(error?.response?.data?.message || "Failed to delete account. Please try again.");
-    }
-  };
 
   const handleLogoutClick = () => {
     if (isLoggingOut) return;
@@ -965,32 +943,7 @@ export default function Profile() {
               </Card>
             </motion.div>
 
-            <motion.div
-              whileHover={{ x: 4, scale: 1.01 }}
-              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
-              <Card
-                className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer"
-                onClick={() => setDeleteModalOpen(true)}>
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <motion.div
-                      className="bg-red-50 dark:bg-red-900/10 rounded-full p-2"
-                      whileHover={{ rotate: 15, scale: 1.1 }}
-                      transition={{ duration: 0.3 }}>
-                      <Trash2 className="h-5 w-5 text-red-500" />
-                    </motion.div>
-                    <span className="text-base font-medium text-red-600">
-                      Delete Account
-                    </span>
-                  </div>
-                  <motion.div
-                    whileHover={{ x: 4 }}
-                    transition={{ duration: 0.2 }}>
-                    <ChevronRight className="h-5 w-5 text-red-300 dark:text-red-900/30" />
-                  </motion.div>
-                </CardContent>
-              </Card>
-            </motion.div>
+
           </div>
         </div>
       </div>
@@ -1172,13 +1125,7 @@ export default function Profile() {
         </DialogContent>
       </Dialog>
  
-      <DeleteAccountModal 
-        isOpen={deleteModalOpen} 
-        onClose={() => setDeleteModalOpen(false)} 
-        onConfirm={handleConfirmDelete} 
-        walletAmount={walletBalance} 
-        moduleName="user" 
-      />
+
     </AnimatedPage>
   );
 }
