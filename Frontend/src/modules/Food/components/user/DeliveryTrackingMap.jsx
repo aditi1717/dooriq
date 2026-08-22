@@ -63,6 +63,7 @@ function normalizeLatLng(source = {}) {
   );
 
   if (lat === null || lng === null) return null;
+  if (Math.abs(lat) < 0.0001 && Math.abs(lng) < 0.0001) return null;
 
   return {
     lat,
@@ -155,8 +156,8 @@ const DeliveryTrackingMap = ({
   const isOrderPickedUp = ['picked_up', 'out_for_delivery', 'delivered'].includes(tripStatus);
 
   const center = useMemo(() => {
-    if (isOrderPickedUp) return customerCoords || restaurantCoords || { lat: 0, lng: 0 };
-    return restaurantCoords || customerCoords || { lat: 0, lng: 0 };
+    if (isOrderPickedUp) return customerCoords || restaurantCoords || { lat: 22.7196, lng: 75.8577 };
+    return restaurantCoords || customerCoords || { lat: 22.7196, lng: 75.8577 };
   }, [customerCoords, isOrderPickedUp, restaurantCoords]);
 
   const baselinePath = useMemo(() => {
