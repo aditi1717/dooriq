@@ -35,6 +35,7 @@ export default function ReferEarn() {
     referralCount: 0,
     totalReferralEarnings: 0,
     rewardAmount: 0,
+    referralLimit: 0,
     totalInvited: 0,
     creditedCount: 0,
     pendingCount: 0,
@@ -55,6 +56,7 @@ export default function ReferEarn() {
             referralCount: Number(nextStats.referralCount) || 0,
             totalReferralEarnings: Number(nextStats.totalReferralEarnings) || 0,
             rewardAmount: Number(nextStats.rewardAmount) || 0,
+            referralLimit: Number(nextStats.referralLimit) || 0,
             totalInvited: Number(nextStats.totalInvited) || 0,
             creditedCount: Number(nextStats.creditedCount) || 0,
             pendingCount: Number(nextStats.pendingCount) || 0,
@@ -146,15 +148,23 @@ export default function ReferEarn() {
                 </p>
               </div>
             </div>
-            <Button
-              type="button"
-              onClick={handleShare}
-              disabled={!referralLink}
-              className="w-full mt-3 h-11 rounded-xl bg-[#EB590E] hover:bg-[#d84f0a] text-white font-bold transition-all shadow-sm"
-            >
-              <Share2 className="h-4 w-4 mr-2 text-white" />
-              Share Invite
-            </Button>
+            {stats.referralLimit > 0 && stats.referralCount >= stats.referralLimit ? (
+              <div className="w-full mt-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/30 rounded-xl text-center">
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                  You have reached your referral limit of {stats.referralLimit} friends.
+                </p>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                onClick={handleShare}
+                disabled={!referralLink}
+                className="w-full mt-3 h-11 rounded-xl bg-[#EB590E] hover:bg-[#d84f0a] text-white font-bold transition-all shadow-sm"
+              >
+                <Share2 className="h-4 w-4 mr-2 text-white" />
+                Share Invite
+              </Button>
+            )}
           </CardContent>
         </Card>
 
@@ -174,7 +184,12 @@ export default function ReferEarn() {
                 <CircleCheck className="h-3.5 w-3.5" />
                 Credited
               </div>
-              <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{stats.creditedCount}</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">
+                {stats.creditedCount}
+                {stats.referralLimit > 0 && (
+                  <span className="text-xs font-semibold text-gray-400"> / {stats.referralLimit}</span>
+                )}
+              </p>
             </CardContent>
           </Card>
           <Card className="border-0 shadow-sm bg-white dark:bg-[#1a1a1a]">

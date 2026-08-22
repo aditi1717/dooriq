@@ -16,6 +16,8 @@ export const ProfileV2 = () => {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [referralReward, setReferralReward] = useState(0)
+  const [referralCount, setReferralCount] = useState(0)
+  const [referralLimit, setReferralLimit] = useState(0)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [logoutSubmitting, setLogoutSubmitting] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0);
@@ -48,8 +50,10 @@ export const ProfileV2 = () => {
 
   useEffect(() => {
     deliveryAPI.getReferralStats().then((res) => {
-      const reward = res?.data?.data?.stats?.rewardAmount
-      setReferralReward(Number(reward) || 0)
+      const stats = res?.data?.data?.stats || {}
+      setReferralReward(Number(stats.rewardAmount) || 0)
+      setReferralCount(Number(stats.referralCount) || 0)
+      setReferralLimit(Number(stats.referralLimit) || 0)
     }).catch(() => {})
   }, [])
 
@@ -239,16 +243,18 @@ export const ProfileV2 = () => {
                 <Share2 className="w-5 h-5" />
              </div>
           </div>
-          <button
-            onClick={handleShareReferral}
-            className="relative z-10 w-full text-white py-4 rounded-[20px] text-[11px] font-black uppercase tracking-widest active:scale-[0.98] transition-transform"
-            style={{
-              background: "linear-gradient(135deg, rgba(var(--module-theme-rgb, 0,183,97), 0.88), var(--module-theme-color, #00B761))",
-              boxShadow: "0 8px 20px rgba(var(--module-theme-rgb, 0,183,97), 0.30)",
-            }}
-          >
-            Share Link
-          </button>
+          {!(referralLimit > 0 && referralCount >= referralLimit) && (
+            <button
+              onClick={handleShareReferral}
+              className="relative z-10 w-full text-white py-4 rounded-[20px] text-[11px] font-black uppercase tracking-widest active:scale-[0.98] transition-transform"
+              style={{
+                background: "linear-gradient(135deg, rgba(var(--module-theme-rgb, 0,183,97), 0.88), var(--module-theme-color, #00B761))",
+                boxShadow: "0 8px 20px rgba(var(--module-theme-rgb, 0,183,97), 0.30)",
+              }}
+            >
+              Share Link
+            </button>
+          )}
         </div>
 
         {/* Support & Legal Section */}

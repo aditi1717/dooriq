@@ -83,6 +83,8 @@ export default function Profile() {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [referralReward, setReferralReward] = useState(0);
+  const [referralCount, setReferralCount] = useState(0);
+  const [referralLimit, setReferralLimit] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
 
   // Trigger web push registration when profile mounts to ensure FCM token is saved
@@ -248,8 +250,12 @@ export default function Profile() {
     userAPI
       .getReferralStats()
       .then((res) => {
-        const reward = res?.data?.data?.stats?.rewardAmount;
-        if (mounted) setReferralReward(Number(reward) || 0);
+        const stats = res?.data?.data?.stats || {};
+        if (mounted) {
+          setReferralReward(Number(stats.rewardAmount) || 0);
+          setReferralCount(Number(stats.referralCount) || 0);
+          setReferralLimit(Number(stats.referralLimit) || 0);
+        }
       })
       .catch(() => { });
     return () => {
@@ -586,18 +592,20 @@ export default function Profile() {
                     Invite a friend. Reward is added to your wallet when they
                     sign up.
                   </p>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleShareReferral();
-                    }}
-                    className="inline-flex items-center gap-1 text-xs text-[#EB590E] font-medium ml-2 px-2 py-1 rounded-md"
-                    disabled={!referralLink}>
-                    <Share2 className="h-3.5 w-3.5" />
-                    Refer
-                  </button>
+                  {!(referralLimit > 0 && referralCount >= referralLimit) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleShareReferral();
+                      }}
+                      className="inline-flex items-center gap-1 text-xs text-[#EB590E] font-medium ml-2 px-2 py-1 rounded-md"
+                      disabled={!referralLink}>
+                      <Share2 className="h-3.5 w-3.5" />
+                      Refer
+                    </button>
+                  )}
                 </div>
               </CardContent>
             </Card>

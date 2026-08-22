@@ -16,7 +16,8 @@ export const ReferralEarningHistoryV2 = () => {
   const [stats, setStats] = useState({
     referralCount: 0,
     totalReferralEarnings: 0,
-    rewardAmount: 0
+    rewardAmount: 0,
+    referralLimit: 0
   });
   const [history, setHistory] = useState([]);
   const [profile, setProfile] = useState(null);
@@ -125,7 +126,12 @@ export const ReferralEarningHistoryV2 = () => {
               </div>
               <div className="bg-white rounded-[24px] p-5 border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Successful Invites</p>
-                <h3 className="text-2xl font-black text-gray-900 mt-2">{stats.referralCount || 0}</h3>
+                <h3 className="text-2xl font-black text-gray-900 mt-2">
+                  {stats.referralCount || 0}
+                  {stats.referralLimit > 0 && (
+                    <span className="text-xs font-bold text-gray-400"> / {stats.referralLimit}</span>
+                  )}
+                </h3>
               </div>
             </div>
 
@@ -142,7 +148,7 @@ export const ReferralEarningHistoryV2 = () => {
               </div>
 
               {/* Code Box */}
-              {refId && (
+              {refId && !(stats.referralLimit > 0 && stats.referralCount >= stats.referralLimit) && (
                 <div className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-100 rounded-[20px] px-4 py-3 mt-4">
                   <div className="text-left">
                     <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Your Code</p>
@@ -157,18 +163,26 @@ export const ReferralEarningHistoryV2 = () => {
                 </div>
               )}
 
-              {/* Share Button */}
-              <button
-                onClick={handleShareReferral}
-                className="w-full py-4 rounded-[20px] text-white text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
-                style={{
-                  background: "linear-gradient(135deg, rgba(var(--module-theme-rgb, 0,183,97), 0.88), var(--module-theme-color, #00B761))",
-                  boxShadow: "0 8px 20px rgba(var(--module-theme-rgb, 0,183,97), 0.20)",
-                }}
-              >
-                <Share2 className="w-4 h-4" />
-                Invite Friends
-              </button>
+              {/* Share Button or Limit Message */}
+              {stats.referralLimit > 0 && stats.referralCount >= stats.referralLimit ? (
+                <div className="w-full p-4 bg-amber-50 rounded-[20px] border border-amber-100 text-center mt-4">
+                  <p className="text-xs font-black text-amber-800 uppercase tracking-wider">
+                    Referral Limit Reached ({stats.referralLimit})
+                  </p>
+                </div>
+              ) : (
+                <button
+                  onClick={handleShareReferral}
+                  className="w-full py-4 rounded-[20px] text-white text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-2 active:scale-[0.98] transition-transform mt-4"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(var(--module-theme-rgb, 0,183,97), 0.88), var(--module-theme-color, #00B761))",
+                    boxShadow: "0 8px 20px rgba(var(--module-theme-rgb, 0,183,97), 0.20)",
+                  }}
+                >
+                  <Share2 className="w-4 h-4" />
+                  Invite Friends
+                </button>
+              )}
             </div>
 
             {/* Payout Redirect Link */}

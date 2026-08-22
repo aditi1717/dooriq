@@ -250,7 +250,7 @@ export default function OTP() {
           )
         } catch (e) {
           const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || ""
-          setReferralError("Invalid Referral Code! This referral code does not exist.")
+          setReferralError(msg || "Invalid Referral Code! This referral code does not exist.")
           setReferralCodeInput("") // Make sure field is empty on error
           setIsLoading(false)
           return

@@ -885,6 +885,10 @@ export async function processReferralForUser(userDoc, refCode) {
   const reward = Math.max(0, Number(settingsDoc.referralRewardUser) || 0);
   const limit = Math.max(0, Number(settingsDoc.referralLimitUser) || 0);
 
+  if (limit > 0 && Number(referrer.referralCount || 0) >= limit) {
+    throw new ValidationError("This referral code has reached its usage limit");
+  }
+
   if (reward > 0 && (limit === 0 || Number(referrer.referralCount || 0) < limit)) {
     userDoc.referredBy = referrerId;
     await userDoc.save();
@@ -960,20 +964,41 @@ export async function validateReferralCode(codeRaw, roleRaw = "any") {
   const query = { $or: queryConditions };
 
   let referrer = null;
+  let referrerRole = null;
 
   if (role === "delivery" || role === "captain") {
-    referrer = await FoodDeliveryPartner.findOne(query).select("_id name referralCode").lean();
+    referrer = await FoodDeliveryPartner.findOne(query).select("_id name referralCode referralCount").lean();
+    if (referrer) referrerRole = "delivery";
   } else if (role === "user") {
-    referrer = await FoodUser.findOne(query).select("_id name referralCode").lean();
+    referrer = await FoodUser.findOne(query).select("_id name referralCode referralCount").lean();
+    if (referrer) referrerRole = "user";
   } else {
-    referrer = await FoodDeliveryPartner.findOne(query).select("_id name referralCode").lean();
-    if (!referrer) {
-      referrer = await FoodUser.findOne(query).select("_id name referralCode").lean();
+    referrer = await FoodDeliveryPartner.findOne(query).select("_id name referralCode referralCount").lean();
+    if (referrer) {
+      referrerRole = "delivery";
+    } else {
+      referrer = await FoodUser.findOne(query).select("_id name referralCode referralCount").lean();
+      if (referrer) referrerRole = "user";
     }
   }
 
   if (!referrer) {
     throw new ValidationError("Invalid referral code");
+  }
+
+  // Enforce referral limit if configured
+  const settingsDoc = await FoodReferralSettings.findOne({ isActive: true })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  if (settingsDoc) {
+    const limit = referrerRole === "delivery"
+      ? Math.max(0, Number(settingsDoc.referralLimitDelivery) || 0)
+      : Math.max(0, Number(settingsDoc.referralLimitUser) || 0);
+
+    if (limit > 0 && Number(referrer.referralCount || 0) >= limit) {
+      throw new ValidationError("This referral code has reached its usage limit");
+    }
   }
 
   return {

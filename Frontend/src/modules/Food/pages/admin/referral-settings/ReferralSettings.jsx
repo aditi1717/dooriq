@@ -206,6 +206,20 @@ export default function ReferralSettings() {
                     />
                   </div>
 
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Max Referral Limit per User
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-1">Maximum number of referrals a user can make (0 for unlimited)</p>
+                    <input
+                      value={settings.referralLimitUser}
+                      onChange={onChangeNumeric("referralLimitUser")}
+                      inputMode="numeric"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
+                      placeholder="e.g. 5 (0 for unlimited)"
+                    />
+                  </div>
+
                   <div className="pt-2 border-t border-slate-200">
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                       User App - Google Play Store URL
@@ -268,6 +282,20 @@ export default function ReferralSettings() {
                       inputMode="numeric"
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
                       placeholder="e.g. 200"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Max Referral Limit per Captain
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-1">Maximum number of referrals a captain can make (0 for unlimited)</p>
+                    <input
+                      value={settings.referralLimitDelivery}
+                      onChange={onChangeNumeric("referralLimitDelivery")}
+                      inputMode="numeric"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
+                      placeholder="e.g. 10 (0 for unlimited)"
                     />
                   </div>
 
