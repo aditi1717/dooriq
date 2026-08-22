@@ -149,6 +149,7 @@ router.get(
 router.get('/customers/:id', adminController.getCustomerById);
 router.patch('/customers/:id/status', adminController.updateCustomerStatus);
 router.patch('/customers/:id/wallet', adminController.updateCustomerWallet);
+router.patch('/customers/:id/cod-block', adminController.toggleCustomerCodBlock);
 
 // ----- Safety / Emergency Reports -----
 router.get('/safety-emergency-reports', adminController.getSafetyEmergencyReports);

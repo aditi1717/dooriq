@@ -1368,7 +1368,7 @@ export async function getCustomers(query = {}) {
             .sort(sort)
             .skip(skip)
             .limit(limit)
-            .select('name email phone countryCode isVerified isActive createdAt profileImage')
+            .select('name email phone countryCode isVerified isActive createdAt profileImage isCodBlocked')
             .lean(),
         FoodUser.countDocuments(filter)
     ]);
@@ -1429,6 +1429,7 @@ export async function getCustomers(query = {}) {
         status: u.isActive !== false,
         isActive: u.isActive !== false,
         isVerified: u.isVerified === true,
+        isCodBlocked: u.isCodBlocked === true,
         totalOrder: stats.totalOrder,
         totalOrderAmount: stats.totalOrderAmount,
         wallet,
@@ -1491,6 +1492,7 @@ export async function getCustomerById(id) {
         status: u.isActive !== false,
         isActive: u.isActive !== false,
         isVerified: u.isVerified === true,
+        isCodBlocked: u.isCodBlocked === true,
         totalOrders: Number(stats.totalOrders || 0),
         totalOrder: Number(stats.totalOrders || 0),
         totalOrderAmount: Number(stats.totalOrderAmount || 0),
@@ -1602,6 +1604,15 @@ export async function updateCustomerStatus(id, isActive) {
         await FoodRefreshToken.deleteMany({ userId: updated._id });
     }
     return updated;
+}
+
+export async function toggleCustomerCodBlock(id, isCodBlocked) {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+    return await FoodUser.findByIdAndUpdate(
+        id,
+        { $set: { isCodBlocked: Boolean(isCodBlocked) } },
+        { new: true }
+    );
 }
 
 export async function getSupportTickets(query = {}) {
@@ -5799,8 +5810,8 @@ export async function getSidebarBadges() {
             FoodDeliveryPartner.countDocuments({ status: 'pending' }),
             FoodItem.countDocuments({ approvalStatus: 'pending' }),
             FoodAddon.countDocuments({ approvalStatus: 'pending' }),
-            FoodOrder.countDocuments({ orderStatus: 'pending' }),
-            FoodOrder.countDocuments({ paymentMethod: 'offline_payment', orderStatus: 'pending' }),
+            FoodOrder.countDocuments({ orderStatus: 'created' }),
+            FoodOrder.countDocuments({ 'payment.method': 'cash', orderStatus: 'created' }),
             FoodRestaurantWithdrawal.countDocuments({ status: 'pending' }),
             FoodDeliveryWithdrawal.countDocuments({ status: 'pending' }),
             FoodSupportTicket.countDocuments({ status: 'open', userId: { $exists: true }, restaurantId: { $exists: false } }),

@@ -130,6 +130,10 @@ const userSchema = new mongoose.Schema(
             default: true,
             index: true
         },
+        isCodBlocked: {
+            type: Boolean,
+            default: false
+        },
         role: {
             type: String,
             default: 'USER'

@@ -716,6 +716,12 @@ export const adminAPI = {
       { isActive: isActive !== false },
       { contextModule: "admin" },
     ),
+  updateCustomerCodBlock: (id, isCodBlocked) =>
+    apiClient.patch(
+      `/food/admin/customers/${String(id)}/cod-block`,
+      { isCodBlocked: isCodBlocked === true },
+      { contextModule: "admin" },
+    ),
   /** Orders (admin) – list, get by id, assign delivery partner */
   getOrders: (params = {}) =>
     apiClient.get("/food/admin/orders", {

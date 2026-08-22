@@ -337,6 +337,37 @@ export default function Customers() {
     }
   }
 
+  const handleToggleCodBlock = async () => {
+    if (!userDetails?._id && !userDetails?.id) return
+    const customerId = userDetails._id || userDetails.id
+    const nextCodBlocked = !userDetails.isCodBlocked
+    try {
+      await adminAPI.updateCustomerCodBlock(customerId, nextCodBlocked)
+      setUserDetails(prev => ({ ...prev, isCodBlocked: nextCodBlocked }))
+      setCustomers(prev => prev.map(c => 
+        (c.id === customerId || c._id === customerId) ? { ...c, isCodBlocked: nextCodBlocked } : c
+      ))
+      toast.success(`COD payment ${nextCodBlocked ? 'blocked' : 'enabled'} successfully`)
+    } catch (error) {
+      debugError('Error toggling COD block:', error)
+      toast.error('Failed to update COD block status')
+    }
+  }
+
+  const handleToggleCodBlockedRow = async (customerId, currentCodBlocked) => {
+    const nextCodBlocked = !currentCodBlocked
+    try {
+      await adminAPI.updateCustomerCodBlock(customerId, nextCodBlocked)
+      setCustomers(prev => prev.map(c => 
+        (c.id === customerId || c._id === customerId) ? { ...c, isCodBlocked: nextCodBlocked } : c
+      ))
+      toast.success(`COD payment ${nextCodBlocked ? 'blocked' : 'enabled'} successfully`)
+    } catch (error) {
+      debugError('Error toggling COD block in row:', error)
+      toast.error('Failed to update COD block status')
+    }
+  }
+
   const handleExport = (format) => {
     if (filteredCustomers.length === 0) {
       toast.error("No customers to export")
@@ -542,6 +573,7 @@ export default function Customers() {
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Total Order Amount</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Wallet Amount</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Joining Date</th>
+                  <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">COD Status</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Active/Inactive</th>
                   <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -549,13 +581,13 @@ export default function Customers() {
               <tbody className="bg-white divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-6 py-8 text-center">
+                    <td colSpan={10} className="px-6 py-8 text-center">
                       <div className="text-sm text-slate-500">Loading customers...</div>
                     </td>
                   </tr>
                 ) : filteredCustomers.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-6 py-8 text-center">
+                    <td colSpan={10} className="px-6 py-8 text-center">
                       <div className="text-sm text-slate-500">No customers found</div>
                     </td>
                   </tr>
@@ -612,6 +644,18 @@ export default function Customers() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-sm text-slate-700">{formatDateTime(customer.joiningDate)}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button
+                          onClick={() => handleToggleCodBlockedRow(customer._id || customer.id || customer.sl, customer.isCodBlocked)}
+                          className={`px-2.5 py-1 rounded text-xs font-bold transition-colors ${
+                            customer.isCodBlocked
+                              ? "bg-red-100 text-red-700 hover:bg-red-200"
+                              : "bg-green-100 text-green-700 hover:bg-green-200"
+                          }`}
+                        >
+                          {customer.isCodBlocked ? "Blocked" : "Active"}
+                        </button>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
@@ -897,6 +941,30 @@ export default function Customers() {
                   </div>
                 </div>
               )}
+
+              {/* COD Control Section */}
+              <div className="bg-slate-50 rounded-xl p-4 sm:p-5 border border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h4 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <IndianRupee className="w-4 h-4 text-slate-700" />
+                      Cash on Delivery (COD) Control
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-1">Enable or disable Cash on Delivery payment for this specific user.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleToggleCodBlock}
+                    className={`px-4 py-2 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-sm flex-shrink-0 ${
+                      userDetails.isCodBlocked
+                        ? "bg-red-600 hover:bg-red-700 text-white"
+                        : "bg-green-600 hover:bg-green-700 text-white"
+                    }`}
+                  >
+                    {userDetails.isCodBlocked ? "COD is BLOCKED (Click to Enable)" : "COD is ACTIVE (Click to Block)"}
+                  </button>
+                </div>
+              </div>
 
               {/* Addresses Section */}
               {userDetails.addresses && userDetails.addresses.length > 0 && (

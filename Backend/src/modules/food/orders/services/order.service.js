@@ -658,6 +658,13 @@ export async function createOrder(userId, dto) {
     const isCash = paymentMethod === "cash";
     const isWallet = paymentMethod === "wallet";
 
+    if (isCash) {
+      const user = await FoodUser.findById(userId).select("isCodBlocked").lean();
+      if (user?.isCodBlocked) {
+        throw new ValidationError("Cash on delivery (COD) is disabled for your account. Please use an online payment method.");
+      }
+    }
+
     // Ensure pricing is present and consistent.
     const computedSubtotal = (dto.items || []).reduce((sum, item) => {
       const price = Number(item?.price);
@@ -2028,13 +2035,15 @@ export async function listOrdersAdmin(query) {
   if (rawStatus && rawStatus !== "all") {
     switch (rawStatus) {
       case "pending":
-        filter.orderStatus = { $in: ["created", "confirmed"] };
+        filter.orderStatus = "created";
         break;
       case "accepted":
         filter.orderStatus = "confirmed";
+        filter["dispatch.status"] = { $ne: "accepted" };
         break;
       case "processing":
-        filter.orderStatus = { $in: ["preparing", "ready_for_pickup"] };
+        filter["dispatch.status"] = "accepted";
+        filter.orderStatus = { $in: ["confirmed", "preparing", "ready_for_pickup"] };
         break;
       case "food-on-the-way":
         filter.orderStatus = "picked_up";

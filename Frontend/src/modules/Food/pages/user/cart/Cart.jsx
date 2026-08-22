@@ -452,10 +452,10 @@ export default function Cart() {
   }, [])
 
   const enabledPaymentMethods = useMemo(() => ({
-    cash: Boolean(isCodEnabled && paymentMethodAvailability.cashOnDelivery),
+    cash: Boolean(isCodEnabled && paymentMethodAvailability.cashOnDelivery && !userProfile?.isCodBlocked),
     wallet: Boolean(paymentMethodAvailability.wallet),
     razorpay: Boolean(paymentMethodAvailability.online),
-  }), [isCodEnabled, paymentMethodAvailability])
+  }), [isCodEnabled, paymentMethodAvailability, userProfile?.isCodBlocked])
 
   const availablePaymentMethodCount = Object.values(enabledPaymentMethods).filter(Boolean).length
 
@@ -2341,7 +2341,7 @@ export default function Cart() {
       // Handle other axios errors
       else if (error.response) {
         // Server responded with error status
-        errorMessage = error.response.data?.message || `Server error: ${error.response.status}`
+        errorMessage = error.response.data?.error || error.response.data?.message || `Server error: ${error.response.status}`
       }
       // Handle other errors
       else if (error.message) {
@@ -2350,6 +2350,9 @@ export default function Cart() {
 
       alert(errorMessage)
       setIsPlacingOrder(false)
+      if (errorMessage.toLowerCase().includes("cash on delivery") || errorMessage.toLowerCase().includes("cod")) {
+        window.location.reload()
+      }
     }
   }
 
