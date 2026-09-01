@@ -616,8 +616,8 @@ export default function Under250() {
                 (Array.isArray(restaurantLocation?.coordinates) ? restaurantLocation.coordinates[0] : null)
               )
               const backendDistanceKm = Number(
-                restaurant?.roadDistanceKm ??
                 restaurant?.distanceScore ??
+                restaurant?.straightLineDistanceKm ??
                 restaurant?.distanceInKm
               )
               const distanceInKm = Number.isFinite(backendDistanceKm)

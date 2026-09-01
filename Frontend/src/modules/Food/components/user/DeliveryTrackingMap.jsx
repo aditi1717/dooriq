@@ -6,12 +6,12 @@ import {
   useJsApiLoader,
 } from '@react-google-maps/api';
 import bikeLogo from '@food/assets/bikelogo.png';
-import { subscribeOrderTracking } from '@food/realtimeTracking';
+import { subscribeDeliveryLocation, subscribeOrderTracking } from '@food/realtimeTracking';
 import { Navigation } from 'lucide-react';
 import { MAPS_SCRIPT_ID } from '@food/utils/googleMapsLoader';
 import { buildVisibleRouteFromRiderPosition, decodePolyline } from '@food/utils/liveTrackingPolyline';
 
-const LOCATION_UPDATE_INTERVAL_MS = 30 * 1000;
+const LOCATION_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
 
 const MAP_LIBRARIES = [];
 
@@ -152,6 +152,23 @@ const DeliveryTrackingMap = ({
     return [...new Set(ids)];
   }, [orderId, orderTrackingIds]);
 
+  const deliveryPartnerId = useMemo(() => {
+    const candidate =
+      order?.deliveryPartnerId ||
+      order?.deliveryPartner?._id ||
+      order?.deliveryPartner?.id ||
+      order?.dispatch?.deliveryPartnerId ||
+      order?.assignmentInfo?.deliveryPartnerId ||
+      null;
+    return candidate ? String(candidate).trim() : '';
+  }, [
+    order?.assignmentInfo?.deliveryPartnerId,
+    order?.deliveryPartner?._id,
+    order?.deliveryPartner?.id,
+    order?.deliveryPartnerId,
+    order?.dispatch?.deliveryPartnerId,
+  ]);
+
   const tripStatus = String(order?.status || order?.orderStatus || 'pending').toLowerCase();
   const isOrderPickedUp = ['picked_up', 'out_for_delivery', 'delivered'].includes(tripStatus);
 
@@ -228,6 +245,14 @@ const DeliveryTrackingMap = ({
       unsubscribers.forEach((unsubscribe) => unsubscribe?.());
     };
   }, [applyTrackingData, trackingIds]);
+
+  useEffect(() => {
+    if (!deliveryPartnerId) return undefined;
+
+    return subscribeDeliveryLocation(deliveryPartnerId, (data) => {
+      applyTrackingData(data, { force: !lastAppliedAtRef.current });
+    });
+  }, [applyTrackingData, deliveryPartnerId]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {

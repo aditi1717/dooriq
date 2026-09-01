@@ -1954,7 +1954,6 @@ export const listApprovedRestaurants = async (query = {}) => {
             { lat, lng },
             {
                 radiusKm: effectiveRadiusKm,
-                includeFailedRoadChecks: false,
             }
         );
 
@@ -1974,7 +1973,7 @@ export const listApprovedRestaurants = async (query = {}) => {
             .slice(skip, skip + limit)
             .map((restaurant) => toRestaurantListItem({
                 ...restaurant,
-                distanceInKm: restaurant.roadDistanceKm ?? restaurant.distanceScore ?? restaurant.distanceInKm
+                distanceInKm: restaurant.distanceScore ?? restaurant.straightLineDistanceKm ?? restaurant.distanceInKm
             }));
 
         // Fetch recommended items for each restaurant from FoodItem model
