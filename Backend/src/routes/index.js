@@ -15,10 +15,12 @@ import { authMiddleware } from '../core/auth/auth.middleware.js';
 import { privateRateLimiter } from '../middleware/rateLimit.js';
 import * as businessSettingsController from '../modules/food/admin/controllers/businessSettings.controller.js';
 import * as adminController from '../modules/food/admin/controllers/admin.controller.js';
+import { getCashbackSettingsController, updateCashbackSettingsController } from '../modules/food/user/controllers/userCashback.controller.js';
 import { requireRoles } from '../core/roles/role.middleware.js';
 import { getQueuesController } from '../controllers/admin.controller.js';
 import webhookRoutes from '../core/payments/routes/webhook.routes.js'; // ✅ NEW
 import searchRoutes from '../modules/food/search/routes/search.routes.js';
+import chatRoutes from '../modules/food/chat/routes/chat.routes.js';
 import locationRoutes from '../modules/food/location/routes/location.routes.js';
 import { CACHE_PRESETS } from '../middleware/httpCache.js';
 
@@ -55,10 +57,13 @@ router.get('/v1/food/admin/power-scanning/public', CACHE_PRESETS.config(), busin
 router.get('/v1/food/admin/restaurant-subscription-settings/public', CACHE_PRESETS.config(), adminController.getRestaurantSubscriptionSettings);
 router.get('/v1/food/admin/feature-settings/public', CACHE_PRESETS.config(), adminController.getFeatureSettings);
 router.get('/v1/food/admin/fee-settings/public', CACHE_PRESETS.config(), adminController.getFeeSettings);
+router.get('/v1/food/admin/cashback-settings/public', CACHE_PRESETS.config(), getCashbackSettingsController);
 
+router.put('/v1/food/admin/cashback-settings', authMiddleware, privateRateLimiter, requireRoles('ADMIN'), updateCashbackSettingsController);
 router.use('/v1/food/admin', authMiddleware, privateRateLimiter, requireRoles('ADMIN'), restaurantAdminRoutes);
 router.use('/v1/food/user', authMiddleware, privateRateLimiter, requireRoles('USER'), userRoutes);
 router.use('/v1/food/notifications', authMiddleware, privateRateLimiter, requireRoles('USER', 'RESTAURANT', 'DELIVERY_PARTNER'), notificationRoutes);
+router.use('/v1/food/chat', authMiddleware, privateRateLimiter, requireRoles('USER', 'RESTAURANT', 'DELIVERY_PARTNER', 'ADMIN'), chatRoutes);
 router.use('/v1/food/orders', authMiddleware, privateRateLimiter, requireRoles('USER'), orderUserRoutes);
 router.use('/v1/food/payments', authMiddleware, privateRateLimiter, paymentRoutes);
 router.use('/v1/payments/webhook', webhookRoutes); // ✅ NEW: Public Webhook

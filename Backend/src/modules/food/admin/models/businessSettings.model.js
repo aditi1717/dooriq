@@ -59,6 +59,13 @@ const businessSettingsSchema = new mongoose.Schema(
             coinToWalletValue: { type: Number, default: 10, min: 0 },
             reviewUrl: { type: String, default: '' },
         },
+        payLaterSettings: {
+            isEnabled: { type: Boolean, default: false },
+            /** Delivered orders a user needs before Pay Later unlocks. */
+            minDeliveredOrders: { type: Number, default: 5, min: 0 },
+            /** Credit granted once eligible, in rupees. */
+            creditLimit: { type: Number, default: 500, min: 0 }
+        },
         restaurantTdsPercentage: { type: Number, default: 0, min: 0, max: 100 },
         deliveryBoyTdsPercentage: { type: Number, default: 0, min: 0, max: 100 },
         defaultServingRadiusKm: { type: Number, default: 7 },

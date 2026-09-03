@@ -35,6 +35,26 @@ import {
     submitCoinRedemptionController
 } from '../controllers/coin.controller.js';
 import { uploadGenericImageController } from '../controllers/upload.controller.js';
+import {
+    getUserCartController,
+    replaceUserCartController,
+    clearUserCartController
+} from '../controllers/userCart.controller.js';
+import {
+    getFavoritesController,
+    addFavoriteRestaurantController,
+    removeFavoriteRestaurantController,
+    addFavoriteFoodController,
+    removeFavoriteFoodController
+} from '../controllers/userFavorite.controller.js';
+import {
+    getPayLaterController,
+    repayPayLaterFromWalletController,
+    startPayLaterRazorpayController,
+    verifyPayLaterRazorpayController
+} from '../controllers/userPayLater.controller.js';
+import { getCashbackHistoryController } from '../controllers/userCashback.controller.js';
+import { getRefundHistoryController } from '../controllers/userRefund.controller.js';
 
 const router = express.Router();
 
@@ -70,5 +90,27 @@ router.post('/addresses', addAddressController);
 router.patch('/addresses/:addressId', updateAddressController);
 router.delete('/addresses/:addressId', deleteAddressController);
 router.patch('/addresses/:addressId/default', setDefaultAddressController);
+
+// ---- Cart (cross-device continuity; checkout re-prices independently) ----
+router.get('/cart', getUserCartController);
+router.put('/cart', replaceUserCartController);
+router.delete('/cart', clearUserCartController);
+
+// ---- Favorites ----
+router.get('/favorites', getFavoritesController);
+router.post('/favorites/restaurants/:restaurantId', addFavoriteRestaurantController);
+router.delete('/favorites/restaurants/:restaurantId', removeFavoriteRestaurantController);
+router.post('/favorites/foods/:foodId', addFavoriteFoodController);
+router.delete('/favorites/foods/:foodId', removeFavoriteFoodController);
+
+// ---- Pay Later ----
+router.get('/pay-later', getPayLaterController);
+router.post('/pay-later/repay/wallet', repayPayLaterFromWalletController);
+router.post('/pay-later/repay/razorpay/start', startPayLaterRazorpayController);
+router.post('/pay-later/repay/razorpay/verify', verifyPayLaterRazorpayController);
+
+// ---- Cashback & refunds ----
+router.get('/cashback', getCashbackHistoryController);
+router.get('/refunds', getRefundHistoryController);
 
 export default router;
