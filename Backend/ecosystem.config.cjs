@@ -6,6 +6,7 @@ module.exports = {
       instances: 'max',
       exec_mode: 'cluster',
       autorestart: true,
+      max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production',
         PORT: 5000
@@ -17,6 +18,7 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
+      max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production',
         SOCKET_PORT: 5001
@@ -28,6 +30,7 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
+      max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production'
       }
@@ -38,6 +41,7 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
+      max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production'
       }
@@ -48,6 +52,7 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
+      max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production'
       }
@@ -58,6 +63,7 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
+      max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production'
       }
@@ -68,6 +74,7 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
+      max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production'
       }
@@ -78,6 +85,7 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
+      max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production'
       }

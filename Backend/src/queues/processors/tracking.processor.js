@@ -61,7 +61,10 @@ const handleHotSync = async ({ userId, orderId }) => {
 
         if (updates.length > 0) {
             await Promise.all(updates);
-            logger.info(`Synced hot rider availability location to MongoDB for Rider ${userId}`);
+            // One line per rider per sync window. At a few thousand active riders
+            // that is a constant stream into a log file nothing rotates, so it
+            // sits at debug alongside the other per-ping tracing.
+            logger.debug(`Synced hot rider availability location to MongoDB for Rider ${userId}`);
         }
     } catch (err) {
         logger.error(`Failed to handle hot sync for ${orderId}: ${err.message}`);

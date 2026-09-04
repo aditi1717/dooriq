@@ -12,6 +12,14 @@
 const isProduction = process.env.NODE_ENV === 'production';
 const debugEnabled = String(process.env.LOG_LEVEL || '').toLowerCase() === 'debug' || !isProduction;
 
+/**
+ * Exported so hot-path callers can skip building a log payload that would be
+ * thrown away. Serialising the argument to `logger.debug` still costs a
+ * `JSON.stringify` even when the line is suppressed, which is measurable on
+ * per-GPS-ping call sites.
+ */
+export const isDebugEnabled = () => debugEnabled;
+
 /** Accept strings, Errors, and objects without emitting "[object Object]". */
 const format = (msg) => {
     if (typeof msg === 'string') return msg;

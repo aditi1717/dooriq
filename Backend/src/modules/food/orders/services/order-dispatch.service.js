@@ -151,13 +151,71 @@ async function listNearbyOnlineDeliveryPartners(
 
   const allowedStatuses = process.env.NODE_ENV === 'production' ? ['approved'] : ['approved', 'pending'];
 
-  // Condition 1: Query ONLY active, online, approved delivery partners
-  const allOnline = await FoodDeliveryPartner.find({
+  const basePartnerFilter = {
     status: { $in: allowedStatuses },
     availabilityStatus: "online",
-  })
-    .select("_id status lastLat lastLng lastLocationAt name")
-    .lean();
+  };
+  const partnerFields = "_id status lastLat lastLng lastLocationAt name";
+
+  // The eligibility passes below (busy trip, cash limit) drop candidates, so the
+  // pool is a multiple of the fanout limit rather than exactly `limit` rows.
+  const candidatePoolSize = Math.max(Math.max(1, limit) * 4, 100);
+  const restaurantCoords = restaurant?.location?.coordinates;
+  const hasRestaurantGeo =
+    Array.isArray(restaurantCoords) && restaurantCoords.length >= 2;
+
+  /**
+   * Condition 1: online, approved riders within the radius.
+   *
+   * This used to load *every* online rider on the platform and apply `maxKm` in
+   * JS afterwards, then fan the two eligibility queries below out over that same
+   * full id list. That is three fleet-sized reads per dispatch attempt, and every
+   * unassigned order re-runs dispatch on a timer - so the cost scaled with
+   * (live orders x fleet size) rather than with the fanout limit.
+   *
+   * The 2dsphere index on `lastLocation` already existed, so the radius is now
+   * applied in the database. `$near` also returns results already sorted by
+   * distance, which is the order the scoring pass below wants anyway.
+   */
+  let allOnline;
+  if (hasRestaurantGeo) {
+    allOnline = await FoodDeliveryPartner.find({
+      ...basePartnerFilter,
+      lastLocation: {
+        $near: {
+          $geometry: {
+            type: "Point",
+            coordinates: [restaurantCoords[0], restaurantCoords[1]],
+          },
+          $maxDistance: maxKm * 1000,
+        },
+      },
+    })
+      .select(partnerFields)
+      .limit(candidatePoolSize)
+      .lean();
+
+    // Riders that have never reported a position are invisible to `$near`. They
+    // only matter when policy says to include stale-GPS riders, and they always
+    // sort last, so they are fetched separately and capped the same way.
+    if (includeStaleGpsRiders) {
+      const withoutGeo = await FoodDeliveryPartner.find({
+        ...basePartnerFilter,
+        $or: [{ lastLocation: { $exists: false } }, { lastLocation: null }],
+      })
+        .select(partnerFields)
+        .limit(candidatePoolSize)
+        .lean();
+      allOnline = allOnline.concat(withoutGeo);
+    }
+  } else {
+    // No restaurant geo means no radius can be applied at all; the fallback
+    // policy further down decides what to do, but the read stays capped.
+    allOnline = await FoodDeliveryPartner.find(basePartnerFilter)
+      .select(partnerFields)
+      .limit(candidatePoolSize)
+      .lean();
+  }
 
   const onlineIds = allOnline.map((p) => p._id).filter(Boolean);
   if (onlineIds.length === 0) {

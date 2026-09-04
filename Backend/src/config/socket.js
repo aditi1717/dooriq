@@ -2,9 +2,14 @@ import { Server } from 'socket.io';
 import { Emitter } from '@socket.io/redis-emitter';
 import { config } from './env.js';
 import { getRedisClient } from './redis.js';
-import { logger } from '../utils/logger.js';
+import { logger, isDebugEnabled } from '../utils/logger.js';
 import { verifyAccessToken } from '../core/auth/token.util.js';
 import { getFirebaseDB } from './firebase.js';
+// Hoisted out of the `update-location` handler: that handler is the hottest path
+// in the system (one call per rider GPS ping) and was paying two dynamic
+// `import()` awaits on every single ping. `queues/index.js` does not import this
+// module, so there is no cycle.
+import { getTrackingQueue } from '../queues/index.js';
 
 let io = null;
 let redisEmitter = null;
@@ -13,6 +18,9 @@ let redisEmitter = null;
 // available for troubleshooting (LOG_LEVEL=debug) without emitting a line per
 // socket connect/reconnect in production.
 function logDeliverySocket(message, extra = {}) {
+    // `update-location` calls this on every rider GPS ping, so the payload is
+    // only serialised once we know the line will actually be emitted.
+    if (!isDebugEnabled()) return;
     const suffix = Object.keys(extra).length ? ` ${JSON.stringify(extra)}` : '';
     logger.debug(`[DeliverySocket] ${message}${suffix}`);
 }
@@ -34,6 +42,56 @@ const roomNames = {
     delivery: (id) => `delivery:${String(id)}`,
     tracking: (orderId) => `tracking:${String(orderId)}`
 };
+
+/**
+ * Per-rider throttle for Firebase RTDB writes.
+ *
+ * Every GPS ping wrote two RTDB nodes unconditionally. A rider waiting at a
+ * light or standing in a restaurant still pings on the same timer, so a large
+ * share of those writes stored coordinates identical to the ones already there.
+ * At a few thousand riders that is the highest-volume external write in the
+ * system and it is billed on bandwidth.
+ *
+ * A write is skipped only when the rider has BOTH barely moved and been written
+ * recently, so a moving rider still streams at full resolution and the customer
+ * map keeps its smoothness. The live socket broadcast above is never throttled.
+ */
+const RTDB_MIN_INTERVAL_MS = 4000;
+const RTDB_MIN_MOVE_METERS = 15;
+const RTDB_TRACKER_MAX_ENTRIES = 20000;
+const lastRtdbWriteByRider = new Map();
+
+function metersBetween(lat1, lng1, lat2, lng2) {
+    const toRad = (v) => (v * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function shouldWriteRtdb(riderId, lat, lng, now) {
+    const key = String(riderId);
+    const previous = lastRtdbWriteByRider.get(key);
+
+    if (previous) {
+        const movedFarEnough =
+            metersBetween(previous.lat, previous.lng, lat, lng) >= RTDB_MIN_MOVE_METERS;
+        const waitedLongEnough = now - previous.at >= RTDB_MIN_INTERVAL_MS;
+        if (!movedFarEnough && !waitedLongEnough) return false;
+    }
+
+    // Bounded so a long-running socket process cannot accumulate an entry per
+    // rider that ever connected. Oldest insertion is evicted first.
+    if (!previous && lastRtdbWriteByRider.size >= RTDB_TRACKER_MAX_ENTRIES) {
+        const oldest = lastRtdbWriteByRider.keys().next().value;
+        if (oldest !== undefined) lastRtdbWriteByRider.delete(oldest);
+    }
+
+    lastRtdbWriteByRider.set(key, { lat, lng, at: now });
+    return true;
+}
 
 const noopIO = {
     emit: () => noopIO,
@@ -281,8 +339,6 @@ export const initSocket = async (server) => {
 
             // ─── Scalable Persistence (BullMQ + Redis "Hot" Buffering) ───
             try {
-                const { getTrackingQueue } = await import('../queues/index.js');
-                const { getRedisClient } = await import('../config/redis.js');
                 const trackingQueue = getTrackingQueue();
                 const redis = getRedisClient();
 
@@ -309,7 +365,7 @@ export const initSocket = async (server) => {
             // ─── Firebase Realtime Database Sync (Cost Optimization) ───
             try {
                 const db = getFirebaseDB();
-                if (db) {
+                if (db && shouldWriteRtdb(userId, lat, lng, now)) {
                     // 1. Update order-specific tracking node
                     const orderRef = db.ref(`active_orders/${trackingKey}`);
                     orderRef.update({
@@ -347,8 +403,37 @@ export const initSocket = async (server) => {
             socket.leave(room);
         });
 
-        socket.on('disconnect', () => {
-            logger.info(`Socket client disconnected: ${socket.id}`);
+        socket.on('disconnect', async () => {
+            // Debug level: mobile riders reconnect constantly on patchy networks,
+            // so this was one info line per reconnect per rider.
+            logger.debug(`Socket client disconnected: ${socket.id}`);
+
+            // `rider:locations:hot` was only ever written to. Riders who went
+            // offline stayed in the hash forever, so it grew without bound and
+            // kept handing dispatch stale positions for riders who had left.
+            if (role === 'DELIVERY_PARTNER' && userId) {
+                try {
+                    const redis = getRedisClient();
+                    if (redis) {
+                        // A rider on a flaky connection can have the old socket's
+                        // `disconnect` arrive *after* the replacement socket has
+                        // joined. Dropping the hot entry unconditionally would
+                        // blank out a rider who is actually online, so the entry
+                        // is only cleared once no socket for them remains. The
+                        // room is cluster-wide via the Redis adapter, so this
+                        // also accounts for sockets held by other workers.
+                        const remaining = await io
+                            .in(roomNames.delivery(userId))
+                            .fetchSockets();
+                        if (remaining.length === 0) {
+                            await redis.hDel('rider:locations:hot', String(userId));
+                            lastRtdbWriteByRider.delete(String(userId));
+                        }
+                    }
+                } catch (err) {
+                    logger.error(`Failed to clear hot location for rider ${userId}: ${err.message}`);
+                }
+            }
         });
 
         // 🆕 Resync State on Reconnect
