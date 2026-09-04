@@ -8,12 +8,17 @@ import { connectRedis, closeRedis } from './src/config/redis.js';
 import { initSocket } from './src/config/socket.js';
 import { closeBullMQConnection } from './src/queues/index.js';
 import { logger } from './src/utils/logger.js';
+import { installProcessGuards } from './src/utils/processGuards.js';
 import { initializeFirebaseRealtime } from './src/config/firebase.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10000;
 let server = null;
 
+let shuttingDown = false;
+
 const gracefulShutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     logger.info(`${signal} received, starting socket server shutdown`);
     if (!server) {
         process.exit(0);
@@ -80,20 +85,7 @@ const startSocketServer = async () => {
             process.exit(1);
         });
 
-        process.on('unhandledRejection', (err) => {
-            logger.error(`Socket server unhandled rejection: ${err?.message || err}`);
-            if (config.nodeEnv === 'production') {
-                if (server) server.close(() => process.exit(1));
-                else process.exit(1);
-            }
-        });
-
-        process.on('uncaughtException', (err) => {
-            logger.error(`Socket server uncaught exception: ${err?.message || err}`);
-            if (config.nodeEnv === 'production') {
-                process.exit(1);
-            }
-        });
+        installProcessGuards({ label: 'socket', onFatal: gracefulShutdown });
     } catch (error) {
         logger.error(`Error starting socket server: ${error.message}`);
         process.exit(1);

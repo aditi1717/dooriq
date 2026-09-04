@@ -2,10 +2,15 @@ import 'dotenv/config';
 import { Worker } from 'bullmq';
 import { config } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
+import { installProcessGuards } from '../../utils/processGuards.js';
 import { getBullMQConnection } from '../connection.js';
 import { TRACKING_QUEUE } from '../queue.constants.js';
 import { processTrackingJob } from '../processors/tracking.processor.js';
 import { connectRedis } from '../../config/redis.js';
+
+// Installed before the worker boots, so a failure during bootstrap is
+// reported rather than silently ending the process.
+installProcessGuards({ label: 'worker-tracking' });
 
 const defaultJobOptions = {
     attempts: 3,
@@ -71,4 +76,10 @@ const start = async () => {
     }
 };
 
-start();
+
+// A worker that fails to start must say so; the rejection would otherwise
+// be silent and the queue would simply never be consumed.
+start().catch((err) => {
+    logger.error(`[worker-tracking] failed to start: ${err?.stack || err}`);
+    process.exit(1);
+});

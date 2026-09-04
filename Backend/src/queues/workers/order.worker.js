@@ -2,11 +2,16 @@ import 'dotenv/config';
 import { Worker } from 'bullmq';
 import { config } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
+import { installProcessGuards } from '../../utils/processGuards.js';
 import { getBullMQConnection } from '../connection.js';
 import { ORDER_QUEUE } from '../queue.constants.js';
 import { processOrderJob } from '../processors/order.processor.js';
 import { connectRedis } from '../../config/redis.js';
 import { initRedisEmitter } from '../../config/socket.js';
+
+// Installed before the worker boots, so a failure during bootstrap is
+// reported rather than silently ending the process.
+installProcessGuards({ label: 'worker-order' });
 
 const defaultJobOptions = {
     attempts: 3,
@@ -68,4 +73,10 @@ const start = async () => {
     }
 };
 
-start();
+
+// A worker that fails to start must say so; the rejection would otherwise
+// be silent and the queue would simply never be consumed.
+start().catch((err) => {
+    logger.error(`[worker-order] failed to start: ${err?.stack || err}`);
+    process.exit(1);
+});

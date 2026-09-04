@@ -2,9 +2,14 @@ import 'dotenv/config';
 import { Worker } from 'bullmq';
 import { config } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
+import { installProcessGuards } from '../../utils/processGuards.js';
 import { getBullMQConnection } from '../connection.js';
 import { OTP_QUEUE } from '../queue.constants.js';
 import { processOtpJob } from '../processors/otp.processor.js';
+
+// Installed before the worker boots, so a failure during bootstrap is
+// reported rather than silently ending the process.
+installProcessGuards({ label: 'worker-otp' });
 
 const defaultJobOptions = {
     attempts: 3,
@@ -42,3 +47,4 @@ if (worker) {
     process.on('SIGTERM', shutdown);
     process.on('SIGINT', shutdown);
 }
+
