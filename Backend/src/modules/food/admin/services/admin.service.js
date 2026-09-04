@@ -5256,7 +5256,7 @@ export async function approveDeliveryPartner(id) {
 
                     if (isUserReferrer) {
                         const { FoodUser } = await import('../../../../core/users/user.model.js');
-                        const { creditReferralReward } = await import('../../../user/services/userWallet.service.js');
+                        const { creditReferralReward } = await import('../../user/services/userWallet.service.js');
                         bonusPromises.push(
                             FoodUser.updateOne({ _id: referrer._id }, { $inc: { referralCount: 1 } }),
                             creditReferralReward(referrer._id, reward, {

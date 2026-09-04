@@ -25,7 +25,20 @@ let server = null;
 /** Stop functions for the recurring maintenance jobs. */
 const stopMaintenanceJobs = [];
 
+/** Set once shutdown has begun, so a throw mid-shutdown cannot restart it. */
+let shuttingDown = false;
+
+/**
+ * Unhandled rejections no longer kill the process, so this counter is the only
+ * signal that they are happening at all. Rising values mean a bug on a hot
+ * path; alert on the rate, not the total.
+ */
+let unhandledRejectionCount = 0;
+export const getUnhandledRejectionCount = () => unhandledRejectionCount;
+
 const gracefulShutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     logger.info(`${signal} received, starting graceful shutdown`);
     if (!server) {
         process.exit(0);
@@ -172,20 +185,34 @@ const startServer = async () => {
             process.exit(1);
         });
 
-        // Handle unhandled promise rejections
+        // A rejected promise is a bug in one request or one job. It is not
+        // evidence that the process is unsound, so it must not take the process
+        // down: exiting here drops every rider, customer and restaurant socket
+        // at once, and the reconnect storm that follows lands on a process that
+        // is about to hit the same bug again. That loop is what took the
+        // platform out under live-tracking load — a single undefined
+        // `logger.debug` on the GPS-ping path produced 874 fatal rejections.
+        //
+        // So: record it loudly and keep serving. `unhandledRejectionCount` is
+        // exported for monitoring precisely because a silent handler is how
+        // this class of bug hides.
         process.on('unhandledRejection', (err) => {
-            logger.error(`Unhandled Rejection: ${err?.message || err}`);
-            if (config.nodeEnv === 'production') {
-                if (server) server.close(() => process.exit(1));
-                else process.exit(1);
-            }
+            unhandledRejectionCount += 1;
+            const detail = err instanceof Error ? (err.stack || err.message) : String(err);
+            logger.error(`Unhandled Rejection #${unhandledRejectionCount}: ${detail}`);
         });
 
+        // An uncaught exception is different: the stack unwound through code
+        // that was not expecting it, so state genuinely may be inconsistent and
+        // Node's own guidance is to exit. Drain first rather than vanishing, so
+        // clients see a clean close and reconnect on their own backoff instead
+        // of all at once. `gracefulShutdown` carries its own re-entrancy guard,
+        // so a throw *during* shutdown cannot restart it.
         process.on('uncaughtException', (err) => {
-            logger.error(`Uncaught Exception: ${err?.message || err}`);
-            if (config.nodeEnv === 'production') {
-                process.exit(1);
-            }
+            const detail = err instanceof Error ? (err.stack || err.message) : String(err);
+            logger.error(`Uncaught Exception: ${detail}`);
+            if (config.nodeEnv !== 'production') return;
+            gracefulShutdown('uncaughtException');
         });
 
     } catch (error) {
