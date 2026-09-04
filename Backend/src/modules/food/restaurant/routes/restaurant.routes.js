@@ -40,6 +40,7 @@ import {
 } from '../controllers/restaurantCategory.controller.js';
 import { getMenuController, updateMenuController, getPublicRestaurantMenuController } from '../controllers/restaurantMenu.controller.js';
 import { getPublicRestaurantAddonsController } from '../controllers/publicAddons.controller.js';
+import { listPublicFoodsController } from '../controllers/publicFoods.controller.js';
 import * as feedbackExperienceController from '../../admin/controllers/feedbackExperience.controller.js';
 import {
     getOutletTimingsByRestaurantIdController,
@@ -98,6 +99,8 @@ router.get('/restaurants/:id/outlet-timings', CACHE_PRESETS.catalog(), cacheResp
 router.get('/offers', optionalAuth, listPublicOffersController);
 // Public: categories list (zone-aware; returns zone categories + global)
 router.get('/categories/public', CACHE_PRESETS.config(), cacheResponse(600, 'categories'), listCategoriesController);
+// Public: cross-restaurant dish feed (home rails, dish search, the sub-99 store).
+router.get('/public/foods', CACHE_PRESETS.catalog(), cacheResponse(300, 'public_foods'), listPublicFoodsController);
 
 // Restaurant dashboard/profile (Bearer token + RESTAURANT role)
 router.get('/current', authMiddleware, requireRestaurant, getCurrentRestaurantController);

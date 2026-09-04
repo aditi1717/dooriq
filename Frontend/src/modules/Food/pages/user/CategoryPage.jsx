@@ -878,8 +878,8 @@ export default function CategoryPage() {
               if (isDefaultValue(distance, 'distance')) distance = null
               if (isDefaultValue(offer, 'offer')) offer = null
               const backendDistance = formatListingDistance(
-                restaurant.roadDistanceKm ??
                 restaurant.distanceScore ??
+                restaurant.straightLineDistanceKm ??
                 restaurant.distanceInKm ??
                 restaurant.distance
               )

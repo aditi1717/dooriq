@@ -60,7 +60,7 @@ const paymentSchema = new mongoose.Schema(
     {
         method: {
             type: String,
-            enum: ['cash', 'razorpay', 'razorpay_qr', 'wallet'],
+            enum: ['cash', 'razorpay', 'razorpay_qr', 'wallet', 'pay_later'],
             required: true
         },
         status: {

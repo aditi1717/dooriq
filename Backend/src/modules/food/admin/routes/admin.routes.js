@@ -5,6 +5,7 @@ import * as foodApprovalController from '../controllers/foodApproval.controller.
 import * as addonsApprovalController from '../controllers/addonsApproval.controller.js';
 import * as businessSettingsController from '../controllers/businessSettings.controller.js';
 import * as coinSettingsController from '../controllers/coinSettings.controller.js';
+import * as payLaterSettingsController from '../controllers/payLaterSettings.controller.js';
 import * as coinRedemptionController from '../controllers/coinRedemption.controller.js';
 import * as feedbackExperienceController from '../controllers/feedbackExperience.controller.js';
 import * as notificationBroadcastController from '../controllers/notificationBroadcast.controller.js';
@@ -304,6 +305,8 @@ router.patch('/power-scanning', businessSettingsController.updatePowerScanningSe
 // ----- Coin Settings -----
 router.get('/coin-settings', coinSettingsController.getCoinSettings);
 router.patch('/coin-settings', coinSettingsController.updateCoinSettings);
+router.get('/pay-later-settings', payLaterSettingsController.getPayLaterSettings);
+router.patch('/pay-later-settings', payLaterSettingsController.updatePayLaterSettings);
 
 router.get('/coin-requests', coinRedemptionController.getCoinRequests);
 router.patch('/coin-requests/:id/verify', coinRedemptionController.verifyCoinRequest);

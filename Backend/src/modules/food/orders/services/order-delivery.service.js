@@ -26,6 +26,7 @@ import {
 } from './dispatch-config.service.js';
 import * as paymentService from './order-payment.service.js';
 import * as userWalletService from '../../user/services/userWallet.service.js';
+import { awardCashbackForOrder } from '../../user/services/userCashback.service.js';
 
 import {
   buildOrderIdentityFilter,
@@ -1172,6 +1173,8 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
   } catch (err) {
     logger.warn(`completeDelivery award coins failed: ${err?.message || err}`);
   }
+
+  await awardCashbackForOrder(order.userId, order);
 
   emitOrderUpdate(order, deliveryPartnerId);
   enqueueOrderEvent('delivery_completed', {

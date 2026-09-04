@@ -74,7 +74,6 @@ export const searchUnified = async (query = {}, options = {}) => {
         const defaultRadius = await getDefaultServingRadiusKm();
         filtered = await filterRestaurantsByRoadRadius(all, origin, {
             radiusKm: defaultRadius,
-            includeFailedRoadChecks: false,
         });
     }
 

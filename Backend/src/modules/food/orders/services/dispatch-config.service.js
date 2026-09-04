@@ -17,10 +17,10 @@
  *                                  to the defaults with warnings attached rather
  *                                  than taking live dispatch down.
  *
- * The defaults reproduce the previously hardcoded behaviour (15/25/40/60 km,
- * 30s retries, crisis on attempt 6) on purpose. Deploying this change must not
- * silently move dispatch radii on a live system - the new behaviour starts only
- * when an admin saves a configuration.
+ * The defaults reproduce the admin-configured behaviour baseline
+ * (2/3/4/5 km, 30s retries, crisis on attempt 6). Deploying this change must
+ * not silently move dispatch radii on a live system - the new behaviour starts
+ * only when an admin saves a configuration.
  */
 
 import { FoodSettings } from '../models/order.model.js';
@@ -54,12 +54,12 @@ export const DEFAULT_DISPATCH_CONFIG = Object.freeze({
   dispatchMode: 'auto',
   radiusExpansionEnabled: true,
   stages: Object.freeze([
-    Object.freeze({ radiusKm: 15, timeoutSeconds: 30 }),
-    Object.freeze({ radiusKm: 25, timeoutSeconds: 30 }),
-    Object.freeze({ radiusKm: 40, timeoutSeconds: 30 }),
-    Object.freeze({ radiusKm: 60, timeoutSeconds: 30 }),
+    Object.freeze({ radiusKm: 2, timeoutSeconds: 30 }),
+    Object.freeze({ radiusKm: 3, timeoutSeconds: 30 }),
+    Object.freeze({ radiusKm: 4, timeoutSeconds: 30 }),
+    Object.freeze({ radiusKm: 5, timeoutSeconds: 30 }),
   ]),
-  maxRadiusKm: 60,
+  maxRadiusKm: 5,
   /** 0 = keep hunting forever, which is what the old loop did. */
   maxAttempts: 0,
   /** Crisis escalation begins once `attempt` exceeds this. 5 => fires on attempt 6. */

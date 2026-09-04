@@ -1,8 +1,6 @@
-import { fetchDrivingRoute } from '../orders/utils/googleMaps.js';
 import { getCachedBusinessSettings } from '../admin/controllers/businessSettings.controller.js';
 
 const DEFAULT_SERVING_RADIUS_KM = 7;
-const ROAD_DISTANCE_CONCURRENCY = 4;
 
 export const getDefaultServingRadiusKm = async () => {
     try {
@@ -61,37 +59,16 @@ export const haversineKm = (origin, destination) => {
     return 6371 * c;
 };
 
-const mapWithConcurrency = async (list, mapper, concurrency = ROAD_DISTANCE_CONCURRENCY) => {
-    const output = new Array(list.length);
-    let cursor = 0;
-
-    const worker = async () => {
-        while (true) {
-            const index = cursor;
-            cursor += 1;
-            if (index >= list.length) return;
-            output[index] = await mapper(list[index], index);
-        }
-    };
-
-    const workers = Array.from(
-        { length: Math.max(1, Math.min(concurrency, list.length)) },
-        () => worker(),
-    );
-    await Promise.all(workers);
-    return output;
-};
-
 /**
  * Shared public-listing visibility gate:
- * 1. cheap straight-line prefilter
- * 2. cached road-distance verification only for candidates inside radius
- * 3. sort by resolved visible distance
+ * 1. compute straight-line distance
+ * 2. keep restaurants inside the configured radius
+ * 3. sort by straight-line distance
  */
 export const filterRestaurantsByRoadRadius = async (
     restaurants = [],
     origin,
-    { radiusKm, includeFailedRoadChecks = true } = {},
+    { radiusKm } = {},
 ) => {
     const userPoint = toLatLngPoint(origin);
     if (!userPoint || !Array.isArray(restaurants) || restaurants.length === 0) {
@@ -103,7 +80,7 @@ export const filterRestaurantsByRoadRadius = async (
             ? Number(radiusKm)
             : await getDefaultServingRadiusKm();
 
-    const candidates = restaurants
+    return restaurants
         .map((restaurant) => {
             const restaurantPoint = toLatLngPoint(restaurant?.location || restaurant);
             const straightLineDistanceKm = restaurantPoint
@@ -123,39 +100,17 @@ export const filterRestaurantsByRoadRadius = async (
             ({ straightLineDistanceKm }) =>
                 Number.isFinite(straightLineDistanceKm) &&
                 straightLineDistanceKm <= effectiveRadiusKm,
-        );
-
-    const resolved = await mapWithConcurrency(candidates, async (candidate) => {
-        if (!candidate.restaurantPoint) {
-            return { ...candidate, roadDistanceKm: null, visible: false };
-        }
-
-        const route = await fetchDrivingRoute(userPoint, candidate.restaurantPoint);
-        const roadDistanceKm = Number(route?.distanceKm);
-        const hasRoadDistance = Number.isFinite(roadDistanceKm) && roadDistanceKm > 0;
-        const visible = hasRoadDistance
-            ? roadDistanceKm <= effectiveRadiusKm
-            : includeFailedRoadChecks;
-
-        return {
-            ...candidate,
-            roadDistanceKm: hasRoadDistance ? roadDistanceKm : null,
-            visible,
-        };
-    });
-
-    return resolved
-        .filter((candidate) => candidate.visible)
+        )
         .sort((left, right) => {
-            const leftDistance = left.roadDistanceKm ?? left.straightLineDistanceKm ?? Infinity;
-            const rightDistance = right.roadDistanceKm ?? right.straightLineDistanceKm ?? Infinity;
+            const leftDistance = left.straightLineDistanceKm ?? Infinity;
+            const rightDistance = right.straightLineDistanceKm ?? Infinity;
             return leftDistance - rightDistance;
         })
         .map((candidate) => ({
             ...candidate.restaurant,
-            distanceScore: candidate.roadDistanceKm ?? candidate.straightLineDistanceKm,
+            distanceScore: candidate.straightLineDistanceKm,
             straightLineDistanceKm: candidate.straightLineDistanceKm,
-            roadDistanceKm: candidate.roadDistanceKm,
-            visibilityDistanceSource: candidate.roadDistanceKm != null ? 'road' : 'straight-line-fallback',
+            roadDistanceKm: null,
+            visibilityDistanceSource: 'straight-line',
         }));
 };

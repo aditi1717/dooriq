@@ -98,7 +98,8 @@ export default function Restaurants() {
             totalRatings: Number(restaurant?.totalRatings || restaurant?.ratingCount || restaurant?.reviews?.length || restaurant?.reviews || 0),
             deliveryTime: restaurant?.estimatedDeliveryTime || (restaurant?.estimatedDeliveryTimeMinutes ? `${restaurant.estimatedDeliveryTimeMinutes} mins` : "25-30 mins"),
             distance: formatListingDistance(
-              restaurant?.roadDistanceKm ??
+              restaurant?.distanceScore ??
+              restaurant?.straightLineDistanceKm ??
               restaurant?.distanceInKm ??
               restaurant?.distance
             ) || restaurant?.distance || "",

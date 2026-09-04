@@ -278,8 +278,8 @@ export default function SearchResults() {
                 offer = null
               }
               const backendDistance = formatListingDistance(
-                restaurant.roadDistanceKm ??
                 restaurant.distanceScore ??
+                restaurant.straightLineDistanceKm ??
                 restaurant.distanceInKm ??
                 restaurant.distance
               )

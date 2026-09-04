@@ -29,7 +29,6 @@ export const getPublicGourmetRestaurants = async (_zoneId, lat = null, lng = nul
             { lat: userLat, lng: userLng },
             {
                 radiusKm: await getDefaultServingRadiusKm(),
-                includeFailedRoadChecks: false,
             }
         );
     }
@@ -53,8 +52,8 @@ export const getPublicGourmetRestaurants = async (_zoneId, lat = null, lng = nul
                 pureVegRestaurant: r.pureVegRestaurant,
                 location: r.location,
                 estimatedDeliveryTime: r.estimatedDeliveryTime,
-                roadDistanceKm: r.roadDistanceKm,
-                distanceInKm: r.distanceScore,
+                roadDistanceKm: null,
+                distanceInKm: r.distanceScore ?? r.straightLineDistanceKm ?? null,
                 zoneId: r.zoneId
             } : null
         };

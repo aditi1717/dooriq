@@ -215,7 +215,8 @@ export default function Gourmet() {
                   const isFavorite = favorites.has(restaurantId)
 
                   const distanceStr = formatListingDistance(
-                    restaurant.roadDistanceKm ??
+                    restaurant.distanceScore ??
+                    restaurant.straightLineDistanceKm ??
                     restaurant.distanceInKm ??
                     restaurant.distance
                   ) || restaurant.distance || ""

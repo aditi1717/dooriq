@@ -52,6 +52,8 @@ const debugLog = (...args) => console.log('[OrderTracking]', ...args)
 const debugWarn = (...args) => console.warn('[OrderTracking]', ...args)
 const debugError = (...args) => console.error('[OrderTracking]', ...args)
 
+const TRACKING_ORDER_POLL_INTERVAL_MS = 5 * 60 * 1000;
+
 
 // Animated checkmark component
 const AnimatedCheckmark = ({ delay = 0 }) => (
@@ -89,7 +91,7 @@ const AnimatedCheckmark = ({ delay = 0 }) => (
 )
 
 // Real Delivery Map Component with User Live Location
-const DeliveryMap = React.memo(({ orderId, order, isVisible, fallbackCustomerCoords = null, userLiveCoords = null, userLocationAccuracy = null, onEtaUpdate = null }) => {
+const DeliveryMap = React.memo(({ orderId, order, isVisible, fallbackCustomerCoords = null, onEtaUpdate = null }) => {
   const toPointFromGeoJSON = (coords) => {
     if (!Array.isArray(coords) || coords.length < 2) return null;
     const lng = Number(coords[0]);
@@ -181,9 +183,6 @@ const DeliveryMap = React.memo(({ orderId, order, isVisible, fallbackCustomerCoo
         orderTrackingIds={orderTrackingIdsList}
         restaurantCoords={restaurantCoords}
         customerCoords={customerCoords}
-
-        userLiveCoords={userLiveCoords}
-        userLocationAccuracy={userLocationAccuracy}
         deliveryBoyData={deliveryBoyData}
         order={order}
         onEtaUpdate={onEtaUpdate}
@@ -770,13 +769,6 @@ export default function OrderTracking() {
     userLiveLocation?.longitude
   ])
 
-  const userLiveCoords = useMemo(() => {
-    const lat = Number(userLiveLocation?.latitude)
-    const lng = Number(userLiveLocation?.longitude)
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
-    return { lat, lng }
-  }, [userLiveLocation?.latitude, userLiveLocation?.longitude])
-
   const isAdminAccepted = useMemo(() => {
     const status = order?.status
     return [
@@ -1038,8 +1030,7 @@ export default function OrderTracking() {
       if (pollRef.current) pollRef.current(false);
     };
 
-    const pollInterval = (isSocketConnected || window.orderSocketConnected) ? 12000 : 5000;
-    const interval = setInterval(tick, pollInterval);
+    const interval = setInterval(tick, TRACKING_ORDER_POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
   }, [orderId, isSocketConnected]);
@@ -1537,8 +1528,6 @@ export default function OrderTracking() {
           order={order}
           isVisible={order !== null}
           fallbackCustomerCoords={fallbackCustomerCoords}
-          userLiveCoords={userLiveCoords}
-          userLocationAccuracy={userLiveLocation?.accuracy ?? null}
           onEtaUpdate={handleEtaUpdate}
         />
       )}

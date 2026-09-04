@@ -31,6 +31,8 @@ import { fetchPolyline } from '../utils/googleMaps.js';
 import { getFirebaseDB } from '../../../../config/firebase.js';
 import * as foodTransactionService from './foodTransaction.service.js';
 import * as userWalletService from '../../user/services/userWallet.service.js';
+import * as payLaterService from '../../user/services/userPayLater.service.js';
+import { awardCashbackForOrder } from '../../user/services/userCashback.service.js';
 import { calculateOrderPricing, getDeliveryDistanceDetails } from './order-pricing.service.js';
 import * as dispatchService from './order-dispatch.service.js';
 import * as deliveryService from './order-delivery.service.js';
@@ -85,6 +87,13 @@ function assertPaymentMethodEnabled(paymentMethod, settings = {}) {
 
   if ((method === "razorpay" || method === "card") && !availability.online) {
     throw new ValidationError("Online payment is currently disabled");
+  }
+
+  // Pay Later has its own switch (and its own per-user credit check, applied
+  // when the balance is charged); the shared paymentMethods block does not
+  // cover it.
+  if (method === "pay_later" && settings?.payLaterSettings?.isEnabled !== true) {
+    throw new ValidationError("Pay Later is currently disabled");
   }
 }
 
@@ -189,6 +198,11 @@ async function applyCancellationRefund(order, { cancelledBy = 'system', refundAm
       reason: refundResult.error || 'razorpay_refund_failed',
       method: paymentMethod,
     };
+  }
+
+  if (paymentMethod === 'pay_later') {
+    const { released } = await payLaterService.releasePayLaterCharge(order.userId, order);
+    return { attempted: true, processed: released > 0, method: paymentMethod, amount: released };
   }
 
   if (paymentMethod === 'wallet') {
@@ -657,6 +671,7 @@ export async function createOrder(userId, dto) {
     assertPaymentMethodEnabled(paymentMethod, businessSettings);
     const isCash = paymentMethod === "cash";
     const isWallet = paymentMethod === "wallet";
+    const isPayLater = paymentMethod === "pay_later";
 
     if (isCash) {
       const user = await FoodUser.findById(userId).select("isCodBlocked").lean();
@@ -763,7 +778,7 @@ export async function createOrder(userId, dto) {
 
     const payment = {
       method: paymentMethod,
-      status: isCash ? "cod_pending" : isWallet ? "paid" : "created",
+      status: (isCash || isPayLater) ? "cod_pending" : isWallet ? "paid" : "created",
       amountDue: normalizedPricing.total || 0,
       razorpay: {},
       qr: {},
@@ -925,6 +940,19 @@ export async function createOrder(userId, dto) {
       try {
         await userWalletService.deductWalletBalance(userId, order.pricing.total, `Payment for order #${order.order_id || order._id}`, { orderId: order._id });
       } catch (err) {
+        await FoodOrder.deleteOne({ _id: order._id });
+        await rollbackCouponUsage(couponReservation);
+        couponReservation = null;
+        throw err;
+      }
+    }
+
+    if (isPayLater) {
+      try {
+        await payLaterService.chargePayLater(userId, order);
+      } catch (err) {
+        // Same rollback as the wallet path: an order that could not be charged
+        // must not survive, or the user gets food nobody is billed for.
         await FoodOrder.deleteOne({ _id: order._id });
         await rollbackCouponUsage(couponReservation);
         couponReservation = null;
@@ -1759,6 +1787,8 @@ export async function updateOrderStatusRestaurant(
     } catch (err) {
       logger.warn(`updateOrderStatusRestaurant award coins failed: ${err?.message || err}`);
     }
+
+    await awardCashbackForOrder(order.userId, order);
   }
 
   // Custom messages / titles for status updates
