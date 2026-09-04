@@ -310,7 +310,7 @@ const getOrderableRestaurantIds = async (vegOnly = false) => {
  * `profileImage.url` wrapper. That was survivable while the geo branch almost
  * never ran; now that coordinates always take the geo path, both must agree.
  */
-const toRestaurantListItem = (r) => ({
+export const toRestaurantListItem = (r) => ({
     ...r,
     restaurantId: r._id,
     id: r._id,

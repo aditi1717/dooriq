@@ -169,6 +169,32 @@ export const initSocket = async (server) => {
             socket.emit('admin-orders-room-joined', { room: 'admin:orders' });
         });
 
+        // ─── Chat ───────────────────────────────────────────────────────
+
+        // Typing indicators are relayed, never stored: they are worthless a
+        // second later, so a dropped one costs nothing and a persisted one
+        // would just be noise. Messages themselves go through the REST
+        // endpoint, which is what emits `chat:message`.
+        socket.on('chat:typing', (data) => {
+            const toRole = String(data?.toRole || '').toUpperCase();
+            if (!toRole) return;
+
+            const room = toRole === 'USER' ? roomNames.user(data?.toId)
+                : toRole === 'DELIVERY_PARTNER' ? roomNames.delivery(data?.toId)
+                : toRole === 'RESTAURANT' ? roomNames.restaurant(data?.toId)
+                : toRole === 'ADMIN' ? 'admin:orders'
+                : null;
+            if (!room) return;
+            if (toRole !== 'ADMIN' && !data?.toId) return;
+
+            socket.to(room).emit('chat:typing', {
+                conversationId: String(data?.conversationId || ''),
+                fromRole: role,
+                fromId: String(userId || ''),
+                typing: data?.typing === true
+            });
+        });
+
         // ─── Live Tracking Events ───────────────────────────────────────
 
         // Users / restaurants subscribe to an order's real-time tracking room.
