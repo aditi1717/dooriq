@@ -237,6 +237,9 @@ async function applyCancellationRefund(order, { cancelledBy = 'system', refundAm
  * It now runs on a timer (see `runOrderExpirySweep` and server.js). Callers that
  * need a specific order settled synchronously still pass a narrow filter.
  */
+/** Max orders expired per sweep cycle. Override with ORDER_EXPIRY_BATCH. */
+const EXPIRY_SWEEP_BATCH = Number(process.env.ORDER_EXPIRY_BATCH || 200);
+
 async function expireUnacceptedOrders(filter = {}) {
   const now = new Date();
   const baseFilter = {
@@ -245,7 +248,17 @@ async function expireUnacceptedOrders(filter = {}) {
     ...filter,
   };
 
-  const docs = await FoodOrder.find(baseFilter).select("_id orderStatus").lean();
+  // Bounded, oldest first. Each document below costs a refund, an offer
+  // release, socket emits and a notification, so an unbounded sweep would
+  // spend minutes inside one 30s cycle if a backlog ever built up. The
+  // { orderStatus, acceptanceDeadlineAt } index serves both the filter and
+  // this sort. A backlog larger than the batch simply drains over the next
+  // few cycles; callers passing a specific _id are unaffected by the cap.
+  const docs = await FoodOrder.find(baseFilter)
+    .select("_id orderStatus")
+    .sort({ acceptanceDeadlineAt: 1 })
+    .limit(EXPIRY_SWEEP_BATCH)
+    .lean();
   if (!docs.length) return 0;
 
   for (const doc of docs) {

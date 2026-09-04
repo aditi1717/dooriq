@@ -79,6 +79,11 @@ export const config = {
     // Maps
     googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
 
+    // Deploy webhook. Absent by design: the /api/deploy route is not
+    // registered at all unless this is set, because it executes a shell
+    // script as root.
+    deployWebhookSecret: process.env.DEPLOY_WEBHOOK_SECRET,
+
     // Socket.io
     socketCorsOrigin: process.env.SOCKET_CORS_ORIGIN || '*',
 

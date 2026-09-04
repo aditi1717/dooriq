@@ -96,29 +96,53 @@ const startServer = async () => {
             logger.warn('BullMQ is enabled but Redis is disabled. Queue initialization skipped.');
         }
 
-        app.post('/api/deploy', (req, res) => {
-            const signature = req.headers['x-hub-signature-256'];
-            const secret = 'mysecret123';
-
-            const hash = 'sha256=' + crypto
-                .createHmac('sha256', secret)
-                .update(JSON.stringify(req.body))
-                .digest('hex');
-
-            if (signature !== hash) {
-                return res.status(403).send('Unauthorized');
-            }
-
-            exec('cd ~ && ./deploy.sh', (err, stdout, stderr) => {
-                if (err) {
-                    console.error(err);
-                    return res.send('Deploy failed');
+        // ─── Deploy webhook ──────────────────────────────────────────────────
+        //
+        // This endpoint runs a shell script as root, so it is registered only
+        // when a secret is explicitly configured. It previously shipped with
+        // the secret 'mysecret123' hardcoded in the repository, which meant
+        // anyone able to read the source could trigger a production deploy.
+        //
+        // Three things changed: the secret comes from the environment, the HMAC
+        // is computed over the raw request body (GitHub signs the bytes it
+        // sent, not a re-serialisation of the parsed object — the old version
+        // could not have validated a real GitHub signature), and the comparison
+        // is timing-safe.
+        if (config.deployWebhookSecret) {
+            app.post('/api/deploy', (req, res) => {
+                const signature = req.headers['x-hub-signature-256'];
+                if (!signature || !req.rawBody) {
+                    logger.warn('Deploy webhook: missing signature or raw body');
+                    return res.status(400).send('Bad request');
                 }
 
-                console.log(stdout);
-                res.send('Deploy success');
+                const expected = 'sha256=' + crypto
+                    .createHmac('sha256', config.deployWebhookSecret)
+                    .update(req.rawBody)
+                    .digest('hex');
+
+                // timingSafeEqual throws on a length mismatch, so compare lengths first.
+                const a = Buffer.from(signature);
+                const b = Buffer.from(expected);
+                if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+                    logger.warn('Deploy webhook: signature verification failed');
+                    return res.status(403).send('Unauthorized');
+                }
+
+                logger.info('Deploy webhook: signature verified, running deploy script');
+                exec('cd ~ && ./deploy.sh', { timeout: 10 * 60 * 1000 }, (err, stdout) => {
+                    if (err) {
+                        logger.error(`Deploy webhook: script failed: ${err.message}`);
+                        return res.status(500).send('Deploy failed');
+                    }
+                    logger.info(`Deploy webhook: complete\n${stdout}`);
+                    res.send('Deploy success');
+                });
             });
-        });
+            logger.info('Deploy webhook enabled at POST /api/deploy');
+        } else {
+            logger.warn('Deploy webhook disabled: DEPLOY_WEBHOOK_SECRET is not set');
+        }
 
         // 6. Start the HTTP server
 

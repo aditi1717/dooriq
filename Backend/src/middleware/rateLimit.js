@@ -1,6 +1,18 @@
 import rateLimit from 'express-rate-limit';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+import { RedisRateLimitStore } from './redisRateLimitStore.js';
+
+/**
+ * Counters live in Redis so the limit is cluster-wide. With the default
+ * in-memory store each process keeps its own tally, so the real limit is the
+ * configured value times the number of API workers, and every deploy clears it.
+ *
+ * The two limiters get distinct prefixes: they have different windows and
+ * different key shapes, so sharing a namespace would let one consume the
+ * other's budget.
+ */
+const makeStore = (prefix) => (config.redisEnabled ? new RedisRateLimitStore({ prefix }) : undefined);
 
 const authWindowMs = config.authRateLimitWindowMinutes * 60 * 1000;
 const privateWindowMs = config.rateLimitWindowMinutes * 60 * 1000;
@@ -12,6 +24,7 @@ const privateWindowMs = config.rateLimitWindowMinutes * 60 * 1000;
 export const authRateLimiter = rateLimit({
     windowMs: authWindowMs,
     max: config.authRateLimitMax,
+    store: makeStore('rl:auth:'),
     standardHeaders: true,
     legacyHeaders: false,
     skip: () => !config.rateLimitEnabled,
@@ -39,6 +52,7 @@ export const authRateLimiter = rateLimit({
 export const privateRateLimiter = rateLimit({
     windowMs: privateWindowMs,
     max: config.nodeEnv === 'development' ? config.rateLimitDevMaxRequests : config.rateLimitMaxRequests,
+    store: makeStore('rl:private:'),
     standardHeaders: true,
     legacyHeaders: false,
     skip: () => !config.rateLimitEnabled,
