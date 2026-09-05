@@ -29,33 +29,43 @@ let cachedAccessTokenExpiryMs = 0;
 let cachedServiceAccount = null;
 
 const sanitizeString = (value) => String(value ?? '').trim();
-const normalizeNotificationText = (value) => {
+/** FCM caps a message at 4KB; these keep one field from consuming it. */
+const MAX_TITLE_LENGTH = 200;
+const MAX_BODY_LENGTH = 1000;
+
+/**
+ * Prepare text for display in a notification.
+ *
+ * FCM payloads are JSON and therefore UTF-8, so emoji, the rupee sign and
+ * Indic scripts all transmit correctly. An earlier version ended with
+ * `.replace(/[^\x20-\x7E]/g, ' ')`, which deleted every character outside
+ * printable ASCII: emoji vanished, "Refund of Rs.250" lost its rupee sign, and
+ * a title written in Hindi normalised to the empty string and shipped as a
+ * blank notification.
+ *
+ * It also tried to repair cp1252 mojibake at runtime by guessing, and the guess
+ * damaged correct text. That repair now happens once, at rest, in the source
+ * literals themselves.
+ *
+ * What remains is what actually needs doing: strip control and formatting
+ * characters (which can break rendering or spoof text direction), collapse runs
+ * of whitespace, and bound the length.
+ */
+const normalizeNotificationText = (value, maxLength = MAX_BODY_LENGTH) => {
     const raw = sanitizeString(value);
     if (!raw) return '';
 
-    const repaired = (() => {
-        // Typical mojibake markers when UTF-8 is decoded as latin1/cp1252.
-        if (!/[ðÃÂâ]/.test(raw)) return raw;
-        try {
-            const decoded = Buffer.from(raw, 'latin1').toString('utf8');
-            if (decoded && !decoded.includes('�')) return decoded;
-            return decoded || raw;
-        } catch {
-            return raw;
-        }
-    })();
-
-    return repaired
-        // Remove leading module prefix if any sender still adds it.
-        .replace(/^\s*(?:\p{Extended_Pictographic}\s*)?\[(user|shop|restaurant|delivery|admin|rider)\]\s*/iu, '')
-        // Remove replacement-char mojibake tails like "�x}0".
-        .replace(/�[A-Za-z0-9{}[\]\\/_.:-]*/g, ' ')
-        // Remove remaining control chars and collapse spaces.
-        .replace(/[\u0000-\u001F\u007F]/g, ' ')
-        // Force plain text for notifications.
-        .replace(/[^\x20-\x7E]/g, ' ')
+    const cleaned = raw
+        // Strip a leading module prefix if any sender still adds one.
+        .replace(/^\s*(?:\p{Extended_Pictographic}️?\s*)?\[(user|shop|restaurant|delivery|admin|rider)\]\s*/iu, '')
+        // Control and formatting characters, including bidi overrides.
+        .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+
+    if (cleaned.length <= maxLength) return cleaned;
+    // Slice by code points so truncation cannot split a surrogate pair.
+    return [...cleaned].slice(0, maxLength - 1).join('').trimEnd() + '…';
 };
 
 const toBase64Url = (input) =>
@@ -164,10 +174,22 @@ const normalizeDataMap = (data = {}) => {
 };
 
 const buildMessagePayload = (payload = {}, token) => {
-    const notification = {
-        title: normalizeNotificationText(payload.title || payload.notification?.title || 'New notification'),
-        body: normalizeNotificationText(payload.body || payload.notification?.body || '')
-    };
+    // Fall back AFTER normalising, not before. Previously the default was
+    // applied to the input, so a title that survived the truthiness check but
+    // normalised to empty produced a genuinely blank notification instead of
+    // falling back. `message` is accepted as an alias for `body` because the
+    // inbox model uses that name and callers reasonably reuse the same object.
+    const title = normalizeNotificationText(
+        payload.title || payload.notification?.title,
+        MAX_TITLE_LENGTH,
+    ) || 'New notification';
+
+    const body = normalizeNotificationText(
+        payload.body || payload.message || payload.notification?.body,
+        MAX_BODY_LENGTH,
+    );
+
+    const notification = { title, body };
     const data = normalizeDataMap(payload.data || {});
     if (data.title) data.title = normalizeNotificationText(data.title);
     if (data.body) data.body = normalizeNotificationText(data.body);

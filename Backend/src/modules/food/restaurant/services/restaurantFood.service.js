@@ -223,7 +223,7 @@ export async function createRestaurantFood(restaurantId, body = {}) {
     try {
         const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
         void notifyAdminsSafely({
-            title: 'New Product Approval Request ðŸ”',
+            title: 'New Product Approval Request 🍔',
             body: `Restaurant has submitted a new item "${doc.name}" for approval.`,
             data: {
                 type: 'approval_request',
