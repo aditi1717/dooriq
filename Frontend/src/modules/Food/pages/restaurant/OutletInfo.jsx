@@ -78,6 +78,19 @@ export default function OutletInfo() {
     zoneId: "",
   })
   const [savingAddress, setSavingAddress] = useState(false)
+  /**
+   * Google renders the Places dropdown as `.pac-container` on <body>, outside
+   * this dialog's DOM subtree. Radix therefore treats clicking a suggestion as
+   * an interaction outside the dialog and closes it before `place_changed`
+   * fires — so picking an address dismissed the form instead of filling it in.
+   */
+  const keepDialogOpenForPlaces = (event) => {
+    const target = event?.detail?.originalEvent?.target ?? event?.target
+    if (target instanceof Element && target.closest(".pac-container")) {
+      event.preventDefault()
+    }
+  }
+
   const [locationSearchValue, setLocationSearchValue] = useState("")
   const [locationSuggestions, setLocationSuggestions] = useState([])
   const [isSearchingLocation, setIsSearchingLocation] = useState(false)
@@ -2118,7 +2131,12 @@ export default function OutletInfo() {
       ) : null}
 
       <Dialog open={showEditAddressDialog} onOpenChange={setShowEditAddressDialog}>
-        <DialogContent className="sm:max-w-lg lg:max-w-2xl p-0 overflow-hidden rounded-xl w-[92%]">
+        <DialogContent
+          className="sm:max-w-lg lg:max-w-2xl p-0 overflow-hidden rounded-xl w-[92%]"
+          onPointerDownOutside={keepDialogOpenForPlaces}
+          onInteractOutside={keepDialogOpenForPlaces}
+          onFocusOutside={keepDialogOpenForPlaces}
+        >
           <DialogHeader className="p-4 border-b border-gray-100">
             <DialogTitle className="text-lg font-bold">Edit address details</DialogTitle>
           </DialogHeader>
