@@ -368,6 +368,31 @@ export async function getOrderByIdDeliveryController(req, res, next) {
     }
 }
 
+export async function getOrderRouteUserController(req, res, next) {
+    try {
+        const userId = req.user?.userId;
+        const orderId = req.params.orderId;
+        const result = await orderService.getOrderRoute(orderId, { userId });
+        return sendResponse(res, 200, 'Route retrieved', result);
+    } catch (err) {
+        next(err);
+    }
+}
+
+export async function getOrderRouteDeliveryController(req, res, next) {
+    try {
+        const deliveryPartnerId = req.user?.userId;
+        const orderId = req.params.orderId;
+        const lat = Number(req.query.lat);
+        const lng = Number(req.query.lng);
+        const origin = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : undefined;
+        const result = await orderService.getOrderRoute(orderId, { deliveryPartnerId, origin });
+        return sendResponse(res, 200, 'Route retrieved', result);
+    } catch (err) {
+        next(err);
+    }
+}
+
 
 export async function getPaymentStatusController(req, res, next) {
     try {
