@@ -681,6 +681,22 @@ export async function tryAutoAssign(orderId, options = {}) {
               pickupLat: payload.restaurantLocation?.lat != null ? String(payload.restaurantLocation.lat) : '',
               pickupLng: payload.restaurantLocation?.lng != null ? String(payload.restaurantLocation.lng) : '',
               acceptTimeoutSeconds: String(config.offerCountdownSeconds || ''),
+
+              // Aliases for the delivery app's notification builder, which
+              // reads pickupAddress / dropAddress / price / distance. It has
+              // never received those keys, so every rider offer rendered as
+              // "From: Restaurant / To: Customer / Earnings: Rs | Dist: km" —
+              // the placeholder defaults — which is what riders reported as a
+              // blank notification.
+              //
+              // Sent in addition to the canonical names rather than instead of
+              // them, so app builds old and new both work and this needs no
+              // coordinated release. Remove once every installed client reads
+              // the canonical keys.
+              pickupAddress: payload.restaurantAddress || '',
+              dropAddress: payload.customerAddress || '',
+              price: payload.riderEarning != null ? String(payload.riderEarning) : '',
+              distance: payload.tripDistanceKm != null ? String(payload.tripDistanceKm) : '',
             },
           }
         );

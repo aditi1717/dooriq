@@ -29,6 +29,25 @@ let cachedAccessTokenExpiryMs = 0;
 let cachedServiceAccount = null;
 
 const sanitizeString = (value) => String(value ?? '').trim();
+
+/**
+ * Android drops a notification addressed to a channel the app never created,
+ * so this value is a contract with the three Flutter clients, not a free
+ * choice. It was previously hardcoded to 'default', which only the restaurant
+ * app creates — the user and delivery apps do not, so their notifications were
+ * being addressed to a channel that does not exist on the device.
+ *
+ * `high_importance_channel` is the one id all three apps create at runtime:
+ *
+ *   user        high_importance_channel
+ *   restaurant  default, high_importance_channel, new_order_channel_v3
+ *   delivery    orders_channel, high_importance_channel, incoming_orders_channel_v4
+ *
+ * Override per message with `payload.androidChannelId` when a caller wants a
+ * more specific channel, and check the app actually creates it first.
+ */
+const DEFAULT_ANDROID_CHANNEL = 'high_importance_channel';
+
 /** FCM caps a message at 4KB; these keep one field from consuming it. */
 const MAX_TITLE_LENGTH = 200;
 const MAX_BODY_LENGTH = 1000;
@@ -230,7 +249,7 @@ const buildMessagePayload = (payload = {}, token) => {
         : {
             priority: 'high',
             notification: {
-                channel_id: 'default',
+                channel_id: sanitizeString(payload.androidChannelId) || DEFAULT_ANDROID_CHANNEL,
                 // sound: 'default',
                 default_vibrate_timings: true,
                 default_light_settings: true
