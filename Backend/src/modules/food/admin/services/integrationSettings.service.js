@@ -85,7 +85,7 @@ export const setGoogleMapsApiKey = async (apiKey, adminId = null) => {
         { upsert: true, new: true, setDefaultsOnInsert: true },
     );
 
-    integrationCache.del(CACHE_KEY);
+    integrationCache.delete(CACHE_KEY);
     logger.info(
         value
             ? `Google Maps API key updated by admin ${adminId || 'unknown'} (${maskSecret(value)})`
@@ -96,4 +96,4 @@ export const setGoogleMapsApiKey = async (apiKey, adminId = null) => {
 };
 
 /** Exposed so a caller can force a re-read after an external change. */
-export const invalidateIntegrationCache = () => integrationCache.del(CACHE_KEY);
+export const invalidateIntegrationCache = () => integrationCache.delete(CACHE_KEY);
