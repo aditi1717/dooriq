@@ -28,7 +28,7 @@ const deliveryAddressSchema = new mongoose.Schema(
         zipCode: { type: String, default: '', trim: true },
         phone: { type: String, default: '', trim: true },
         location: {
-            type: { type: String, enum: ['Point'], default: 'Point' },
+            type: { type: String, enum: ['Point'] },
             coordinates: { type: [Number], default: undefined }
         }
     },

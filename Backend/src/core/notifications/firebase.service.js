@@ -368,6 +368,9 @@ export const sendPushNotification = async (tokens, payload = {}) => {
     const results = await Promise.all(
         uniqueTokens.map(async (token) => {
             const message = buildMessagePayload(payload, token);
+            if (payload?.data?.type === 'new_order') {
+                logger.info(`[FCM debug] new_order message=${JSON.stringify(message)}`);
+            }
             try {
                 const response = await fetch(FCM_SEND_URL(projectId), {
                     method: 'POST',

@@ -437,16 +437,43 @@ export async function notifyRestaurantNewOrder(orderDoc) {
     }
 
     if (canExposeToRestaurant) {
+      const itemCount = Array.isArray(orderDoc.items)
+        ? orderDoc.items.reduce((n, it) => n + (it.quantity || 1), 0)
+        : 0;
+      const itemsList = Array.isArray(orderDoc.items)
+        ? orderDoc.items.map((it) => `${it.quantity || 1}x ${it.name}`).join(", ")
+        : "";
+      const address = [orderDoc.deliveryAddress?.street, orderDoc.deliveryAddress?.city]
+        .filter(Boolean)
+        .join(", ");
+
       await notifyOwnersSafely(
         [{ ownerType: "RESTAURANT", ownerId: orderDoc.restaurantId }],
         {
+          dataOnly: true,
           title: "New order received",
           body: `Order #${orderDoc.order_id || orderDoc._id} is waiting for review.`,
           data: {
             type: "new_order",
+            title: "New order received",
+            body: `Order #${orderDoc.order_id || orderDoc._id} is waiting for review.`,
             orderId: orderDoc._id.toString(),
             orderMongoId: orderDoc._id?.toString?.() || "",
+            orderDisplayId: orderDoc.order_id || "",
             link: `/restaurant/orders/${orderDoc._id?.toString?.() || ""}`,
+            customerName: orderDoc.customerName || "",
+            address,
+            itemCount: String(itemCount),
+            itemsList,
+            total: orderDoc.pricing?.total != null ? String(orderDoc.pricing.total) : "",
+            paymentMethod: orderDoc.payment?.method || "",
+            acceptanceDeadlineAt: orderDoc.acceptanceDeadlineAt
+              ? new Date(orderDoc.acceptanceDeadlineAt).toISOString()
+              : "",
+            acceptTimeoutSeconds:
+              orderDoc.acceptanceWindowSeconds != null
+                ? String(orderDoc.acceptanceWindowSeconds)
+                : "",
           },
         },
       );
