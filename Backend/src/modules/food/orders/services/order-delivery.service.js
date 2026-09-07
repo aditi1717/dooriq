@@ -42,6 +42,7 @@ import {
   isCodOrder,
   extractOrderPayableAmount,
 } from './order.helpers.js';
+import { settleUserReferralSafely } from '../../../../core/referrals/referral.service.js';
 
 const TERMINAL_ORDER_STATUSES = [
   'delivered',
@@ -1173,6 +1174,10 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
   } catch (err) {
     logger.warn(`completeDelivery award coins failed: ${err?.message || err}`);
   }
+
+  // A referral is earned by a completed order, not by a registration. No-op
+  // unless this user signed up with a code and has not qualified before.
+  await settleUserReferralSafely(order.userId, order._id);
 
   await awardCashbackForOrder(order.userId, order);
 

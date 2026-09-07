@@ -55,6 +55,7 @@ import {
   isStatusAdvance,
   checkRestaurantOpenStatus,
 } from './order.helpers.js';
+import { settleUserReferralSafely } from '../../../../core/referrals/referral.service.js';
 
 
 
@@ -1853,6 +1854,9 @@ export async function updateOrderStatusRestaurant(
     } catch (err) {
       logger.warn(`updateOrderStatusRestaurant delivered transaction sync failed: ${err?.message || err}`);
     }
+
+    // Same rule as the rider completion path: settle on a completed order.
+    await settleUserReferralSafely(order.userId, order._id);
 
     try {
       await userWalletService.awardCoinsForOrder(order.userId, order._id);
