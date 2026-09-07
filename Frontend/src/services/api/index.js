@@ -861,6 +861,25 @@ export const adminAPI = {
     apiClient.put("/food/admin/dispatch-settings", body ?? {}, { contextModule: "admin" }),
 
 
+  /** Integrations — third-party credentials set from the admin panel. */
+
+  /** Status only: whether a key is set, where it came from, last 4 chars. */
+  getGoogleMapsIntegration: () =>
+    apiClient.get("/food/admin/integrations/google-maps", { contextModule: "admin" }),
+
+  /** Save a key, or send an empty string to fall back to the server env var. */
+  updateGoogleMapsIntegration: (apiKey) =>
+    apiClient.put("/food/admin/integrations/google-maps", { apiKey }, { contextModule: "admin" }),
+
+  /** Verify a key against Google before saving it. Omit to test the live one. */
+  testGoogleMapsIntegration: (apiKey) =>
+    apiClient.post(
+      "/food/admin/integrations/google-maps/test",
+      apiKey ? { apiKey } : {},
+      { contextModule: "admin" },
+    ),
+
+
   /** Offers & Coupons (admin) */
   /** GET /admin/offers/:id/usage — customers who redeemed a coupon. */
   getOfferUsage: (offerId, params = {}) =>

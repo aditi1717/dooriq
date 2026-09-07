@@ -146,6 +146,7 @@ export const adminSidebarMenu = [
     label: "DELIVERYMAN MANAGEMENT",
     items: [
       { type: "link", label: "Order Broadcast Settings", path: "/admin/food/dispatch-settings", icon: "Radio" },
+      { type: "link", label: "Integrations", path: "/admin/food/integrations", icon: "KeyRound" },
       { type: "link", label: "Delivery & Platform Fee", path: "/admin/food/fee-settings", icon: "DollarSign" },
       { type: "link", label: "Delivery Cash Limit", path: "/admin/food/delivery-cash-limit", icon: "Wallet" },
       { type: "link", label: "Cash Limit Settlement", path: "/admin/food/cash-limit-settlement", icon: "Receipt" },

@@ -16,6 +16,7 @@ import {
   Plus,
   Utensils,
   Radio,
+  KeyRound,
   Megaphone,
   ChevronDown,
   ChevronRight,
@@ -65,6 +66,7 @@ const debugError = (...args) => {}
 const iconMap = {
   LayoutDashboard,
   Radio,
+  KeyRound,
   UtensilsCrossed,
   Building2,
   FileText,

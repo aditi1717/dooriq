@@ -56,6 +56,7 @@ const PATH_PREFIX_TO_SECTION = [
   { prefix: "/admin/food/feature-settings", section: "system_settings" },
   // Matches the backend resolver, which maps /dispatch-settings to system_settings.
   { prefix: "/admin/food/dispatch-settings", section: "system_settings" },
+  { prefix: "/admin/food/integrations", section: "system_settings" },
   { prefix: "/admin/food/power-scanning", section: "system_settings" },
   { prefix: "/admin/food/business-setup", section: "system_settings" },
   { prefix: "/admin/food/broadcast-notification", section: "system_settings" },
