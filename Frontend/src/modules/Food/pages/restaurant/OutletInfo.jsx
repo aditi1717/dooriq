@@ -677,8 +677,11 @@ export default function OutletInfo() {
               containers.forEach((container) => {
                 container.style.zIndex = "999999"
                 container.style.pointerEvents = "auto"
-                container.style.visibility = "visible"
-                container.style.display = "block"
+                // Deliberately NOT forcing display/visibility here.
+                // Google hides .pac-container by setting display:none when
+                // there are no predictions or the input blurs; overriding that
+                // pinned an empty "powered by Google" box on screen, which
+                // then outlived the dialog that opened it.
               })
             }
           }
@@ -705,6 +708,12 @@ export default function OutletInfo() {
         locationSearchInputRef.current.removeAttribute("data-google-places-initialized")
       }
       placesAutocompleteRef.current = null
+
+      // Google appends .pac-container to <body>, outside this dialog's subtree,
+      // so it is not unmounted with the dialog and would otherwise linger over
+      // the page. The next open builds a fresh Autocomplete (listeners cleared
+      // and the init attribute removed above), which creates its own container.
+      document.querySelectorAll(".pac-container").forEach((el) => el.remove())
     }
   }, [showEditAddressDialog])
 

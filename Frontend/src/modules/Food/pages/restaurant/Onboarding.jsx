@@ -2451,8 +2451,11 @@ export default function RestaurantOnboarding() {
               containers.forEach((container) => {
                 container.style.zIndex = "999999"
                 container.style.pointerEvents = "auto"
-                container.style.visibility = "visible"
-                container.style.display = "block"
+                // Deliberately NOT forcing display/visibility here.
+                // Google hides .pac-container by setting display:none when
+                // there are no predictions or the input blurs; overriding that
+                // pinned an empty "powered by Google" box on screen, which
+                // then outlived the dialog that opened it.
               })
             }
           }
