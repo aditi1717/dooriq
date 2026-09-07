@@ -76,7 +76,28 @@ const paymentSchema = new mongoose.Schema(
             ],
             default: 'cod_pending'
         },
+        /**
+         * What still has to be collected by `method`. With a wallet portion
+         * applied this is the remainder, not the order total — which is why the
+         * Razorpay and QR paths, which already charge `amountDue`, need no
+         * change to support split payment.
+         */
         amountDue: { type: Number, min: 0 },
+
+        /**
+         * The wallet portion of a split payment.
+         *
+         * `method` above always describes how the *remainder* is collected, so
+         * an order paid Rs 100 wallet + Rs 400 card has method 'razorpay',
+         * amountDue 400 and wallet.amount 100. An order settled entirely from
+         * wallet keeps method 'wallet' and amountDue 0, which is the shape that
+         * existed before split payment.
+         */
+        wallet: {
+            amount: { type: Number, min: 0, default: 0 },
+            debitedAt: { type: Date, default: null },
+            refundedAt: { type: Date, default: null },
+        },
         razorpay: {
             orderId: { type: String },
             paymentId: { type: String },

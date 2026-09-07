@@ -78,6 +78,13 @@ export function validateCreateOrderDto(body) {
         sendCutlery: z.boolean().optional(),
         // 'razorpay_qr' means COD-style flow, but payment is collected via Razorpay QR at delivery.
         paymentMethod: z.enum(['cash', 'razorpay', 'razorpay_qr', 'card', 'wallet']),
+
+        // Split payment. `walletAmount` is what the client wants taken from
+        // wallet; the server clamps it to the admin cap, the balance and the
+        // order total, so a client cannot spend more than it should. Omitted or
+        // 0 means the order behaves exactly as it did before.
+        walletAmount: z.number().min(0).optional(),
+
         zoneId: z.string().nullable().optional()
     });
     const result = schema.safeParse(body);

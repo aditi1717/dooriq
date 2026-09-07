@@ -102,6 +102,51 @@ export function maxWalletUsableForOrder(orderTotal, settings = {}) {
  * payment exists; silently charging the full total would ignore the setting the
  * admin just configured.
  */
+/**
+ * Decide how much of an order comes out of the wallet.
+ *
+ * Clamped server-side against three independent ceilings, because the client
+ * is not trusted to enforce any of them: the admin cap, the user's actual
+ * balance, and the order total. The remainder is collected by the order's
+ * payment method.
+ *
+ * @returns {Promise<{ walletAmount: number, remainder: number }>}
+ */
+async function resolveWalletSplit({ userId, orderTotal, requestedWalletAmount, paymentMethod, settings }) {
+  const total = Math.round(Math.max(0, Number(orderTotal) || 0) * 100) / 100;
+
+  // Choosing 'wallet' as the method means "pay the whole thing from wallet",
+  // which is the pre-split behaviour and is what the cap check below governs.
+  if (String(paymentMethod).toLowerCase() === 'wallet') {
+    assertWalletUsageWithinLimit(total, settings);
+    return { walletAmount: total, remainder: 0 };
+  }
+
+  const requested = Number(requestedWalletAmount);
+  if (!Number.isFinite(requested) || requested <= 0) {
+    return { walletAmount: 0, remainder: total };
+  }
+
+  const cap = maxWalletUsableForOrder(total, settings);
+  const { balance } = await userWalletService.getUserWallet(userId);
+  const usable = Math.min(requested, cap, Number(balance) || 0, total);
+  const walletAmount = Math.floor(Math.max(0, usable) * 100) / 100;
+
+  if (walletAmount <= 0) {
+    return { walletAmount: 0, remainder: total };
+  }
+
+  const remainder = Math.round((total - walletAmount) * 100) / 100;
+
+  // A remainder of a few paise cannot be charged by any gateway, so absorb it
+  // into the wallet portion rather than creating an uncollectable order.
+  if (remainder > 0 && remainder < 1) {
+    return { walletAmount: total, remainder: 0 };
+  }
+
+  return { walletAmount, remainder };
+}
+
 function assertWalletUsageWithinLimit(orderTotal, settings = {}) {
   const total = Math.max(0, Number(orderTotal) || 0);
   const usable = maxWalletUsableForOrder(total, settings);
@@ -189,14 +234,70 @@ async function applyCancellationRefund(order, { cancelledBy = 'system', refundAm
   const paymentMethod = String(order.payment?.method || 'cash').toLowerCase();
   const paymentStatus = String(order.payment?.status || 'cod_pending').toLowerCase();
   const refundStatus = String(order.payment?.refund?.status || 'none').toLowerCase();
-  const amount = Number(refundAmount ?? order?.pricing?.total ?? order?.payment?.amountDue ?? 0);
+
+  // The wallet portion is refunded first and independently of the method
+  // below, because it has already left the customer's balance. Without this a
+  // cancelled split-paid cash order would return at `cash_payment` and quietly
+  // keep the wallet money: nothing was charged to refund, but something was
+  // debited.
+  const walletPortion = Number(order.payment?.wallet?.amount || 0);
+  const walletAlreadyRefunded = Boolean(order.payment?.wallet?.refundedAt);
+  let walletRefunded = 0;
+
+  if (walletPortion > 0 && order.payment?.wallet?.debitedAt && !walletAlreadyRefunded) {
+    try {
+      await userWalletService.refundWalletBalance(
+        order.userId,
+        walletPortion,
+        buildCancellationRefundDescription(order, cancelledBy),
+        { orderId: order._id, cancelledBy, portion: 'wallet' },
+      );
+      order.payment.wallet.refundedAt = new Date();
+      walletRefunded = walletPortion;
+      await order.save();
+    } catch (err) {
+      logger.error(
+        `Wallet portion refund failed for order ${order._id} (Rs ${walletPortion}): ${err?.message || err}`,
+      );
+    }
+  }
+
+  // Only the remainder is owed back through the payment method. Falling back to
+  // the order total here would over-refund a split payment.
+  const amount = Number(
+    refundAmount ?? order?.payment?.amountDue ?? order?.pricing?.total ?? 0,
+  );
 
   if (!Number.isFinite(amount) || amount <= 0) {
-    return { attempted: false, processed: false, reason: 'invalid_amount' };
+    // Nothing left to return through a gateway. If the wallet portion covered
+    // the whole order, it is now fully refunded and the order should say so —
+    // this is the path a fully wallet-paid order takes.
+    if (walletRefunded > 0) {
+      order.payment.status = 'refunded';
+      order.payment.refund = {
+        status: 'processed',
+        amount: walletRefunded,
+        processedAt: new Date(),
+      };
+      await order.save();
+      return {
+        attempted: true,
+        processed: true,
+        reason: 'wallet_portion_only',
+        method: 'wallet',
+        walletRefunded,
+      };
+    }
+    return { attempted: false, processed: false, reason: 'invalid_amount', walletRefunded };
   }
 
   if (paymentMethod === 'cash' || paymentMethod === 'cod') {
-    return { attempted: false, processed: false, reason: 'cash_payment' };
+    return {
+      attempted: walletRefunded > 0,
+      processed: walletRefunded > 0,
+      reason: 'cash_payment',
+      walletRefunded,
+    };
   }
 
   if (paymentStatus === 'refunded' || refundStatus === 'processed') {
@@ -724,7 +825,6 @@ export async function createOrder(userId, dto) {
     const businessSettings = await FoodBusinessSettings.findOne().lean();
     assertPaymentMethodEnabled(paymentMethod, businessSettings);
     const isCash = paymentMethod === "cash";
-    const isWallet = paymentMethod === "wallet";
     const isPayLater = paymentMethod === "pay_later";
 
     if (isCash) {
@@ -830,10 +930,28 @@ export async function createOrder(userId, dto) {
       normalizedPricing.total = Math.round(normalizedPricing.total * 100) / 100;
     }
 
+    // Split payment. `walletAmount` is what still has to be taken from the
+    // wallet; `remainder` is what `paymentMethod` collects. For an order with
+    // no wallet portion both of these collapse to the previous behaviour.
+    const { walletAmount: walletPortion, remainder: dueFromMethod } = await resolveWalletSplit({
+      userId,
+      orderTotal: normalizedPricing.total || 0,
+      requestedWalletAmount: dto.walletAmount,
+      paymentMethod,
+      settings: businessSettings,
+    });
+
+    const isFullyWalletPaid = dueFromMethod <= 0 && walletPortion > 0;
+
     const payment = {
       method: paymentMethod,
-      status: (isCash || isPayLater) ? "cod_pending" : isWallet ? "paid" : "created",
-      amountDue: normalizedPricing.total || 0,
+      // A fully wallet-paid order is settled the moment the debit succeeds.
+      // Otherwise the status describes how the remainder will be collected.
+      status: isFullyWalletPaid
+        ? "paid"
+        : (isCash || isPayLater) ? "cod_pending" : "created",
+      amountDue: dueFromMethod,
+      wallet: { amount: walletPortion, debitedAt: null, refundedAt: null },
       razorpay: {},
       qr: {},
     };
@@ -990,10 +1108,19 @@ export async function createOrder(userId, dto) {
       logger.warn(`Failed to enqueue acceptance timeout check: ${err?.message || err}`);
     });
 
-    if (isWallet) {
+    // Debit whatever share of this order the wallet is covering. This runs for
+    // a full wallet payment and for the wallet half of a split alike; the
+    // amount is the one the server resolved, never one the client supplied.
+    if (walletPortion > 0) {
       try {
-        assertWalletUsageWithinLimit(order.pricing.total, businessSettings);
-        await userWalletService.deductWalletBalance(userId, order.pricing.total, `Payment for order #${order.order_id || order._id}`, { orderId: order._id });
+        await userWalletService.deductWalletBalance(
+          userId,
+          walletPortion,
+          `Payment for order #${order.order_id || order._id}`,
+          { orderId: order._id, split: dueFromMethod > 0 },
+        );
+        order.payment.wallet.debitedAt = new Date();
+        await order.save();
       } catch (err) {
         await FoodOrder.deleteOne({ _id: order._id });
         await rollbackCouponUsage(couponReservation);
