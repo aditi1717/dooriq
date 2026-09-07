@@ -167,6 +167,23 @@
 .touch-none { touch-action: none; }
 .touch-pan-x { touch-action: pan-x; }
 
+/*
+ * Outlet info: give the page a readable column on desktop.
+ *
+ * The page was built mobile-first and had no width cap at all, so on a wide
+ * screen every label sat at one edge and its value at the other. The sticky
+ * header keeps its full-bleed bar (its contents are constrained in the JSX);
+ * every other top-level block is centred at a fixed measure.
+ */
+@media (min-width: 1024px) {
+  .outlet-info-page > *:not(.outlet-info-header) {
+    max-width: 64rem;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+}
+
 /* Google Places Autocomplete dropdown should overlay modals */
 .pac-container {
   z-index: 999999 !important;
