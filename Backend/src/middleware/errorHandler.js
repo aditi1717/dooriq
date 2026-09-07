@@ -15,6 +15,9 @@ const errorHandler = (err, req, res, next) => {
 
     res.status(statusCode).json({
         success: false,
+        // `message` mirrors `error` so clients reading either key (the mobile
+        // apps read `message`) surface the real reason instead of a generic one.
+        message,
         error: message
     });
 };

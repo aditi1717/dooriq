@@ -1120,8 +1120,8 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
 
   logger.info(`[DeliveryComplete] Order ${order._id} payment: ${payMethod}, status: ${prevPayStatus}`);
 
-  if (['cash', 'cod', 'cash_on_delivery'].includes(payMethod)) {
-    throw new ValidationError('Generate and verify the payment QR before completing this COD delivery');
+  if (['cash', 'cod', 'cash_on_delivery'].includes(payMethod) && prevPayStatus !== 'paid') {
+    throw new ValidationError('Collect the cash payment before completing this COD delivery');
   }
 
   if (payMethod === 'razorpay_qr') {

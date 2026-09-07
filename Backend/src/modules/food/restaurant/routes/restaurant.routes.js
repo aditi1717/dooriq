@@ -65,7 +65,16 @@ import {
 import * as orderController from '../../orders/controllers/order.controller.js';
 import { authMiddleware, optionalAuth } from '../../../../core/auth/auth.middleware.js';
 import { sendError } from '../../../../utils/response.js';
-import { getRestaurantFinanceController } from '../controllers/restaurantFinance.controller.js';
+import {
+    getRestaurantFinanceController,
+    getRestaurantSubscriptionInvoicesController
+} from '../controllers/restaurantFinance.controller.js';
+import {
+    getRestaurantMediaController,
+    uploadRestaurantCoverImageController,
+    uploadRestaurantGalleryImagesController,
+    deleteRestaurantGalleryImageController
+} from '../controllers/restaurantMedia.controller.js';
 
 import { cacheResponse, invalidateCache } from '../../../../middleware/cache.js';
 import { CACHE_PRESETS } from '../../../../middleware/httpCache.js';
@@ -89,7 +98,7 @@ const uploadFields = upload.fields([
 
 router.post('/register', uploadFields, registerRestaurantController);
 router.post('/unregistered', registerUnregisteredRestaurantController);
-router.post('/upload-attachment', upload.single('file'), uploadRestaurantAttachmentController);
+router.post('/upload-attachment', authMiddleware, upload.single('file'), uploadRestaurantAttachmentController);
 
 // Public: approved restaurants list (for user app)
 router.get('/restaurants', CACHE_PRESETS.catalog(), cacheResponse(300, 'restaurants'), listApprovedRestaurantsController);
@@ -172,6 +181,46 @@ router.post(
     },
     uploadRestaurantMenuImagesController
 );
+
+// Restaurant media (cover image + gallery) for the restaurant dashboard.
+// Every response returns the full media payload the app re-renders from.
+router.get('/media', authMiddleware, requireRestaurant, getRestaurantMediaController);
+router.post(
+    '/media/cover-image',
+    authMiddleware,
+    requireRestaurant,
+    upload.single('file'),
+    async (req, res, next) => {
+        await invalidateCache('restaurants:*');
+        await invalidateCache('restaurant_detail:*');
+        next();
+    },
+    uploadRestaurantCoverImageController
+);
+router.post(
+    '/media/gallery',
+    authMiddleware,
+    requireRestaurant,
+    upload.array('files', 10),
+    async (req, res, next) => {
+        await invalidateCache('restaurant_detail:*');
+        next();
+    },
+    uploadRestaurantGalleryImagesController
+);
+router.delete(
+    '/media/gallery',
+    authMiddleware,
+    requireRestaurant,
+    async (req, res, next) => {
+        await invalidateCache('restaurant_detail:*');
+        next();
+    },
+    deleteRestaurantGalleryImageController
+);
+
+// Subscription billing history, rolled up per month for the payouts screen.
+router.get('/subscription/invoices', authMiddleware, requireRestaurant, getRestaurantSubscriptionInvoicesController);
 
 // Categories (restaurant dashboard). Read-only for item creation, CRUD for Menu Categories page.
 router.get('/categories', authMiddleware, requireRestaurant, listCategoriesController);
