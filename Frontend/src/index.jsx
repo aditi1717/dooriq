@@ -7,6 +7,31 @@ import './shared/styles/global.css'
 import { setupSmoothScroll } from './shared/utils/smoothScroll.js'
 import { getGoogleMapsApiKey } from './modules/Food/utils/googleMapsApiKey.js'
 
+// Recover from a stale tab after a deploy.
+//
+// Routes are lazy-loaded, so a tab opened before a release still holds the old
+// chunk graph and asks for filenames the new build does not contain. Vite fires
+// `vite:preloadError` for exactly this. Reloading picks up the current
+// index.html and its chunk map.
+//
+// Guarded by sessionStorage so a genuine, permanent 404 cannot put the tab in a
+// reload loop: one attempt per tab, then the error is left to surface.
+window.addEventListener('vite:preloadError', (event) => {
+  const RELOAD_FLAG = 'dooriq:chunk-reload'
+  let alreadyTried = false
+  try { alreadyTried = sessionStorage.getItem(RELOAD_FLAG) === '1' } catch { /* private mode */ }
+  if (alreadyTried) return
+  try { sessionStorage.setItem(RELOAD_FLAG, '1') } catch { /* ignore */ }
+  event.preventDefault()
+  window.location.reload()
+})
+
+// A successful load means the tab is current; clear the guard so a future
+// deploy can recover this tab too.
+window.addEventListener('load', () => {
+  try { sessionStorage.removeItem('dooriq:chunk-reload') } catch { /* ignore */ }
+})
+
 // Warm the Maps browser key before any map mounts. The Maps loader hook needs
 // the key synchronously at mount, so components read it via
 // getGoogleMapsApiKeySync(); this one fetch is what makes that value the
