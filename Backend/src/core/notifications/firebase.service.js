@@ -211,26 +211,44 @@ const buildMessagePayload = (payload = {}, token) => {
         message.data = data;
     }
 
-    message.android = {
-        priority: 'high',
-        notification: {
-            channel_id: 'default',
-            // sound: 'default',
-            default_vibrate_timings: true,
-            default_light_settings: true
-        }
-    };
+    // The platform blocks must respect dataOnly as well.
+    //
+    // An `android.notification` block is itself enough to make FCM render a
+    // system notification, whether or not a top-level `notification` block
+    // exists. Sending one on a data-only message produced a notification built
+    // from channel_id, vibration and lights — with no title and no body — which
+    // is exactly the blank notification riders were seeing on `new_order`.
+    // Web looked fine at the same time, because `webpush.notification` did
+    // carry the text, which is why the symptom appeared platform-specific.
+    //
+    // On a data-only message the app builds its own notification from `data`,
+    // so `android.priority` still matters (it governs delivery, and these are
+    // time-critical delivery offers) while the notification blocks must not be
+    // present at all.
+    message.android = payload.dataOnly
+        ? { priority: 'high' }
+        : {
+            priority: 'high',
+            notification: {
+                channel_id: 'default',
+                // sound: 'default',
+                default_vibrate_timings: true,
+                default_light_settings: true
+            }
+        };
 
-    message.webpush = {
-        headers: {
-            Urgency: 'high'
-        },
-        notification: {
-            title: notification.title,
-            body: notification.body,
-            icon: image || payload.icon || '/favicon.ico'
-        }
-    };
+    message.webpush = payload.dataOnly
+        ? { headers: { Urgency: 'high' } }
+        : {
+            headers: {
+                Urgency: 'high'
+            },
+            notification: {
+                title: notification.title,
+                body: notification.body,
+                icon: image || payload.icon || '/favicon.ico'
+            }
+        };
 
     return message;
 };
