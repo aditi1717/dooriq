@@ -654,12 +654,34 @@ export async function tryAutoAssign(orderId, options = {}) {
 
     if (pushTargets.length > 0) {
       try {
+        const orderDisplayId = order.order_id || order._id.toString();
+        const pushTitle = 'New order available!';
+        const pushBody = `Order #${orderDisplayId} is available. You have ${config.offerCountdownSeconds} seconds to accept!`;
         await notifyOwnersSafely(
           pushTargets,
           {
-            title: 'New order available!',
-            body: `Order #${order.order_id || order._id} is available. You have ${config.offerCountdownSeconds} seconds to accept!`,
-            data: { type: 'new_order', orderId: order._id.toString() },
+            title: pushTitle,
+            body: pushBody,
+            dataOnly: true,
+            data: {
+              type: 'new_order',
+              title: pushTitle,
+              body: pushBody,
+              orderId: order._id.toString(),
+              orderMongoId: order._id.toString(),
+              orderDisplayId,
+              restaurantName: payload.restaurantName || '',
+              restaurantAddress: payload.restaurantAddress || '',
+              customerAddress: payload.customerAddress || '',
+              tripDistanceKm: payload.tripDistanceKm != null ? String(payload.tripDistanceKm) : '',
+              tripDurationMins: payload.tripDurationMins != null ? String(payload.tripDurationMins) : '',
+              riderEarning: payload.riderEarning != null ? String(payload.riderEarning) : '',
+              paymentMethod: payload.paymentMethod || '',
+              total: payload.total != null ? String(payload.total) : '',
+              pickupLat: payload.restaurantLocation?.lat != null ? String(payload.restaurantLocation.lat) : '',
+              pickupLng: payload.restaurantLocation?.lng != null ? String(payload.restaurantLocation.lng) : '',
+              acceptTimeoutSeconds: String(config.offerCountdownSeconds || ''),
+            },
           }
         );
       } catch (err) {

@@ -179,6 +179,10 @@ const restaurantSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    galleryImages: {
+      type: [String],
+      default: [],
+    },
     profileImage: {
       type: String,
     },

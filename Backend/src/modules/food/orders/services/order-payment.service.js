@@ -424,14 +424,17 @@ export async function switchToCash(orderId, deliveryPartnerId) {
     throw new ForbiddenError('Not your order');
   }
 
-  // Reset payment method to cash in FoodTransaction
+  // This is the rider's "cash collected" confirmation (the only caller is
+  // POST /collect/cash), not just a QR->cash mode switch — so it must mark
+  // the order paid, or completeDelivery's cash-payment check never clears
+  // and the rider gets stuck being asked to collect payment forever.
   await FoodTransaction.updateOne(
     { orderId: order._id },
     {
       $set: {
         paymentMethod: 'cash',
         'payment.method': 'cash',
-        'payment.status': 'cod_pending',
+        'payment.status': 'paid',
         'payment.qr': {} // Clear QR info
       }
     }
@@ -442,7 +445,7 @@ export async function switchToCash(orderId, deliveryPartnerId) {
     {
       $set: {
         'payment.method': 'cash',
-        'payment.status': 'cod_pending',
+        'payment.status': 'paid',
         'payment.qr': {},
       },
     },
@@ -450,11 +453,11 @@ export async function switchToCash(orderId, deliveryPartnerId) {
 
   await foodTransactionService.updateTransactionStatus(
     order._id,
-    'cod_switched_to_cash',
+    'cod_collected',
     {
       recordedByRole: 'DELIVERY_PARTNER',
       recordedById: deliveryPartnerId,
-      note: 'Rider switched from QR to Cash collection',
+      note: 'Rider collected cash from customer',
     }
   );
 
