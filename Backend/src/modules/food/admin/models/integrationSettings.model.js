@@ -29,6 +29,18 @@ const integrationSettingsSchema = new mongoose.Schema(
              * deployment that has never opened the admin screen.
              */
             apiKey: { type: String, default: '' },
+
+            /**
+             * Browser key for the React apps. Separate from `apiKey` because
+             * the two must carry different Google restrictions: the server key
+             * is restricted by IP, and a browser key by HTTP referrer. A
+             * referrer-restricted key is rejected on server-to-server calls,
+             * and an IP-restricted key is useless in a browser — so one key
+             * cannot serve both. This one is delivered to clients and is
+             * public by design; referrer restriction is what protects it.
+             */
+            browserKey: { type: String, default: '' },
+
             updatedAt: { type: Date, default: null },
             updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodAdmin', default: null },
         },

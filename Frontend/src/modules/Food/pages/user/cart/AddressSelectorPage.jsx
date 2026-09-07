@@ -14,13 +14,14 @@ import AnimatedPage from "@food/components/user/AnimatedPage"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { isModuleAuthenticated } from "@food/utils/auth"
 import { MAPS_LIBRARIES } from "@food/utils/googleMapsLoader"
+import { getGoogleMapsApiKeySync } from "@food/utils/googleMapsApiKey"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 // Enable Maps if API Key is available, otherwise fallback to coordinates-only mode
-const MAPS_ENABLED = !!import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+const MAPS_ENABLED = !!getGoogleMapsApiKeySync()
 
 // Calculate distance between two coordinates using Haversine formula
 function calculateDistance(lat1, lon1, lat2, lon2) {

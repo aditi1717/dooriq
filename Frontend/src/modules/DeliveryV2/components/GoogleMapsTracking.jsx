@@ -6,6 +6,7 @@ const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 import bikeLogo from '../../Food/assets/bikelogo.png'
 import { MAPS_LIBRARIES, MAPS_SCRIPT_ID } from '@food/utils/googleMapsLoader';
+import { getGoogleMapsApiKeySync } from "@food/utils/googleMapsApiKey"
 
 
 /**
@@ -67,7 +68,7 @@ export default function GoogleMapsTracking({
   onRouteInfoUpdate,
   lastUpdate
 }) {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+  const apiKey = getGoogleMapsApiKeySync()
   const mapRef = useRef(null)
   const directionsServiceRef = useRef(null)
   const directionsRendererRef = useRef(null)

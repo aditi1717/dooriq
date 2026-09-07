@@ -11,6 +11,7 @@ import {
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { zoneAPI } from '@food/api';
 import { MAPS_LIBRARIES, MAPS_SCRIPT_ID } from '@food/utils/googleMapsLoader';
+import { getGoogleMapsApiKeySync } from "@food/utils/googleMapsApiKey"
 
 const mapContainerStyle = {
   width: '100%',
@@ -56,7 +57,7 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
   const { riderLocation, activeOrder, tripStatus } = useDeliveryStore();
   
   const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    googleMapsApiKey: getGoogleMapsApiKeySync(),
     libraries: MAPS_LIBRARIES,
     id: MAPS_SCRIPT_ID,
   });

@@ -10,6 +10,7 @@ import { subscribeDeliveryLocation, subscribeOrderTracking } from '@food/realtim
 import { Navigation } from 'lucide-react';
 import { MAPS_SCRIPT_ID } from '@food/utils/googleMapsLoader';
 import { buildVisibleRouteFromRiderPosition, decodePolyline } from '@food/utils/liveTrackingPolyline';
+import { getGoogleMapsApiKeySync } from "@food/utils/googleMapsApiKey"
 
 const LOCATION_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -140,7 +141,7 @@ const DeliveryTrackingMap = ({
   const hasFitBoundsRef = useRef(false);
 
   const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    googleMapsApiKey: getGoogleMapsApiKeySync(),
     libraries: MAP_LIBRARIES,
     id: MAPS_SCRIPT_ID,
   });

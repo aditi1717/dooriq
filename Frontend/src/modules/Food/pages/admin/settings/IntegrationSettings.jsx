@@ -29,6 +29,8 @@ export default function IntegrationSettings() {
   const [testing, setTesting] = useState(false);
   const [status, setStatus] = useState(null);
   const [apiKey, setApiKey] = useState("");
+  const [browserKey, setBrowserKey] = useState("");
+  const [savingBrowser, setSavingBrowser] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
   const load = useCallback(async () => {
@@ -96,6 +98,20 @@ export default function IntegrationSettings() {
       toast.error(error?.response?.data?.message || "Failed to clear the key.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveBrowserKey = async (value) => {
+    setSavingBrowser(true);
+    try {
+      const res = await adminAPI.updateGoogleMapsIntegration(value, "browserKey");
+      setStatus(res?.data?.data ?? res?.data ?? null);
+      setBrowserKey("");
+      toast.success(value ? "Browser key saved." : "Browser key cleared.");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to save the browser key.");
+    } finally {
+      setSavingBrowser(false);
     }
   };
 
@@ -244,6 +260,90 @@ export default function IntegrationSettings() {
             </button>
           ) : null}
         </div>
+      </section>
+
+      <section className="mt-5 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Google Maps — browser key</h2>
+            <p className="mt-0.5 text-sm text-gray-600">
+              Used by the maps you see in this panel, and by the customer and restaurant
+              web apps. This must be a <strong>different</strong> key from the one above.
+            </p>
+          </div>
+          <span
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
+              status?.browserConfigured ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+            }`}
+          >
+            {status?.browserConfigured ? "Configured" : "Using build-time value"}
+          </span>
+        </div>
+
+        <dl className="mb-5 grid gap-3 rounded-md bg-gray-50 p-3 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-gray-500">Current key</dt>
+            <dd className="mt-0.5 font-mono text-gray-900">{status?.browserMaskedKey || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-gray-500">Source</dt>
+            <dd className="mt-0.5 text-gray-900">
+              {status?.browserSource === "database"
+                ? "Set here, in the admin panel"
+                : "Falling back to VITE_GOOGLE_MAPS_API_KEY from the build"}
+            </dd>
+          </div>
+        </dl>
+
+        <label htmlFor="gmaps-browser-key" className="block text-sm font-medium text-gray-900">
+          New browser key
+        </label>
+        <input
+          id="gmaps-browser-key"
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+          value={browserKey}
+          onChange={(e) => setBrowserKey(e.target.value)}
+          placeholder="Referrer-restricted key for dooriq.in"
+          className="mt-1.5 w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+        />
+        <p className="mt-1.5 flex items-start gap-1.5 text-xs text-gray-500">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Restrict this one by <strong>HTTP referrer</strong> (<code>dooriq.in/*</code>),
+            and enable Maps JavaScript API and Places API on it. It is delivered to
+            browsers and is visible in page source — that is normal, and the referrer
+            restriction is what protects it. Do not paste the server key here.
+          </span>
+        </p>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => saveBrowserKey(browserKey.trim())}
+            disabled={savingBrowser || !browserKey.trim()}
+            className="inline-flex items-center gap-2 rounded-md bg-gray-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {savingBrowser ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save browser key
+          </button>
+          {status?.browserSource === "database" ? (
+            <button
+              type="button"
+              onClick={() => saveBrowserKey("")}
+              disabled={savingBrowser}
+              className="ml-auto inline-flex items-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              Clear browser key
+            </button>
+          ) : null}
+        </div>
+
+        <p className="mt-4 rounded-md bg-blue-50 p-3 text-xs text-blue-900">
+          After changing this, users need one page reload before the new key is used —
+          the key is fetched once at app start.
+        </p>
       </section>
     </div>
   );

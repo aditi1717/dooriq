@@ -25,13 +25,22 @@ export const maskSecret = (value) => {
     return `${'*'.repeat(Math.min(raw.length - 4, 32))}${raw.slice(-4)}`;
 };
 
-const loadGoogleMapsKey = async () => {
+const loadGoogleMapsKeys = async () => {
     const doc = await FoodIntegrationSettings.findOne().select('googleMaps').lean();
-    const fromDb = String(doc?.googleMaps?.apiKey || '').trim();
-    if (fromDb) return { key: fromDb, source: 'database' };
 
-    const fromEnv = String(config.googleMapsApiKey || '').trim();
-    return { key: fromEnv, source: fromEnv ? 'environment' : 'unset' };
+    const serverDb = String(doc?.googleMaps?.apiKey || '').trim();
+    const serverEnv = String(config.googleMapsApiKey || '').trim();
+
+    // The browser key falls back to the server key only when nothing else is
+    // set, because a half-configured deployment showing a broken map is worse
+    // than one reusing a key. Google will reject it if its restrictions do not
+    // permit browser use, and the admin screen says so explicitly.
+    const browserDb = String(doc?.googleMaps?.browserKey || '').trim();
+
+    return {
+        server: { key: serverDb || serverEnv, source: serverDb ? 'database' : (serverEnv ? 'environment' : 'unset') },
+        browser: { key: browserDb, source: browserDb ? 'database' : 'unset' },
+    };
 };
 
 /**
@@ -40,8 +49,8 @@ const loadGoogleMapsKey = async () => {
  */
 export const getGoogleMapsApiKey = async () => {
     try {
-        const resolved = await integrationCache.get(CACHE_KEY, loadGoogleMapsKey);
-        return resolved?.key || '';
+        const resolved = await integrationCache.get(CACHE_KEY, loadGoogleMapsKeys);
+        return resolved?.server?.key || '';
     } catch (err) {
         // A database problem must not take the Maps integration down when the
         // environment still holds a working key.
@@ -50,17 +59,38 @@ export const getGoogleMapsApiKey = async () => {
     }
 };
 
-/** Where the active key came from, for the admin screen. Never the key itself. */
+/**
+ * Browser key for the web apps. Unlike the server key this IS returned to
+ * clients: it is embedded in the page either way, and Google's referrer
+ * restriction is what protects it.
+ */
+export const getGoogleMapsBrowserKey = async () => {
+    try {
+        const resolved = await integrationCache.get(CACHE_KEY, loadGoogleMapsKeys);
+        return resolved?.browser?.key || '';
+    } catch (err) {
+        logger.warn(`Integration settings unavailable, no browser Maps key: ${err?.message || err}`);
+        return '';
+    }
+};
+
+/** Where the active keys came from, for the admin screen. Never the key itself. */
 export const getGoogleMapsKeyStatus = async () => {
     const doc = await FoodIntegrationSettings.findOne().select('googleMaps').lean();
     const fromDb = String(doc?.googleMaps?.apiKey || '').trim();
     const fromEnv = String(config.googleMapsApiKey || '').trim();
+    const browserDb = String(doc?.googleMaps?.browserKey || '').trim();
 
     return {
         configured: Boolean(fromDb || fromEnv),
         source: fromDb ? 'database' : (fromEnv ? 'environment' : 'unset'),
         maskedKey: maskSecret(fromDb || fromEnv),
         canOverrideEnv: true,
+
+        browserConfigured: Boolean(browserDb),
+        browserSource: browserDb ? 'database' : 'unset',
+        browserMaskedKey: maskSecret(browserDb),
+
         updatedAt: doc?.googleMaps?.updatedAt || null,
         updatedBy: doc?.googleMaps?.updatedBy || null,
     };
@@ -70,14 +100,15 @@ export const getGoogleMapsKeyStatus = async () => {
  * Store a new key, or clear it with an empty string to fall back to the
  * environment again.
  */
-export const setGoogleMapsApiKey = async (apiKey, adminId = null) => {
+export const setGoogleMapsApiKey = async (apiKey, adminId = null, field = 'apiKey') => {
     const value = String(apiKey ?? '').trim();
+    const path = field === 'browserKey' ? 'googleMaps.browserKey' : 'googleMaps.apiKey';
 
     await FoodIntegrationSettings.findOneAndUpdate(
         { key: 'global' },
         {
             $set: {
-                'googleMaps.apiKey': value,
+                [path]: value,
                 'googleMaps.updatedAt': new Date(),
                 'googleMaps.updatedBy': adminId || null,
             },

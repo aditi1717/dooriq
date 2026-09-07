@@ -5,6 +5,13 @@ import App from './app/App.jsx'
 import { isModuleAuthenticated } from './modules/Food/utils/auth.js'
 import './shared/styles/global.css'
 import { setupSmoothScroll } from './shared/utils/smoothScroll.js'
+import { getGoogleMapsApiKey } from './modules/Food/utils/googleMapsApiKey.js'
+
+// Warm the Maps browser key before any map mounts. The Maps loader hook needs
+// the key synchronously at mount, so components read it via
+// getGoogleMapsApiKeySync(); this one fetch is what makes that value the
+// admin-configured key rather than the build-time fallback.
+getGoogleMapsApiKey().catch(() => {})
 
 const NATIVE_LAST_ROUTE_KEY = 'native_last_route'
 

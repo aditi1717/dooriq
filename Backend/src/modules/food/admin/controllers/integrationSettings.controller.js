@@ -4,6 +4,7 @@ import {
     getGoogleMapsKeyStatus,
     setGoogleMapsApiKey,
     getGoogleMapsApiKey,
+    getGoogleMapsBrowserKey,
     maskSecret,
 } from '../services/integrationSettings.service.js';
 
@@ -33,6 +34,10 @@ export async function getGoogleMapsSettings(req, res, next) {
  */
 export async function updateGoogleMapsSettings(req, res, next) {
     try {
+        // `field` selects which of the two keys is being written: the
+        // server-side key (IP-restricted, used for geocoding and directions)
+        // or the browser key (referrer-restricted, served to the web apps).
+        const field = req.body?.field === 'browserKey' ? 'browserKey' : 'apiKey';
         const raw = req.body?.apiKey;
         if (raw === undefined || raw === null) {
             throw new ValidationError('apiKey is required. Send an empty string to clear it.');
@@ -47,7 +52,7 @@ export async function updateGoogleMapsSettings(req, res, next) {
             throw new ValidationError('That does not look like a Google Maps API key.');
         }
 
-        const status = await setGoogleMapsApiKey(apiKey, req.user?.userId || null);
+        const status = await setGoogleMapsApiKey(apiKey, req.user?.userId || null, field);
         return sendResponse(
             res,
             200,
@@ -122,6 +127,24 @@ export async function testGoogleMapsKey(req, res, next) {
                 message: 'The request to Google timed out after 10 seconds.',
             });
         }
+        next(error);
+    }
+}
+
+
+/**
+ * GET /api/v1/food/public/maps-config
+ *
+ * The browser key for the web apps. Public on purpose: a Maps key used by a
+ * browser is visible in page source no matter how it is delivered, and Google's
+ * HTTP-referrer restriction — not secrecy — is what protects it. The
+ * server-side key is never returned here.
+ */
+export async function getPublicMapsConfig(req, res, next) {
+    try {
+        const browserKey = await getGoogleMapsBrowserKey();
+        return sendResponse(res, 200, 'Maps config fetched successfully', { browserKey });
+    } catch (error) {
         next(error);
     }
 }

@@ -867,9 +867,13 @@ export const adminAPI = {
   getGoogleMapsIntegration: () =>
     apiClient.get("/food/admin/integrations/google-maps", { contextModule: "admin" }),
 
-  /** Save a key, or send an empty string to fall back to the server env var. */
-  updateGoogleMapsIntegration: (apiKey) =>
-    apiClient.put("/food/admin/integrations/google-maps", { apiKey }, { contextModule: "admin" }),
+  /**
+   * Save a key, or send an empty string to clear it.
+   * `field` picks which key: "apiKey" (server-side, IP-restricted) or
+   * "browserKey" (served to the web apps, referrer-restricted).
+   */
+  updateGoogleMapsIntegration: (apiKey, field = "apiKey") =>
+    apiClient.put("/food/admin/integrations/google-maps", { apiKey, field }, { contextModule: "admin" }),
 
   /** Verify a key against Google before saving it. Omit to test the live one. */
   testGoogleMapsIntegration: (apiKey) =>
