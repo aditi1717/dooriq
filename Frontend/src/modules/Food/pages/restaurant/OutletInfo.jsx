@@ -101,7 +101,6 @@ export default function OutletInfo() {
   })
 
   const locationSearchInputRef = useRef(null)
-  const placesAutocompleteRef = useRef(null)
   const placesAutocompleteServiceRef = useRef(null)
   const placesDetailsServiceRef = useRef(null)
   const placesSessionTokenRef = useRef(null)
@@ -586,7 +585,6 @@ export default function OutletInfo() {
     if (!showEditAddressDialog) return
 
     let cancelled = false
-    let autocomplete = null
 
     const init = async () => {
       let inputElement = null
@@ -610,33 +608,8 @@ export default function OutletInfo() {
         return ok
       }
 
-      const parsePlace = (place) => {
-        const formattedAddress = place?.formatted_address || ""
-        const comps = Array.isArray(place?.address_components) ? place.address_components : []
-        const get = (types) => comps.find((c) => types.some((t) => c.types?.includes(t)))?.long_name || ""
-
-        const area = get(["sublocality_level_1", "sublocality", "neighborhood"]) || get(["locality"])
-        const city = get(["locality"]) || get(["administrative_area_level_2"])
-        const state = get(["administrative_area_level_1"]) || get(["administrative_area_level_2"])
-        const pincode = get(["postal_code"])
-        const lat = place?.geometry?.location?.lat?.()
-        const lng = place?.geometry?.location?.lng?.()
-
-        return {
-          formattedAddress,
-          area,
-          city,
-          state,
-          pincode,
-          latitude: typeof lat === "number" ? Number(lat.toFixed(6)) : "",
-          longitude: typeof lng === "number" ? Number(lng.toFixed(6)) : "",
-        }
-      }
-
       const ok = await loadMaps()
       if (!ok || cancelled || !inputElement) return
-
-      if (inputElement.hasAttribute("data-google-places-initialized")) return
 
       try {
         if (!placesAutocompleteServiceRef.current && window.google?.maps?.places?.AutocompleteService) {
@@ -650,61 +623,19 @@ export default function OutletInfo() {
           placesSessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken()
         }
 
-        autocomplete = new window.google.maps.places.Autocomplete(inputElement, {
-          fields: ["formatted_address", "address_components", "geometry"],
-          componentRestrictions: { country: "in" }
-        })
-
-        inputElement.setAttribute("data-google-places-initialized", "true")
-        placesAutocompleteRef.current = autocomplete
-
-        autocomplete.addListener("place_changed", async () => {
-          const place = autocomplete.getPlace()
-          if (!place?.geometry) return
-
-          const parsed = parsePlace(place)
-          const resolvedPincode = parsed.pincode || (
-            parsed.latitude !== "" && parsed.longitude !== ""
-              ? await fetchPincodeFromLatLng(parsed.latitude, parsed.longitude)
-              : ""
-          )
-          setAddressForm((prev) => ({
-            ...prev,
-            area: parsed.area || prev.area,
-            city: parsed.city || prev.city,
-            state: parsed.state || prev.state,
-            pincode: resolvedPincode || prev.pincode,
-            latitude: parsed.latitude !== "" ? parsed.latitude : prev.latitude,
-            longitude: parsed.longitude !== "" ? parsed.longitude : prev.longitude,
-          }))
-          
-          setLocationSearchValue(parsed.formattedAddress)
-          inputElement.blur()
-          void detectAndSetZoneForLocation(parsed.latitude, parsed.longitude)
-        })
-
-        const pacContainerFix = () => {
-          const applyFix = () => {
-            const containers = document.querySelectorAll(".pac-container")
-            if (containers.length > 0) {
-              containers.forEach((container) => {
-                container.style.zIndex = "999999"
-                container.style.pointerEvents = "auto"
-                // Deliberately NOT forcing display/visibility here.
-                // Google hides .pac-container by setting display:none when
-                // there are no predictions or the input blurs; overriding that
-                // pinned an empty "powered by Google" box on screen, which
-                // then outlived the dialog that opened it.
-              })
-            }
-          }
-          applyFix()
-          setTimeout(applyFix, 100)
-          setTimeout(applyFix, 300)
-        }
-
-        inputElement.addEventListener("focus", pacContainerFix)
-        inputElement.addEventListener("input", pacContainerFix)
+        // Google's own Autocomplete widget is deliberately NOT attached here.
+        //
+        // This input already drives a suggestion list rendered inside the
+        // dialog, built from AutocompleteService + PlacesService below. Running
+        // the widget as well meant two autocompletes on one input: two dropdowns
+        // on every keystroke, two billed Places sessions, and — because the
+        // widget renders `.pac-container` on <body>, outside the dialog — Radix
+        // saw clicking a suggestion as an outside interaction and closed the
+        // dialog before the selection could be applied.
+        //
+        // The in-dialog list is the one that works: it resolves place details,
+        // fills area/city/state/pincode/lat/lng, falls back to a reverse
+        // geocode for a missing pincode, and then detects the delivery zone.
       } catch (e) {
         debugError("Autocomplete error:", e)
       }
@@ -714,18 +645,10 @@ export default function OutletInfo() {
 
     return () => {
       cancelled = true
-      if (autocomplete) {
-        try { window.google?.maps?.event?.clearInstanceListeners(autocomplete) } catch {}
-      }
-      if (locationSearchInputRef.current) {
-        locationSearchInputRef.current.removeAttribute("data-google-places-initialized")
-      }
-      placesAutocompleteRef.current = null
 
-      // Google appends .pac-container to <body>, outside this dialog's subtree,
-      // so it is not unmounted with the dialog and would otherwise linger over
-      // the page. The next open builds a fresh Autocomplete (listeners cleared
-      // and the init attribute removed above), which creates its own container.
+      // Defensive: nothing here creates a .pac-container any more, but the SDK
+      // is shared and another screen's widget could leave one behind on <body>,
+      // where it would float over this page. Cheap to sweep.
       document.querySelectorAll(".pac-container").forEach((el) => el.remove())
     }
   }, [showEditAddressDialog])
