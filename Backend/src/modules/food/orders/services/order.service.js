@@ -74,6 +74,46 @@ function normalizePaymentMethodAvailability(settings = {}) {
   };
 }
 
+/**
+ * How much of an order wallet balance is allowed to cover.
+ *
+ * Wallet balance is largely referral and cashback credit. Letting it settle a
+ * whole order turns promotional credit into free food, so an admin can cap the
+ * share. Default is 100, which is the behaviour that existed before this
+ * setting, so nothing changes until someone lowers it.
+ *
+ * @returns {number} rupees, rounded down to paise
+ */
+export function maxWalletUsableForOrder(orderTotal, settings = {}) {
+  const total = Math.max(0, Number(orderTotal) || 0);
+  const raw = settings?.walletUsagePercentPerOrder;
+  const pct = raw === undefined || raw === null ? 100 : Number(raw);
+  const clamped = Number.isFinite(pct) ? Math.min(100, Math.max(0, pct)) : 100;
+  return Math.floor(total * clamped) / 100;
+}
+
+/**
+ * Wallet is currently an all-or-nothing payment method: choosing it debits the
+ * full order total. So a cap below 100% means paying entirely by wallet is only
+ * possible when the cap still covers the whole amount — which it does not,
+ * unless the cap is 100.
+ *
+ * Rejecting here with the usable figure is the honest behaviour until split
+ * payment exists; silently charging the full total would ignore the setting the
+ * admin just configured.
+ */
+function assertWalletUsageWithinLimit(orderTotal, settings = {}) {
+  const total = Math.max(0, Number(orderTotal) || 0);
+  const usable = maxWalletUsableForOrder(total, settings);
+  if (usable >= total) return;
+
+  const pct = Number(settings?.walletUsagePercentPerOrder ?? 100);
+  throw new ValidationError(
+    `Wallet can cover at most ${pct}% of an order (Rs ${usable.toFixed(2)} of Rs ${total.toFixed(2)}). ` +
+    `Please choose another payment method for this order.`,
+  );
+}
+
 function assertPaymentMethodEnabled(paymentMethod, settings = {}) {
   const availability = normalizePaymentMethodAvailability(settings);
   const method = String(paymentMethod || "").toLowerCase();
@@ -952,6 +992,7 @@ export async function createOrder(userId, dto) {
 
     if (isWallet) {
       try {
+        assertWalletUsageWithinLimit(order.pricing.total, businessSettings);
         await userWalletService.deductWalletBalance(userId, order.pricing.total, `Payment for order #${order.order_id || order._id}`, { orderId: order._id });
       } catch (err) {
         await FoodOrder.deleteOne({ _id: order._id });

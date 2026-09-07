@@ -69,6 +69,17 @@ const businessSettingsSchema = new mongoose.Schema(
         restaurantTdsPercentage: { type: Number, default: 0, min: 0, max: 100 },
         deliveryBoyTdsPercentage: { type: Number, default: 0, min: 0, max: 100 },
         defaultServingRadiusKm: { type: Number, default: 7 },
+
+        /**
+         * Ceiling on how much of a single order wallet balance may cover, as a
+         * percentage of the order total.
+         *
+         * Wallet balance is largely referral and cashback credit, so allowing it
+         * to settle an entire order turns promotional credit into free food.
+         * 100 preserves the previous behaviour, so adding this changes nothing
+         * until an admin lowers it.
+         */
+        walletUsagePercentPerOrder: { type: Number, default: 100, min: 0, max: 100 },
         paymentMethods: {
             cashOnDelivery: { type: Boolean, default: true },
             wallet: { type: Boolean, default: true },

@@ -54,6 +54,7 @@ export default function BusinessSetup() {
     restaurantTdsPercentage: 0,
     deliveryBoyTdsPercentage: 0,
     defaultServingRadiusKm: 7,
+    walletUsagePercentPerOrder: 100,
     paymentMethods: {
       cashOnDelivery: true,
       wallet: true,
@@ -92,6 +93,7 @@ export default function BusinessSetup() {
           restaurantTdsPercentage: settings.restaurantTdsPercentage ?? 0,
           deliveryBoyTdsPercentage: settings.deliveryBoyTdsPercentage ?? 0,
           defaultServingRadiusKm: settings.defaultServingRadiusKm ?? 7,
+          walletUsagePercentPerOrder: settings.walletUsagePercentPerOrder ?? 100,
           paymentMethods: {
             cashOnDelivery: settings.paymentMethods?.cashOnDelivery ?? true,
             wallet: settings.paymentMethods?.wallet ?? true,
@@ -198,6 +200,7 @@ export default function BusinessSetup() {
         restaurantTdsPercentage: Number(formData.restaurantTdsPercentage || 0),
         deliveryBoyTdsPercentage: Number(formData.deliveryBoyTdsPercentage || 0),
         defaultServingRadiusKm: Number(formData.defaultServingRadiusKm || 7),
+        walletUsagePercentPerOrder: Number(formData.walletUsagePercentPerOrder ?? 100),
         paymentMethods: {
           cashOnDelivery: Boolean(formData.paymentMethods?.cashOnDelivery),
           wallet: Boolean(formData.paymentMethods?.wallet),
@@ -533,6 +536,30 @@ export default function BusinessSetup() {
                     }}
                     className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Wallet usage limit per order (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    placeholder="e.g. 20"
+                    value={formData.walletUsagePercentPerOrder}
+                    onChange={(e) => {
+                      const val = e.target.value === "" ? "" : Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0));
+                      handleInputChange("walletUsagePercentPerOrder", val);
+                    }}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="mt-1.5 text-[11px] leading-snug text-slate-500">
+                    The most of a single order that wallet balance may cover. At 20%, a
+                    &#8377;500 order can use at most &#8377;100 of wallet. 100% keeps the
+                    current behaviour, where wallet can settle a whole order.
+                  </p>
                 </div>
               </div>
             </div>
