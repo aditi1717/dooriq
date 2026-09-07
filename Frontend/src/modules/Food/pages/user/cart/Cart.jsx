@@ -173,6 +173,10 @@ export default function Cart() {
   const [showPaymentSheet, setShowPaymentSheet] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
   const [isLoadingWallet, setIsLoadingWallet] = useState(false)
+  /** Admin ceiling on the share of an order wallet may cover. 100 = no cap. */
+  const [walletUsagePercent, setWalletUsagePercent] = useState(100)
+  /** Whether the user chose to put part of this order on their wallet. */
+  const [applyWallet, setApplyWallet] = useState(false)
   const [note, setNote] = useState(() => {
     try {
       if (typeof window === "undefined") return ""
@@ -400,6 +404,9 @@ export default function Cart() {
   useEffect(() => {
     const loadFeatureSettings = async () => {
       const applyBusinessPaymentSettings = (businessSettings) => {
+        if (businessSettings?.walletUsagePercentPerOrder !== undefined) {
+          setWalletUsagePercent(Number(businessSettings.walletUsagePercentPerOrder) || 0)
+        }
         if (businessSettings?.paymentMethods) {
           setPaymentMethodAvailability({
             cashOnDelivery: businessSettings.paymentMethods.cashOnDelivery ?? true,
@@ -437,6 +444,9 @@ export default function Cart() {
 
     const handleSettingsUpdate = () => {
       const settings = getCachedSettings()
+      if (settings?.walletUsagePercentPerOrder !== undefined) {
+        setWalletUsagePercent(Number(settings.walletUsagePercentPerOrder) || 0)
+      }
       if (settings?.paymentMethods) {
         setPaymentMethodAvailability({
           cashOnDelivery: settings.paymentMethods.cashOnDelivery ?? true,
@@ -453,9 +463,45 @@ export default function Cart() {
 
   const enabledPaymentMethods = useMemo(() => ({
     cash: Boolean(isCodEnabled && paymentMethodAvailability.cashOnDelivery && !userProfile?.isCodBlocked),
-    wallet: Boolean(paymentMethodAvailability.wallet),
+    // Paying entirely from wallet is only offered when the admin allows wallet
+    // to cover a whole order. Below 100% the wallet becomes a partial-payment
+    // toggle instead, and the server would reject a full wallet payment anyway.
+    wallet: Boolean(paymentMethodAvailability.wallet && walletUsagePercent >= 100),
     razorpay: Boolean(paymentMethodAvailability.online),
-  }), [isCodEnabled, paymentMethodAvailability, userProfile?.isCodBlocked])
+  }), [isCodEnabled, paymentMethodAvailability, userProfile?.isCodBlocked, walletUsagePercent])
+
+  /**
+   * The wallet split for this order.
+   *
+   * Mirrors the server's clamp — admin cap, actual balance, order total — so the
+   * figures shown match what will be charged. The server recomputes all of it
+   * regardless; this is presentation, not enforcement.
+   */
+  const walletSplit = useMemo(() => {
+    const orderTotal = Math.max(0, Number(total) || 0)
+    const pct = Math.min(100, Math.max(0, Number(walletUsagePercent) || 0))
+    const cap = Math.floor(orderTotal * pct) / 100
+    const balance = Math.max(0, Number(walletBalance) || 0)
+    const maxUsable = Math.floor(Math.min(cap, balance, orderTotal) * 100) / 100
+
+    // Offered only when the wallet cannot already pay for everything on its own,
+    // which is the separate "Wallet" payment method.
+    const canOffer =
+      paymentMethodAvailability.wallet &&
+      selectedPaymentMethod !== "wallet" &&
+      maxUsable > 0
+
+    const applied = canOffer && applyWallet ? maxUsable : 0
+    const remaining = Math.round((orderTotal - applied) * 100) / 100
+
+    return { canOffer, maxUsable, applied, remaining, pct }
+  }, [total, walletUsagePercent, walletBalance, paymentMethodAvailability.wallet, selectedPaymentMethod, applyWallet])
+
+  // Switching to the standalone Wallet method makes the partial toggle
+  // meaningless, so drop it rather than leaving a stale amount applied.
+  useEffect(() => {
+    if (selectedPaymentMethod === "wallet" && applyWallet) setApplyWallet(false)
+  }, [selectedPaymentMethod, applyWallet])
 
   const availablePaymentMethodCount = Object.values(enabledPaymentMethods).filter(Boolean).length
 
@@ -2103,6 +2149,9 @@ export default function Cart() {
         note: note || "",
         sendCutlery: sendCutlery !== false,
         paymentMethod: selectedPaymentMethod,
+        // A request, not an instruction: the server re-clamps this against the
+        // admin cap, the real balance and the order total.
+        walletAmount: walletSplit.applied > 0 ? walletSplit.applied : undefined,
         // `useZone()` can return `null`. Zod expects string/undefined, not null.
         zoneId: zoneId || undefined,
         scheduledAt: isScheduled ? new Date(`${scheduledDate}T${scheduledTime}:00`).toISOString() : undefined,
@@ -3065,6 +3114,56 @@ export default function Cart() {
               </div>
             </div>
 
+            {/* Partial wallet payment. Shown only when the wallet can cover part
+                of this order but not stand in as the whole payment method. */}
+            {walletSplit.canOffer && (
+              <div className="mb-3 rounded-2xl border border-orange-200 dark:border-orange-900/40 bg-orange-50/60 dark:bg-orange-900/10 p-3">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={applyWallet}
+                    onChange={(e) => setApplyWallet(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#EB590E] cursor-pointer"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Wallet className="h-4 w-4 text-[#EB590E] shrink-0" />
+                      <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                        Use wallet balance
+                      </p>
+                      <span className="text-[10px] font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded">
+                        {RUPEE_SYMBOL}{walletBalance.toFixed(0)} available
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-snug text-gray-600 dark:text-gray-400">
+                      {walletSplit.pct < 100
+                        ? `Wallet can cover up to ${walletSplit.pct}% of an order — ${RUPEE_SYMBOL}${walletSplit.maxUsable.toFixed(2)} on this one.`
+                        : `You can put up to ${RUPEE_SYMBOL}${walletSplit.maxUsable.toFixed(2)} of this order on your wallet.`}
+                    </p>
+
+                    {applyWallet && (
+                      <div className="mt-2.5 space-y-1 border-t border-orange-200/70 dark:border-orange-900/40 pt-2">
+                        <div className="flex items-center justify-between text-[12px]">
+                          <span className="text-gray-600 dark:text-gray-400">Paid from wallet</span>
+                          <span className="font-bold text-green-700 dark:text-green-400">
+                            &minus; {RUPEE_SYMBOL}{walletSplit.applied.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[12px]">
+                          <span className="text-gray-700 dark:text-gray-300 font-semibold">
+                            Left to pay by {selectedPaymentLabel || "your payment method"}
+                          </span>
+                          <span className="font-bold text-gray-900 dark:text-gray-100">
+                            {RUPEE_SYMBOL}{walletSplit.remaining.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </label>
+              </div>
+            )}
+
             {/* Closed warning banner */}
             {isRestaurantClosed && (
               <div className="mb-3 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-2xl flex items-start gap-2.5">
@@ -3095,8 +3194,14 @@ export default function Cart() {
             >
               {availablePaymentMethodCount > 0 && (selectedPaymentMethod === "razorpay" || selectedPaymentMethod === "wallet" || selectedPaymentMethod === "cash") && (
                 <div className="text-left flex flex-col justify-center border-r-[1.5px] border-white/20 pr-4">
-                  <span className="text-xs md:text-sm font-semibold text-white/90">{RUPEE_SYMBOL}{total.toFixed(2)}</span>
-                  <span className="text-[9px] md:text-[10px] uppercase font-bold tracking-wider text-white/80 mt-[-2px]">Total</span>
+                  <span className="text-xs md:text-sm font-semibold text-white/90">
+                    {RUPEE_SYMBOL}{(walletSplit.applied > 0 ? walletSplit.remaining : total).toFixed(2)}
+                  </span>
+                  <span className="text-[9px] md:text-[10px] uppercase font-bold tracking-wider text-white/80 mt-[-2px]">
+                    {walletSplit.applied > 0
+                      ? `After ${RUPEE_SYMBOL}${walletSplit.applied.toFixed(0)} wallet`
+                      : "Total"}
+                  </span>
                 </div>
               )}
               <div className="flex items-center gap-1 mx-auto text-sm md:text-lg tracking-wide">
@@ -3218,10 +3323,12 @@ export default function Cart() {
                     <div>
                       <p className="text-lg font-semibold text-gray-900">
                         {selectedPaymentMethod === "razorpay"
-                          ? `Pay ${RUPEE_SYMBOL}${total.toFixed(2)} online (Razorpay)`
+                          ? `Pay ${RUPEE_SYMBOL}${(walletSplit.applied > 0 ? walletSplit.remaining : total).toFixed(2)} online (Razorpay)`
                           : selectedPaymentMethod === "wallet"
                             ? `Pay ${RUPEE_SYMBOL}${total.toFixed(2)} from Wallet`
-                            : `Pay on delivery (COD)`}
+                            : walletSplit.applied > 0
+                              ? `Pay ${RUPEE_SYMBOL}${walletSplit.remaining.toFixed(2)} on delivery (COD)`
+                              : `Pay on delivery (COD)`}
                       </p>
                     </div>
                   </div>
