@@ -42,6 +42,7 @@ export default function DispatchSettings() {
       }
       setForm({
         radiusExpansionEnabled: current.radiusExpansionEnabled !== false,
+        zoneFilterEnabled: current.zoneFilterEnabled === true,
         stages: (current.stages || []).map((s) => ({
           radiusKm: String(s.radiusKm ?? ""),
           timeoutSeconds: String(s.timeoutSeconds ?? 30),
@@ -85,6 +86,7 @@ export default function DispatchSettings() {
     if (!defaults) return;
     setForm({
       radiusExpansionEnabled: defaults.radiusExpansionEnabled !== false,
+      zoneFilterEnabled: defaults.zoneFilterEnabled === true,
       stages: (defaults.stages || []).map((s) => ({
         radiusKm: String(s.radiusKm),
         timeoutSeconds: String(s.timeoutSeconds),
@@ -128,6 +130,7 @@ export default function DispatchSettings() {
       setSaving(true);
       await adminAPI.updateDispatchSettings({
         radiusExpansionEnabled: form.radiusExpansionEnabled,
+        zoneFilterEnabled: form.zoneFilterEnabled,
         stages,
         maxRadiusKm: Number(form.maxRadiusKm) || stages[stages.length - 1].radiusKm,
         maxAttempts: Number(form.maxAttempts) || 0,
@@ -222,6 +225,26 @@ export default function DispatchSettings() {
               Expansion is off, so every attempt uses stage 1 only.
             </p>
           )}
+
+          <label className="mb-3 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <input
+              type="checkbox"
+              checked={form.zoneFilterEnabled}
+              onChange={(e) => setField("zoneFilterEnabled", e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300"
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-bold text-slate-900">
+                Only offer orders to captains in the restaurant&apos;s zone
+              </span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">
+                Captains pick a zone when they register. Anyone who has not picked one stays
+                eligible everywhere, so turning this on never removes your existing captains
+                from dispatch. The zone is ignored on the final stage, so an order in a zone
+                nobody covers still finds a rider rather than waiting forever.
+              </span>
+            </span>
+          </label>
 
           <div className="space-y-2">
             {form.stages.map((stage, index) => (

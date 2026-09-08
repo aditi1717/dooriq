@@ -270,6 +270,10 @@ export function normalizeDispatchConfig(raw) {
       typeof source.radiusExpansionEnabled === 'boolean'
         ? source.radiusExpansionEnabled
         : DEFAULT_DISPATCH_CONFIG.radiusExpansionEnabled,
+    zoneFilterEnabled:
+      typeof source.zoneFilterEnabled === 'boolean'
+        ? source.zoneFilterEnabled
+        : DEFAULT_DISPATCH_CONFIG.zoneFilterEnabled,
     stages: stages.map((s) => ({ ...s, timeoutSeconds: offerCountdownSeconds })),
     maxRadiusKm,
     maxAttempts,
