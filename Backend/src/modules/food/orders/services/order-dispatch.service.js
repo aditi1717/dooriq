@@ -139,14 +139,15 @@ async function enrichPayloadWithTripRoadDistance(order, payload) {
 
 async function listNearbyOnlineDeliveryPartners(
   restaurantId,
-  { maxKm = 15, limit = 25, order = null, config = null } = {},
+  options = {},
 ) {
+  const { maxKm = 15, limit = 25, order = null, config = null } = options;
   const staleGpsMs = Number(config?.staleGpsMinutes ?? 10) * 60 * 1000;
   const includeStaleGpsRiders = config?.includeStaleGpsRiders !== false;
   const unboundedFallbackEnabled = config?.unboundedFallbackEnabled !== false;
   const rId = (restaurantId?._id || restaurantId).toString();
   const restaurant = await FoodRestaurant.findById(rId)
-    .select("location")
+    .select("location zoneId")
     .lean();
 
   const allowedStatuses = process.env.NODE_ENV === 'production' ? ['approved'] : ['approved', 'pending'];
@@ -155,6 +156,32 @@ async function listNearbyOnlineDeliveryPartners(
     status: { $in: allowedStatuses },
     availabilityStatus: "online",
   };
+
+  // Zone preference.
+  //
+  // Matched against the *restaurant's* zone, not the order's: the rider is
+  // being sent to a pickup, the radius below is already measured from the
+  // restaurant, and restaurants carry a zone far more consistently than orders
+  // do.
+  //
+  // Riders with no zone selected stay eligible. That is what makes this safe to
+  // deploy before the app ships - otherwise every existing rider, none of whom
+  // has a zone, would stop receiving orders.
+  //
+  // The caller drops this on the final widening stage, so an order in a zone
+  // nobody picked still gets delivered rather than sitting unassigned.
+  const zoneFilterActive =
+    config?.zoneFilterEnabled === true &&
+    options.applyZoneFilter !== false &&
+    Boolean(restaurant?.zoneId);
+
+  if (zoneFilterActive) {
+    basePartnerFilter.$or = [
+      { activeZoneId: restaurant.zoneId },
+      { activeZoneId: null },
+      { activeZoneId: { $exists: false } },
+    ];
+  }
   const partnerFields = "_id status lastLat lastLng lastLocationAt name";
 
   // The eligibility passes below (busy trip, cash limit) drop candidates, so the
@@ -505,7 +532,19 @@ export async function tryAutoAssign(orderId, options = {}) {
       return order;
     }
 
-    const searchOptions = { maxKm, limit: config.riderFanoutLimit, order, config };
+    // Once the search has widened to its last stage, stop preferring the
+    // restaurant's zone. A zone nobody selected would otherwise leave the order
+    // permanently unassigned, and an order that cannot find a rider is worse
+    // than one taken by a rider from the next zone over.
+    const isFinalStage = stage.isFinalStage === true || maxKm >= Number(config.maxRadiusKm || 0);
+
+    const searchOptions = {
+      maxKm,
+      limit: config.riderFanoutLimit,
+      order,
+      config,
+      applyZoneFilter: !isFinalStage,
+    };
     const { partners, staleGpsCount = 0, usedUnboundedFallback = false } =
       await listNearbyOnlineDeliveryPartners(order.restaurantId, searchOptions);
 

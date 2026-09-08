@@ -102,6 +102,21 @@ const deliveryPartnerSchema = new mongoose.Schema(
         lastLat: { type: Number },
         lastLng: { type: Number },
         lastLocationAt: { type: Date },
+        /**
+         * The zone this rider chose when going online. Dispatch offers them
+         * orders whose restaurant sits in the same zone.
+         *
+         * Null means "no preference", which is deliberately how every existing
+         * rider starts: a null here must never exclude anyone, or deploying
+         * this would silently stop dispatch for the whole fleet before the app
+         * that sets it has shipped. Cleared when the rider goes offline.
+         */
+        activeZoneId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'FoodZone',
+            default: null,
+        },
+
         referralCode: { type: String, index: true },
         referredBy: {
             type: mongoose.Schema.Types.ObjectId,
@@ -133,6 +148,9 @@ deliveryPartnerSchema.index({ lastLocation: '2dsphere' });
 deliveryPartnerSchema.index({ availabilityStatus: 1, status: 1 });
 // Dispatch also filters riders whose GPS is older than the staleness window.
 deliveryPartnerSchema.index({ availabilityStatus: 1, lastLocationAt: -1 });
+// Zone-filtered dispatch: online riders in a given zone. Sparse-friendly in
+// practice because dispatch always constrains availabilityStatus first.
+deliveryPartnerSchema.index({ availabilityStatus: 1, activeZoneId: 1 });
 
 // FCM token reassignment looks a device token up across every owner collection.
 // Multikey indexes turn those scans into point lookups.

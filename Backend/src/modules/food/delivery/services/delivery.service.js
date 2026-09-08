@@ -467,7 +467,7 @@ export const getSupportTicketByIdAndPartner = async (ticketId, deliveryPartnerId
  * fields that change and needs a single round-trip.
  */
 export const updateDeliveryAvailability = async (userId, payload, requestMeta = {}) => {
-    const { status, latitude, longitude, source } = payload || {};
+    const { status, latitude, longitude, source, zoneId } = payload || {};
     const normalizedSource = String(source || 'delivery-app').trim() || 'delivery-app';
     const isSimulation = /simulation/i.test(normalizedSource);
 
@@ -501,6 +501,22 @@ export const updateDeliveryAvailability = async (userId, payload, requestMeta = 
     }
 
     const $set = { availabilityStatus: validStatus };
+
+    // Zone selection travels with the availability toggle, because that is the
+    // moment the rider is asked. Going offline clears it, so a rider cannot be
+    // left attached to a zone they are no longer working.
+    if (validStatus === 'online') {
+        if (zoneId !== undefined && zoneId !== null && String(zoneId).trim() !== '') {
+            const { assertSelectableZone } = await import('./deliveryZone.service.js');
+            $set.activeZoneId = await assertSelectableZone(zoneId);
+        }
+        // No zoneId means "no preference". Deliberately not an error: existing
+        // app builds do not send one, and rejecting them would stop riders
+        // going online the moment this deploys.
+    } else {
+        $set.activeZoneId = null;
+    }
+
     if (hasValidLocation) {
         // Both shapes are kept in sync: `lastLocation` backs the 2dsphere index,
         // while `lastLat`/`lastLng` are what order dispatch reads. Writing only
@@ -514,7 +530,7 @@ export const updateDeliveryAvailability = async (userId, payload, requestMeta = 
     const partner = await FoodDeliveryPartner.findOneAndUpdate(
         { _id: userId },
         { $set },
-        { new: true, projection: 'availabilityStatus' },
+        { new: true, projection: 'availabilityStatus activeZoneId' },
     ).lean();
 
     if (!partner) {

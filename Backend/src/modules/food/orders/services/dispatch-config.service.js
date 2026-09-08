@@ -65,6 +65,18 @@ export const DEFAULT_DISPATCH_CONFIG = Object.freeze({
   /** Crisis escalation begins once `attempt` exceeds this. 5 => fires on attempt 6. */
   crisisAfterStage: 5,
   finalStageBehavior: 'repeat_last',
+  /**
+   * Offer an order only to riders who selected the restaurant's zone.
+   *
+   * Off by default: the backend and the rider app have to ship together, and
+   * until the app can set a zone every rider has none, so switching this on
+   * early narrows nothing and risks stranding orders. Turn it on once the app
+   * build with the zone picker is out.
+   *
+   * Riders who have chosen no zone are always eligible - see the query in
+   * order-dispatch.service.js - so this never excludes the whole fleet.
+   */
+  zoneFilterEnabled: false,
   riderFanoutLimit: 15,
   offerCountdownSeconds: 30,
   /**
