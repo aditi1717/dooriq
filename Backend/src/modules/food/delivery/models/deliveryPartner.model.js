@@ -103,13 +103,16 @@ const deliveryPartnerSchema = new mongoose.Schema(
         lastLng: { type: Number },
         lastLocationAt: { type: Date },
         /**
-         * The zone this rider chose when going online. Dispatch offers them
-         * orders whose restaurant sits in the same zone.
+         * The zone this rider works, chosen on the registration form. Dispatch
+         * offers them orders whose restaurant sits in the same zone.
+         *
+         * Part of the rider's profile rather than a per-shift choice, so it
+         * survives going offline. It can be changed later without
+         * re-registering, but never implicitly cleared.
          *
          * Null means "no preference", which is deliberately how every existing
-         * rider starts: a null here must never exclude anyone, or deploying
-         * this would silently stop dispatch for the whole fleet before the app
-         * that sets it has shipped. Cleared when the rider goes offline.
+         * rider starts: a null here must never exclude anyone, or enabling the
+         * dispatch filter would stop orders reaching the whole current fleet.
          */
         activeZoneId: {
             type: mongoose.Schema.Types.ObjectId,

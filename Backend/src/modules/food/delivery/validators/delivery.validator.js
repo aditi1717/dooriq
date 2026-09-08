@@ -30,6 +30,10 @@ const deliveryRegisterSchema = z.object({
         .optional()
         .or(z.literal('')),
     ref: z.string().trim().max(64).optional().or(z.literal('')),
+    // The zone the rider will work, chosen on the registration form. Optional so
+    // older app builds keep registering; the id itself is validated against the
+    // active zones in the service.
+    zoneId: z.string().trim().optional().or(z.literal('')).nullable(),
     panNumber: z
         .string()
         .regex(panRegex, 'Invalid PAN format')

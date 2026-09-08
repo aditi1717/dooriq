@@ -19,7 +19,7 @@ export const registerDeliveryPartner = async (payload, files) => {
     const { 
         name, phone, email, countryCode, address, city, state, 
         vehicleType, vehicleName, vehicleNumber, drivingLicenseNumber, panNumber, aadharNumber,
-        fcmToken, platform 
+        fcmToken, platform, zoneId
     } = payload;
     const refRaw = typeof payload?.ref === 'string' ? String(payload.ref).trim() : '';
 
@@ -102,6 +102,16 @@ export const registerDeliveryPartner = async (payload, files) => {
         }
     }
 
+    // The rider picks the zone they will work during registration, so it is
+    // part of their profile rather than a per-shift choice. Optional: existing
+    // app builds do not send it, and a rider without a zone stays eligible for
+    // every zone.
+    let selectedZoneId = null;
+    if (zoneId !== undefined && zoneId !== null && String(zoneId).trim() !== '') {
+        const { assertSelectableZone } = await import('./deliveryZone.service.js');
+        selectedZoneId = await assertSelectableZone(zoneId);
+    }
+
     const partner = await FoodDeliveryPartner.create({
         name,
         phone,
@@ -116,6 +126,7 @@ export const registerDeliveryPartner = async (payload, files) => {
         drivingLicenseNumber,
         panNumber,
         aadharNumber,
+        activeZoneId: selectedZoneId,
         status: 'pending',
         ...images
     });
@@ -502,19 +513,14 @@ export const updateDeliveryAvailability = async (userId, payload, requestMeta = 
 
     const $set = { availabilityStatus: validStatus };
 
-    // Zone selection travels with the availability toggle, because that is the
-    // moment the rider is asked. Going offline clears it, so a rider cannot be
-    // left attached to a zone they are no longer working.
-    if (validStatus === 'online') {
-        if (zoneId !== undefined && zoneId !== null && String(zoneId).trim() !== '') {
-            const { assertSelectableZone } = await import('./deliveryZone.service.js');
-            $set.activeZoneId = await assertSelectableZone(zoneId);
-        }
-        // No zoneId means "no preference". Deliberately not an error: existing
-        // app builds do not send one, and rejecting them would stop riders
-        // going online the moment this deploys.
-    } else {
-        $set.activeZoneId = null;
+    // The zone is chosen at registration and belongs to the rider's profile, so
+    // it deliberately survives going offline. This endpoint still accepts a
+    // zoneId so a rider can change zones without re-registering, but never
+    // clears one: an absent field means "leave it as it is", which is what the
+    // three-minute keep-alive pings depend on.
+    if (zoneId !== undefined && zoneId !== null && String(zoneId).trim() !== '') {
+        const { assertSelectableZone } = await import('./deliveryZone.service.js');
+        $set.activeZoneId = await assertSelectableZone(zoneId);
     }
 
     if (hasValidLocation) {

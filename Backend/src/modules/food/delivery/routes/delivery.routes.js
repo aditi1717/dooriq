@@ -50,10 +50,16 @@ router.delete('/profile/account', authMiddleware, requireRoles('DELIVERY_PARTNER
 
 router.patch('/availability', authMiddleware, requireRoles('DELIVERY_PARTNER'), updateAvailabilityController);
 
-// Zone selection. `/zones` backs the popup shown when a rider goes online;
-// `/zones/current` restores that choice on app restart. The choice itself is
-// submitted with PATCH /availability above, since that is the same action.
-router.get('/zones', authMiddleware, requireRoles('DELIVERY_PARTNER'), listSelectableZonesController);
+// Zone selection.
+//
+// `/zones` is deliberately unauthenticated: the rider picks their zone on the
+// registration form, before they have a token. It exposes nothing new - active
+// zone names are already public at /v1/food/zones/public, which the customer
+// app uses for serviceability - it just adds the "which zone am I standing in"
+// sorting the form wants.
+//
+// `/zones/current` is rider-specific and stays authenticated.
+router.get('/zones', listSelectableZonesController);
 router.get('/zones/current', authMiddleware, requireRoles('DELIVERY_PARTNER'), getActiveZoneController);
 
 router.get('/support-tickets', authMiddleware, requireRoles('DELIVERY_PARTNER'), listSupportTicketsController);
