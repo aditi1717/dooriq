@@ -160,3 +160,129 @@ export const settleUserReferralSafely = async (userId, orderId) => {
         return { settled: false, reason: 'error' };
     }
 };
+
+/**
+ * Deliveries a referred rider has actually completed.
+ *
+ * Served by the { 'dispatch.deliveryPartnerId', orderStatus } index that
+ * already exists, so this is cheap enough to run on every completed delivery.
+ */
+const countCompletedDeliveries = async (deliveryPartnerId) => {
+    const { FoodOrder } = await import('../../modules/food/orders/models/order.model.js');
+    return FoodOrder.countDocuments({
+        'dispatch.deliveryPartnerId': deliveryPartnerId,
+        orderStatus: 'delivered',
+    });
+};
+
+/**
+ * "Rider Lao, Rs 500 Kamao".
+ *
+ * The referrer is paid once the rider they brought in has completed the
+ * configured number of deliveries — not when that rider registers, and not
+ * when their KYC is approved. Approval only pays the new rider's joining
+ * bonus, which is a separate thing.
+ *
+ * Called after each completed delivery. Cheap and idempotent: it returns
+ * immediately unless a pending referral exists for this rider, and the claim
+ * below can only succeed once.
+ *
+ * @param {import('mongoose').Types.ObjectId|string} deliveryPartnerId the referred rider
+ * @param {import('mongoose').Types.ObjectId|string} orderId            the delivery just completed
+ */
+export const settleDeliveryReferralOnDelivery = async (deliveryPartnerId, orderId) => {
+    if (!deliveryPartnerId) return { settled: false, reason: 'no_partner' };
+
+    const pending = await FoodReferralLog.findOne({
+        refereeId: deliveryPartnerId,
+        role: 'DELIVERY_PARTNER',
+        status: 'pending',
+    }).lean();
+
+    if (!pending) return { settled: false, reason: 'no_pending_referral' };
+
+    const settings = await FoodReferralSettings.findOne({ isActive: true })
+        .sort({ createdAt: -1 })
+        .select('referralLimitDelivery deliveryQualifyingDeliveries')
+        .lean();
+
+    const required = Math.max(0, Number(settings?.deliveryQualifyingDeliveries ?? 20));
+    const completed = await countCompletedDeliveries(deliveryPartnerId);
+    if (completed < required) {
+        return { settled: false, reason: 'not_qualified_yet', completed, required };
+    }
+
+    const limit = Math.max(0, Number(settings?.referralLimitDelivery) || 0);
+    const settledCount = await countSettledReferrals(pending.referrerId, 'DELIVERY_PARTNER');
+    if (limit > 0 && settledCount >= limit) {
+        await FoodReferralLog.updateOne(
+            { _id: pending._id, status: 'pending' },
+            { $set: { status: 'rejected', reason: 'limit_reached_at_settlement' } },
+        );
+        return { settled: false, reason: 'limit_reached' };
+    }
+
+    const claimed = await FoodReferralLog.findOneAndUpdate(
+        { _id: pending._id, status: 'pending' },
+        { $set: { status: 'credited', settledAt: new Date(), qualifyingOrderId: orderId || null } },
+        { new: true },
+    ).lean();
+
+    if (!claimed) return { settled: false, reason: 'already_settled' };
+
+    try {
+        const reward = Math.max(0, Number(claimed.rewardAmount) || 0);
+        if (reward > 0) {
+            // A rider may be referred by another rider or by a customer, and the
+            // two are credited through different ledgers. Imported lazily
+            // because the admin service is large and pulls in most of the app.
+            const { FoodDeliveryPartner } = await import('../../modules/food/delivery/models/deliveryPartner.model.js');
+            const referrerIsRider = await FoodDeliveryPartner.exists({ _id: claimed.referrerId });
+
+            if (referrerIsRider) {
+                const { addDeliveryPartnerBonus } = await import('../../modules/food/admin/services/admin.service.js');
+                await addDeliveryPartnerBonus(
+                    {
+                        deliveryPartnerId: String(claimed.referrerId),
+                        amount: reward,
+                        reference: 'Referral bonus - referred rider completed qualifying deliveries',
+                    },
+                    null,
+                );
+                await FoodDeliveryPartner.updateOne({ _id: claimed.referrerId }, { $inc: { referralCount: 1 } });
+            } else {
+                await creditReferralReward(claimed.referrerId, reward, {
+                    role: 'USER',
+                    refereeId: String(claimed.refereeId),
+                    referralLogId: String(claimed._id),
+                });
+                await FoodUser.updateOne({ _id: claimed.referrerId }, { $inc: { referralCount: 1 } });
+            }
+        }
+
+        logger.info(
+            `Rider referral settled: referrer=${claimed.referrerId} rider=${claimed.refereeId} ` +
+            `reward=${reward} after ${completed}/${required} deliveries`,
+        );
+        return { settled: true, reward, completed, required };
+    } catch (err) {
+        await FoodReferralLog.updateOne(
+            { _id: claimed._id },
+            { $set: { status: 'pending', settledAt: null, qualifyingOrderId: null } },
+        );
+        logger.error(
+            `Rider referral settlement failed, returned to pending: log=${claimed._id}: ${err?.stack || err}`,
+        );
+        return { settled: false, reason: 'credit_failed' };
+    }
+};
+
+/** Fire-and-forget wrapper, for the same reason as the user one. */
+export const settleDeliveryReferralSafely = async (deliveryPartnerId, orderId) => {
+    try {
+        return await settleDeliveryReferralOnDelivery(deliveryPartnerId, orderId);
+    } catch (err) {
+        logger.warn(`Rider referral settlement error for ${deliveryPartnerId}: ${err?.message || err}`);
+        return { settled: false, reason: 'error' };
+    }
+};

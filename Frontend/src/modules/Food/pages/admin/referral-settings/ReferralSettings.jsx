@@ -16,6 +16,7 @@ export default function ReferralSettings() {
     referredRewardDelivery: "",
     referralLimitUser: "",
     referralLimitDelivery: "",
+    deliveryQualifyingDeliveries: "",
     userAppStoreUrl: "",
     userPlayStoreUrl: "",
     deliveryAppStoreUrl: "",
@@ -35,6 +36,7 @@ export default function ReferralSettings() {
           referredRewardDelivery: s.referredRewardDelivery ?? "",
           referralLimitUser: s.referralLimitUser ?? "",
           referralLimitDelivery: s.referralLimitDelivery ?? "",
+          deliveryQualifyingDeliveries: s.deliveryQualifyingDeliveries ?? 20,
           userAppStoreUrl: s.userAppStoreUrl ?? "",
           userPlayStoreUrl: s.userPlayStoreUrl ?? "",
           deliveryAppStoreUrl: s.deliveryAppStoreUrl ?? "",
@@ -48,6 +50,7 @@ export default function ReferralSettings() {
           referredRewardDelivery: "",
           referralLimitUser: "",
           referralLimitDelivery: "",
+          deliveryQualifyingDeliveries: 20,
           userAppStoreUrl: "",
           userPlayStoreUrl: "",
           deliveryAppStoreUrl: "",
@@ -76,6 +79,7 @@ export default function ReferralSettings() {
         referredRewardDelivery: settings.referredRewardDelivery === "" ? 0 : Number(settings.referredRewardDelivery),
         referralLimitUser: settings.referralLimitUser === "" ? 0 : Number(settings.referralLimitUser),
         referralLimitDelivery: settings.referralLimitDelivery === "" ? 0 : Number(settings.referralLimitDelivery),
+        deliveryQualifyingDeliveries: settings.deliveryQualifyingDeliveries === "" ? 20 : Number(settings.deliveryQualifyingDeliveries),
         userAppStoreUrl: settings.userAppStoreUrl.trim(),
         userPlayStoreUrl: settings.userPlayStoreUrl.trim(),
         deliveryAppStoreUrl: settings.deliveryAppStoreUrl.trim(),
@@ -94,6 +98,7 @@ export default function ReferralSettings() {
             referredRewardDelivery: saved.referredRewardDelivery ?? "",
             referralLimitUser: saved.referralLimitUser ?? "",
             referralLimitDelivery: saved.referralLimitDelivery ?? "",
+            deliveryQualifyingDeliveries: saved.deliveryQualifyingDeliveries ?? 20,
             userAppStoreUrl: saved.userAppStoreUrl ?? "",
             userPlayStoreUrl: saved.userPlayStoreUrl ?? "",
             deliveryAppStoreUrl: saved.deliveryAppStoreUrl ?? "",
@@ -296,6 +301,24 @@ export default function ReferralSettings() {
                       inputMode="numeric"
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
                       placeholder="e.g. 10 (0 for unlimited)"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Deliveries Required to Earn the Referral Bonus
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-1">
+                      The referrer is paid only after the captain they referred completes
+                      this many deliveries. The joining bonus is paid separately, on KYC
+                      approval. Set 0 to pay the referrer on approval instead.
+                    </p>
+                    <input
+                      value={settings.deliveryQualifyingDeliveries}
+                      onChange={onChangeNumeric("deliveryQualifyingDeliveries")}
+                      inputMode="numeric"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white font-semibold"
+                      placeholder="e.g. 20"
                     />
                   </div>
 
