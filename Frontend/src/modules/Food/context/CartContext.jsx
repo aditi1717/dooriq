@@ -1,0 +1,645 @@
+// src/context/cart-context.jsx
+import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
+import { buildCartLineId } from "@food/utils/foodVariants"
+const debugLog = (...args) => {}
+const debugWarn = (...args) => {}
+const debugError = (...args) => {}
+
+
+// Default cart context value to prevent errors during initial render
+const defaultCartContext = {
+  _isProvider: false, // Flag to identify if this is from the actual provider
+  cart: [],
+  items: [],
+  itemCount: 0,
+  total: 0,
+  lastAddEvent: null,
+  lastRemoveEvent: null,
+  addToCart: () => {
+    debugWarn('CartProvider not available - addToCart called');
+  },
+  removeFromCart: () => {
+    debugWarn('CartProvider not available - removeFromCart called');
+  },
+  updateQuantity: () => {
+    debugWarn('CartProvider not available - updateQuantity called');
+  },
+  getCartCount: () => 0,
+  isInCart: () => false,
+  getCartItem: () => null,
+  clearCart: () => {
+    debugWarn('CartProvider not available - clearCart called');
+  },
+  cleanCartForRestaurant: () => {
+    debugWarn('CartProvider not available - cleanCartForRestaurant called');
+  },
+  replaceCart: () => {
+    debugWarn('CartProvider not available - replaceCart called');
+  },
+}
+
+const CartContext = createContext(defaultCartContext)
+
+const normalizeCartData = (rawCart) => {
+  if (!Array.isArray(rawCart)) return []
+
+  return rawCart
+    .filter((item) => item && typeof item === "object")
+    .map((item, index) => {
+      const parsedQuantity = Number(item.quantity)
+      const parsedPrice = Number(item.price)
+      const normalizedRestaurantName =
+        typeof item.restaurant === "string"
+          ? item.restaurant
+          : typeof item.restaurant?.name === "string"
+            ? item.restaurant.name
+            : ""
+
+      const normalizedRestaurantId =
+        item.restaurantId ||
+        item.restaurant_id ||
+        item.restaurant?._id ||
+        item.restaurant?.restaurantId ||
+        null
+
+      const normalizedImage =
+        item.image ||
+        item.imageUrl ||
+        item.product?.imageUrl ||
+        item.product?.image ||
+        ""
+
+      const baseItemId =
+        item.itemId ||
+        item.productId ||
+        item.foodId ||
+        item.baseItemId ||
+        item.menuItemId ||
+        item.id ||
+        item._id ||
+        `cart-item-${index}`
+
+      const variantId = item.variantId || item.variant?._id || item.variant?.id || ""
+      const variantName =
+        typeof item.variantName === "string"
+          ? item.variantName
+          : typeof item.variant?.name === "string"
+            ? item.variant.name
+            : ""
+      const parsedVariantPrice = Number(
+        item.variantPrice ?? item.variant?.price ?? item.price,
+      )
+      const lineItemId =
+        item.lineItemId ||
+        item.cartLineId ||
+        buildCartLineId(baseItemId, variantId)
+
+        const name = item.name || item.product?.name || "Item";
+        const nameLower = name.toLowerCase();
+        
+        // Strict cache sanitation: If it was wrongly cached as Veg previously, override it
+        let currentFoodType = item.foodType;
+        if (nameLower.includes("chicken") || nameLower.includes("salmon") || nameLower.includes("tart")) {
+          currentFoodType = "Non-Veg";
+        }
+        
+        // Ensure foodType and isVeg are perfectly synchronized
+        const isVegResolved = item.isVeg === true || currentFoodType === "Veg";
+        const finalFoodType = isVegResolved ? "Veg" : "Non-Veg";
+
+        return {
+          ...item,
+          id: lineItemId,
+          lineItemId,
+          itemId: String(baseItemId),
+          productId: String(baseItemId),
+          variantId: variantId ? String(variantId) : "",
+          variantName,
+          variantPrice: Number.isFinite(parsedVariantPrice) ? parsedVariantPrice : 0,
+          name: name,
+          quantity:
+            Number.isFinite(parsedQuantity) && parsedQuantity > 0
+              ? Math.floor(parsedQuantity)
+              : 1,
+          price: Number.isFinite(parsedPrice) ? parsedPrice : 0,
+          foodType: finalFoodType,
+          isVeg: finalFoodType === "Veg",
+        restaurant: normalizedRestaurantName,
+        restaurantId: normalizedRestaurantId,
+        image: normalizedImage,
+        imageUrl: normalizedImage,
+      }
+    })
+}
+
+const resolveCartEntryId = (items, itemId, variantId = "") => {
+  const normalizedItemId = String(itemId || "")
+  const safeItems = Array.isArray(items) ? items : []
+
+  const directMatch = safeItems.find((item) => item.id === normalizedItemId)
+  if (directMatch) return directMatch.id
+
+  const preferredId = buildCartLineId(normalizedItemId, variantId)
+
+  const exactMatch = safeItems.find((item) => item.id === preferredId)
+  if (exactMatch) return exactMatch.id
+
+  if (!variantId) {
+    const legacyBaseMatch = safeItems.find(
+      (item) =>
+        String(item.itemId || item.productId || item.id || "") === normalizedItemId &&
+        !String(item.variantId || "").trim(),
+    )
+    if (legacyBaseMatch) return legacyBaseMatch.id
+  }
+
+  return preferredId
+}
+
+export function CartProvider({ children }) {
+  // Safe init (works with SSR and bad JSON)
+  const [cart, setCart] = useState(() => {
+    if (typeof window === "undefined") return []
+    try {
+      const saved = localStorage.getItem("cart")
+      const parsed = saved ? JSON.parse(saved) : []
+      return normalizeCartData(parsed)
+    } catch {
+      return []
+    }
+  })
+  // Track last add event for animation
+  const [lastAddEvent, setLastAddEvent] = useState(null)
+  // Track last remove event for animation
+  const [lastRemoveEvent, setLastRemoveEvent] = useState(null)
+  const [conflictData, setConflictData] = useState(null)
+
+  // Persist to localStorage whenever cart changes
+  useEffect(() => {
+    try {
+      // Only save if we have items or user is authenticated to avoid cluttering localStorage for every guest visitor
+      const isAuthenticated = localStorage.getItem("user_authenticated") === "true" || !!localStorage.getItem("user_accessToken");
+      if (cart.length > 0 || isAuthenticated) {
+        localStorage.setItem("cart", JSON.stringify(normalizeCartData(cart)))
+      }
+    } catch {
+      // ignore storage errors (private mode, quota, etc.)
+    }
+  }, [cart])
+
+  const addToCart = (item, sourcePosition = null) => {
+    const safeCart = normalizeCartData(cart)
+    if (!item) return { ok: false, error: 'Invalid item' }
+
+    // Normalize the incoming item using the same rules as Cart state items
+    const normalizedItem = normalizeCartData([item])[0]
+    if (!normalizedItem) return { ok: false, error: 'Invalid item' }
+
+    if (safeCart.length > 0) {
+      const firstItemRestaurantId = safeCart[0]?.restaurantId
+      const firstItemRestaurantName = safeCart[0]?.restaurant
+      const newItemRestaurantId = normalizedItem?.restaurantId
+      const newItemRestaurantName = normalizedItem?.restaurant
+      const normalizeName = (name) => (name ? String(name).trim().toLowerCase() : '')
+
+      const firstRestaurantNameNormalized = normalizeName(firstItemRestaurantName)
+      const newRestaurantNameNormalized = normalizeName(newItemRestaurantName)
+      const hasNameMismatch =
+        firstRestaurantNameNormalized &&
+        newRestaurantNameNormalized &&
+        firstRestaurantNameNormalized !== newRestaurantNameNormalized
+
+      const hasIdMismatch =
+        !firstRestaurantNameNormalized &&
+        !newRestaurantNameNormalized &&
+        firstItemRestaurantId &&
+        newItemRestaurantId &&
+        String(firstItemRestaurantId) !== String(newItemRestaurantId)
+
+      if (hasNameMismatch || hasIdMismatch) {
+        setConflictData({
+          newItem: item,
+          sourcePosition,
+          existingRestaurantName: firstItemRestaurantName || 'another restaurant',
+          newRestaurantName: newItemRestaurantName || 'new restaurant'
+        })
+        const message = `Cart already contains items from "${firstItemRestaurantName || 'another restaurant'}". Please clear cart or complete order first.`
+        return { ok: false, error: message, code: 'RESTAURANT_MISMATCH_PENDING' }
+      }
+    }
+
+    if (!normalizedItem?.restaurantId && !normalizedItem?.restaurant) {
+      return {
+        ok: false,
+        error: 'Item is missing restaurant information. Please refresh the page.',
+        code: 'MISSING_RESTAURANT'
+      }
+    }
+
+    setCart((prev) => {
+      const safePrev = normalizeCartData(prev)
+      // CRITICAL: Validate restaurant consistency
+      // If cart already has items, ensure new item belongs to the same restaurant
+      if (safePrev.length > 0) {
+        const firstItemRestaurantId = safePrev[0]?.restaurantId;
+        const firstItemRestaurantName = safePrev[0]?.restaurant;
+        const newItemRestaurantId = normalizedItem?.restaurantId;
+        const newItemRestaurantName = normalizedItem?.restaurant;
+        
+        // Normalize restaurant names for comparison (trim and case-insensitive)
+        const normalizeName = (name) => name ? name.trim().toLowerCase() : '';
+        const firstRestaurantNameNormalized = normalizeName(firstItemRestaurantName);
+        const newRestaurantNameNormalized = normalizeName(newItemRestaurantName);
+        
+        // Check restaurant name first (more reliable than IDs which can have different formats)
+        // If names match, allow it even if IDs differ (same restaurant, different ID format)
+        if (firstRestaurantNameNormalized && newRestaurantNameNormalized) {
+          if (firstRestaurantNameNormalized !== newRestaurantNameNormalized) {
+            debugError('❌ Cannot add item: Restaurant name mismatch!', {
+              cartRestaurantId: firstItemRestaurantId,
+              cartRestaurantName: firstItemRestaurantName,
+              newItemRestaurantId: newItemRestaurantId,
+              newItemRestaurantName: newItemRestaurantName
+            });
+            return safePrev;
+          }
+          // Names match - allow it (even if IDs differ, it's the same restaurant)
+        } else if (firstItemRestaurantId && newItemRestaurantId) {
+          // If names are not available, fallback to ID comparison
+          if (firstItemRestaurantId !== newItemRestaurantId) {
+            debugError('❌ Cannot add item: Cart contains items from different restaurant!', {
+              cartRestaurantId: firstItemRestaurantId,
+              cartRestaurantName: firstItemRestaurantName,
+              newItemRestaurantId: newItemRestaurantId,
+              newItemRestaurantName: newItemRestaurantName
+            });
+            return safePrev;
+          }
+        }
+      }
+      
+      const existing = safePrev.find((i) => i.id === normalizedItem.id)
+      if (existing) {
+        // Set last add event for animation when incrementing existing item
+        if (sourcePosition) {
+          setLastAddEvent({
+            product: {
+              id: normalizedItem.id,
+              name: normalizedItem.name,
+              imageUrl: normalizedItem.image || normalizedItem.imageUrl,
+            },
+            sourcePosition,
+          })
+          // Clear after animation completes (increased delay)
+          setTimeout(() => setLastAddEvent(null), 1500)
+        }
+        return safePrev.map((i) =>
+          i.id === normalizedItem.id ? { ...i, quantity: i.quantity + 1 } : i
+        )
+      }
+      
+      const newItem = { ...normalizedItem, quantity: 1 }
+      
+      // Set last add event for animation if sourcePosition is provided
+      if (sourcePosition) {
+        setLastAddEvent({
+          product: {
+            id: normalizedItem.id,
+            name: normalizedItem.name,
+            imageUrl: normalizedItem.image || normalizedItem.imageUrl,
+          },
+          sourcePosition,
+        })
+        // Clear after animation completes (increased delay to allow full animation)
+        setTimeout(() => setLastAddEvent(null), 1500)
+      }
+      
+      return [...safePrev, newItem]
+    })
+
+    return { ok: true }
+  }
+
+  const removeFromCart = (itemId, sourcePosition = null, productInfo = null) => {
+    setCart((prev) => {
+      const safePrev = normalizeCartData(prev)
+      const resolvedItemId = resolveCartEntryId(safePrev, itemId)
+      const itemToRemove = safePrev.find((i) => i.id === resolvedItemId)
+      if (itemToRemove && sourcePosition && productInfo) {
+        // Set last remove event for animation
+        setLastRemoveEvent({
+          product: {
+            id: productInfo.id || itemToRemove.id,
+            name: productInfo.name || itemToRemove.name,
+            imageUrl: productInfo.imageUrl || productInfo.image || itemToRemove.image || itemToRemove.imageUrl,
+          },
+          sourcePosition,
+        })
+        // Clear after animation completes
+        setTimeout(() => setLastRemoveEvent(null), 1500)
+      }
+      return safePrev.filter((i) => i.id !== resolvedItemId)
+    })
+  }
+
+  const updateQuantity = (itemId, quantity, sourcePosition = null, productInfo = null) => {
+    const safeCart = normalizeCartData(cart)
+    const resolvedItemId = resolveCartEntryId(safeCart, itemId)
+    if (quantity <= 0) {
+      setCart((prev) => {
+        const safePrev = normalizeCartData(prev)
+        const itemToRemove = safePrev.find((i) => i.id === resolvedItemId)
+        if (itemToRemove && sourcePosition && productInfo) {
+          // Set last remove event for animation
+          setLastRemoveEvent({
+            product: {
+              id: productInfo.id || itemToRemove.id,
+              name: productInfo.name || itemToRemove.name,
+              imageUrl: productInfo.imageUrl || productInfo.image || itemToRemove.image || itemToRemove.imageUrl,
+            },
+            sourcePosition,
+          })
+          // Clear after animation completes
+          setTimeout(() => setLastRemoveEvent(null), 1500)
+        }
+        return safePrev.filter((i) => i.id !== resolvedItemId)
+      })
+      return
+    }
+    
+    // When quantity decreases (but not to 0), also trigger removal animation
+    setCart((prev) => {
+      const safePrev = normalizeCartData(prev)
+      const existingItem = safePrev.find((i) => i.id === resolvedItemId)
+      if (existingItem && quantity < existingItem.quantity && sourcePosition && productInfo) {
+        // Set last remove event for animation when decreasing quantity
+        setLastRemoveEvent({
+          product: {
+            id: productInfo.id || existingItem.id,
+            name: productInfo.name || existingItem.name,
+            imageUrl: productInfo.imageUrl || productInfo.image || existingItem.image || existingItem.imageUrl,
+          },
+          sourcePosition,
+        })
+        // Clear after animation completes
+        setTimeout(() => setLastRemoveEvent(null), 1500)
+      }
+      return safePrev.map((i) => (i.id === resolvedItemId ? { ...i, quantity } : i))
+    })
+  }
+
+  const getCartCount = () =>
+    normalizeCartData(cart).reduce((total, item) => total + (item.quantity || 0), 0)
+
+  const isInCart = (itemId, variantId = "") => {
+    const safeCart = normalizeCartData(cart)
+    const resolvedItemId = resolveCartEntryId(safeCart, itemId, variantId)
+    return safeCart.some((i) => i.id === resolvedItemId)
+  }
+
+  const getCartItem = (itemId, variantId = "") => {
+    const safeCart = normalizeCartData(cart)
+    const resolvedItemId = resolveCartEntryId(safeCart, itemId, variantId)
+    return safeCart.find((i) => i.id === resolvedItemId) || null
+  }
+
+  const clearCart = () => setCart([])
+
+  const replaceCart = (items) => {
+    const normalizedItems = normalizeCartData(items).filter((item) => {
+      const quantity = Number(item?.quantity)
+      return item?.id && (item?.restaurantId || item?.restaurant) && Number.isFinite(quantity) && quantity > 0
+    })
+
+    setCart(normalizedItems)
+    return { ok: true, count: normalizedItems.length }
+  }
+
+  // Clean cart to remove items from different restaurants
+  // Keeps only items from the specified restaurant
+  const cleanCartForRestaurant = (restaurantId, restaurantName) => {
+    setCart((prev) => {
+      const safePrev = normalizeCartData(prev)
+      if (safePrev.length === 0) return safePrev;
+      
+      // Normalize restaurant name for comparison
+      const normalizeName = (name) => name ? name.trim().toLowerCase() : '';
+      const targetRestaurantNameNormalized = normalizeName(restaurantName);
+      
+      // Filter cart to keep only items from the target restaurant
+      const cleanedCart = safePrev.filter((item) => {
+        const itemRestaurantId = item?.restaurantId;
+        const itemRestaurantName = item?.restaurant;
+        const itemRestaurantNameNormalized = normalizeName(itemRestaurantName);
+        
+        // Check by restaurant name first (more reliable)
+        if (targetRestaurantNameNormalized && itemRestaurantNameNormalized) {
+          return itemRestaurantNameNormalized === targetRestaurantNameNormalized;
+        }
+        // Fallback to ID comparison
+        if (restaurantId && itemRestaurantId) {
+          return itemRestaurantId === restaurantId || 
+                 itemRestaurantId === restaurantId.toString() ||
+                 itemRestaurantId.toString() === restaurantId;
+        }
+        // If no match, remove item
+        return false;
+      });
+      
+      if (cleanedCart.length !== safePrev.length) {
+        debugWarn('🧹 Cleaned cart: Removed items from different restaurants', {
+          before: safePrev.length,
+          after: cleanedCart.length,
+          removed: safePrev.length - cleanedCart.length
+        });
+      }
+      
+      return cleanedCart;
+    });
+  }
+
+  // Validate and clean cart on mount/load to prevent multiple restaurant items
+  // This runs only once on initial load to clean up any corrupted cart data from localStorage
+  useEffect(() => {
+    const safeCart = normalizeCartData(cart)
+    if (safeCart.length !== cart.length) {
+      setCart(safeCart)
+      return
+    }
+    if (safeCart.length === 0) return;
+    
+    // Get unique restaurant IDs and names
+    const restaurantIds = safeCart.map(item => item.restaurantId).filter(Boolean);
+    const restaurantNames = safeCart.map(item => item.restaurant).filter(Boolean);
+    const uniqueRestaurantIds = [...new Set(restaurantIds)];
+    const uniqueRestaurantNames = [...new Set(restaurantNames)];
+    
+    // Normalize restaurant names for comparison
+    const normalizeName = (name) => name ? name.trim().toLowerCase() : '';
+    const uniqueRestaurantNamesNormalized = uniqueRestaurantNames.map(normalizeName);
+    const uniqueRestaurantNamesSet = new Set(uniqueRestaurantNamesNormalized);
+    
+    // Check if cart has items from multiple restaurants
+    if (uniqueRestaurantIds.length > 1 || uniqueRestaurantNamesSet.size > 1) {
+      debugWarn('⚠️ Cart contains items from multiple restaurants. Cleaning cart...', {
+        restaurantIds: uniqueRestaurantIds,
+        restaurantNames: uniqueRestaurantNames
+      });
+      
+      // Keep items from the first restaurant (most recent or first in cart)
+      const firstRestaurantId = uniqueRestaurantIds[0];
+      const firstRestaurantName = uniqueRestaurantNames[0];
+      
+      setCart((prev) => {
+        const safePrev = normalizeCartData(prev)
+        const normalizeName = (name) => name ? name.trim().toLowerCase() : '';
+        const firstRestaurantNameNormalized = normalizeName(firstRestaurantName);
+        
+        return safePrev.filter((item) => {
+          const itemRestaurantId = item?.restaurantId;
+          const itemRestaurantName = item?.restaurant;
+          const itemRestaurantNameNormalized = normalizeName(itemRestaurantName);
+          
+          // Check by restaurant name first
+          if (firstRestaurantNameNormalized && itemRestaurantNameNormalized) {
+            return itemRestaurantNameNormalized === firstRestaurantNameNormalized;
+          }
+          // Fallback to ID comparison
+          if (firstRestaurantId && itemRestaurantId) {
+            return itemRestaurantId === firstRestaurantId || 
+                   itemRestaurantId === firstRestaurantId.toString() ||
+                   itemRestaurantId.toString() === firstRestaurantId;
+          }
+          return false;
+        });
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run once on mount to clean up localStorage data
+
+  // Transform cart to match AddToCartAnimation expected structure
+  const cartForAnimation = useMemo(() => {
+    const safeCart = normalizeCartData(cart)
+    const items = safeCart.map(item => ({
+      product: {
+        id: item.id,
+        name: item.name,
+        imageUrl: item.image || item.imageUrl,
+      },
+      quantity: item.quantity || 1,
+    }))
+    
+    const itemCount = safeCart.reduce((total, item) => total + (item.quantity || 0), 0)
+    const total = safeCart.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 0), 0)
+    
+    return {
+      items,
+      itemCount,
+      total,
+    }
+  }, [cart])
+
+  const value = useMemo(
+    () => ({
+      _isProvider: true, // Flag to identify this is from the actual provider
+      // Keep original cart array for backward compatibility
+      cart,
+      // Add animation-compatible structure
+      items: cartForAnimation.items,
+      itemCount: cartForAnimation.itemCount,
+      total: cartForAnimation.total,
+      lastAddEvent,
+      lastRemoveEvent,
+      addToCart,
+      removeFromCart,
+      updateQuantity,
+      getCartCount,
+      isInCart,
+      getCartItem,
+      clearCart,
+      cleanCartForRestaurant,
+      replaceCart,
+    }),
+    [cart, cartForAnimation, lastAddEvent, lastRemoveEvent]
+  )
+
+  const handleConfirmReplaceCart = () => {
+    if (!conflictData) return
+    const { newItem, sourcePosition } = conflictData
+    
+    const normalizedItem = normalizeCartData([newItem])[0]
+    if (normalizedItem) {
+      const itemToAdd = { ...normalizedItem, quantity: 1 }
+      setCart([itemToAdd])
+      
+      if (sourcePosition) {
+        setLastAddEvent({
+          product: {
+            id: normalizedItem.id,
+            name: normalizedItem.name,
+            imageUrl: normalizedItem.image || normalizedItem.imageUrl,
+          },
+          sourcePosition,
+        })
+        setTimeout(() => setLastAddEvent(null), 1500)
+      }
+      toast.success("Cart replaced with new items")
+    }
+    
+    setConflictData(null)
+  }
+
+  return (
+    <CartContext.Provider value={value}>
+      {children}
+      {conflictData && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden border border-gray-100 dark:border-gray-800 animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                Replace cart items?
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
+                Your cart contains items from <span className="font-semibold text-gray-800 dark:text-gray-250">"{conflictData.existingRestaurantName}"</span>. Do you want to discard these items and add items from <span className="font-semibold text-gray-800 dark:text-gray-250">"{conflictData.newRestaurantName}"</span> instead?
+              </p>
+            </div>
+            
+            <div className="flex border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setConflictData(null)}
+                className="flex-1 px-4 py-3.5 text-sm font-semibold text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border-r border-gray-100 dark:border-gray-800 text-center"
+              >
+                No, Keep Existing
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReplaceCart}
+                className="flex-1 px-4 py-3.5 text-sm font-bold text-[#EB590E] hover:bg-orange-50/50 dark:hover:bg-orange-950/20 transition-colors text-center"
+              >
+                Yes, Discard & Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </CartContext.Provider>
+  )
+}
+
+export function useCart() {
+  const context = useContext(CartContext)
+  // Check if context is from the actual provider by checking the _isProvider flag
+  if (!context || context._isProvider !== true) {
+    // In development, log a warning but don't throw to prevent crashes
+    if (process.env.NODE_ENV === 'development') {
+      debugWarn('⚠️ useCart called outside CartProvider. Using default values.');
+      debugWarn('💡 Make sure the component is rendered inside UserLayout which provides CartProvider.');
+    }
+    // Return default context instead of throwing
+    return defaultCartContext
+  }
+  return context
+}
+
