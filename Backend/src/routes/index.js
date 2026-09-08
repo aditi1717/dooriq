@@ -10,6 +10,7 @@ import userRoutes from '../modules/food/user/routes/user.routes.js';
 import orderUserRoutes from '../modules/food/orders/routes/order.routes.user.js';
 import paymentRoutes from '../core/payments/payment.routes.js';
 import fcmRoutes from '../core/notifications/fcm.routes.js';
+import { getPublicMapsConfig } from '../modules/food/admin/controllers/integrationSettings.controller.js';
 import notificationRoutes from '../core/notifications/notification.routes.js';
 import { authMiddleware } from '../core/auth/auth.middleware.js';
 import { privateRateLimiter } from '../middleware/rateLimit.js';
@@ -43,6 +44,9 @@ router.use('/v1/food/search', searchRoutes);
 // Server-side geocoding proxy. Keeps the Google key off the browser so the
 // browser key can be referrer-restricted (see geocode.service.js).
 router.use('/v1/food/location', locationRoutes);
+
+// Browser Maps key for the web apps. Public by design - see the controller.
+router.get('/v1/food/public/maps-config', getPublicMapsConfig);
 router.get('/v1/food/dining/categories/public', getPublicDiningCategories);
 router.get('/v1/food/dining/restaurants/public', getPublicDiningRestaurants);
 router.use('/v1/uploads', uploadRoutes);

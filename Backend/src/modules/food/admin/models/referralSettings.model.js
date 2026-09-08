@@ -8,6 +8,14 @@ const referralSettingsSchema = new mongoose.Schema(
         referredRewardDelivery: { type: Number, min: 0, default: 0 },
         referralLimitUser: { type: Number, min: 0, default: 0 },
         referralLimitDelivery: { type: Number, min: 0, default: 0 },
+
+        /**
+         * Successful deliveries a referred rider must complete before their
+         * referrer's reward is paid. The programme is "Rider Lao, Rs 500 Kamao":
+         * the bonus is for bringing in a rider who actually works, not for a
+         * registration. 0 disables the requirement and pays on approval.
+         */
+        deliveryQualifyingDeliveries: { type: Number, default: 20, min: 0 },
         userAppStoreUrl: { type: String, default: '' },
         userPlayStoreUrl: { type: String, default: '' },
         deliveryAppStoreUrl: { type: String, default: '' },

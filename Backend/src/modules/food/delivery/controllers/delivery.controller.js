@@ -400,3 +400,40 @@ export const deleteDeliveryPartnerAccountController = async (req, res, next) => 
         next(error);
     }
 };
+
+/**
+ * GET /api/v1/food/delivery/zones?latitude=&longitude=
+ *
+ * Zones the rider can choose from when going online. Passing their position is
+ * optional but worth doing: the zone containing them is flagged and sorted
+ * first, so the popup can preselect it.
+ */
+export const listSelectableZonesController = async (req, res, next) => {
+    try {
+        const { listSelectableZones } = await import('../services/deliveryZone.service.js');
+        const zones = await listSelectableZones({
+            latitude: req.query?.latitude,
+            longitude: req.query?.longitude,
+        });
+        return sendResponse(res, 200, 'Zones fetched successfully', { zones });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * GET /api/v1/food/delivery/zones/current
+ *
+ * What this rider currently has selected, so the app can restore state after a
+ * restart instead of asking again. `zone.isActive === false` means an admin
+ * retired the zone while they were working and the app should re-prompt.
+ */
+export const getActiveZoneController = async (req, res, next) => {
+    try {
+        const { getActiveZoneForPartner } = await import('../services/deliveryZone.service.js');
+        const data = await getActiveZoneForPartner(req.user?.userId);
+        return sendResponse(res, 200, 'Active zone fetched successfully', data);
+    } catch (error) {
+        next(error);
+    }
+};

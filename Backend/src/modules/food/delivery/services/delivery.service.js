@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
 import { FoodDeliveryPartner } from '../models/deliveryPartner.model.js';
-import { FoodZone } from '../../admin/models/zone.model.js';
 import { DeliverySupportTicket } from '../models/supportTicket.model.js';
 import { DeliveryBonusTransaction } from '../../admin/models/deliveryBonusTransaction.model.js';
 import { FoodEarningAddon } from '../../admin/models/earningAddon.model.js';
@@ -12,32 +11,18 @@ import { isMobilePlatform } from '../../../../utils/platform.js';
 import { getIO } from '../../../../config/socket.js';
 import { notifyAdminsSafely } from '../../../../core/notifications/firebase.service.js';
 import { logger } from '../../../../utils/logger.js';
+import { assertSelectableZone } from './deliveryZone.service.js';
 
 const isDevelopmentEnvironment = () =>
     String(process.env.NODE_ENV || '').trim().toLowerCase() === 'development';
-
-// Shared by registration and the profile "change zone" flow — never trust a
-// client-supplied zoneId without confirming it's a real, currently-active zone.
-const resolveActiveZoneId = async (zoneId) => {
-    if (!mongoose.Types.ObjectId.isValid(String(zoneId || ''))) {
-        throw new ValidationError('Invalid delivery zone');
-    }
-    const zone = await FoodZone.findOne({ _id: zoneId, isActive: true }).select('_id').lean();
-    if (!zone) {
-        throw new ValidationError('Selected delivery zone is not available');
-    }
-    return zone._id;
-};
 
 export const registerDeliveryPartner = async (payload, files) => {
     const {
         name, phone, email, countryCode, address, city, state,
         vehicleType, vehicleName, vehicleNumber, drivingLicenseNumber, panNumber, aadharNumber,
-        zoneId, fcmToken, platform
+        fcmToken, platform, zoneId
     } = payload;
     const refRaw = typeof payload?.ref === 'string' ? String(payload.ref).trim() : '';
-
-    const resolvedZoneId = await resolveActiveZoneId(zoneId);
 
     const existing = await FoodDeliveryPartner.findOne({ phone });
     if (existing) {
@@ -118,6 +103,15 @@ export const registerDeliveryPartner = async (payload, files) => {
         }
     }
 
+    // The rider picks the zone they will work during registration, so it is
+    // part of their profile rather than a per-shift choice. Optional: existing
+    // app builds do not send it, and a rider without a zone stays eligible for
+    // every zone.
+    let selectedZoneId = null;
+    if (zoneId !== undefined && zoneId !== null && String(zoneId).trim() !== '') {
+        selectedZoneId = await assertSelectableZone(zoneId);
+    }
+
     const partner = await FoodDeliveryPartner.create({
         name,
         phone,
@@ -132,7 +126,7 @@ export const registerDeliveryPartner = async (payload, files) => {
         drivingLicenseNumber,
         panNumber,
         aadharNumber,
-        zoneId: resolvedZoneId,
+        activeZoneId: selectedZoneId,
         status: 'pending',
         ...images
     });
@@ -307,7 +301,7 @@ export const updateDeliveryPartnerDetails = async (userId, payload) => {
     }
 
     if (payload?.zoneId !== undefined) {
-        partner.zoneId = await resolveActiveZoneId(payload.zoneId);
+        partner.activeZoneId = await assertSelectableZone(payload.zoneId);
     }
 
     await partner.save();
@@ -488,7 +482,7 @@ export const getSupportTicketByIdAndPartner = async (ticketId, deliveryPartnerId
  * fields that change and needs a single round-trip.
  */
 export const updateDeliveryAvailability = async (userId, payload, requestMeta = {}) => {
-    const { status, latitude, longitude, source } = payload || {};
+    const { status, latitude, longitude, source, zoneId } = payload || {};
     const normalizedSource = String(source || 'delivery-app').trim() || 'delivery-app';
     const isSimulation = /simulation/i.test(normalizedSource);
 
@@ -522,6 +516,16 @@ export const updateDeliveryAvailability = async (userId, payload, requestMeta = 
     }
 
     const $set = { availabilityStatus: validStatus };
+
+    // The zone is chosen at registration and belongs to the rider's profile, so
+    // it deliberately survives going offline. This endpoint still accepts a
+    // zoneId so a rider can change zones without re-registering, but never
+    // clears one: an absent field means "leave it as it is", which is what the
+    // three-minute keep-alive pings depend on.
+    if (zoneId !== undefined && zoneId !== null && String(zoneId).trim() !== '') {
+        $set.activeZoneId = await assertSelectableZone(zoneId);
+    }
+
     if (hasValidLocation) {
         // Both shapes are kept in sync: `lastLocation` backs the 2dsphere index,
         // while `lastLat`/`lastLng` are what order dispatch reads. Writing only
@@ -535,7 +539,7 @@ export const updateDeliveryAvailability = async (userId, payload, requestMeta = 
     const partner = await FoodDeliveryPartner.findOneAndUpdate(
         { _id: userId },
         { $set },
-        { new: true, projection: 'availabilityStatus' },
+        { new: true, projection: 'availabilityStatus activeZoneId' },
     ).lean();
 
     if (!partner) {

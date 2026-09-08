@@ -46,11 +46,6 @@ const deliveryPartnerSchema = new mongoose.Schema(
             trim: true,
             uppercase: true
         },
-        zoneId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'FoodZone',
-            index: true
-        },
         panNumber: {
             type: String
         },
@@ -107,6 +102,24 @@ const deliveryPartnerSchema = new mongoose.Schema(
         lastLat: { type: Number },
         lastLng: { type: Number },
         lastLocationAt: { type: Date },
+        /**
+         * The zone this rider works, chosen on the registration form. Dispatch
+         * offers them orders whose restaurant sits in the same zone.
+         *
+         * Part of the rider's profile rather than a per-shift choice, so it
+         * survives going offline. It can be changed later without
+         * re-registering, but never implicitly cleared.
+         *
+         * Null means "no preference", which is deliberately how every existing
+         * rider starts: a null here must never exclude anyone, or enabling the
+         * dispatch filter would stop orders reaching the whole current fleet.
+         */
+        activeZoneId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'FoodZone',
+            default: null,
+        },
+
         referralCode: { type: String, index: true },
         referredBy: {
             type: mongoose.Schema.Types.ObjectId,
@@ -136,10 +149,11 @@ deliveryPartnerSchema.index({ lastLocation: '2dsphere' });
 // order placed. Without this compound index that is a full collection scan over
 // every delivery partner ever registered, on the critical path of each order.
 deliveryPartnerSchema.index({ availabilityStatus: 1, status: 1 });
-// Dispatch also narrows candidates to the order's zone (see order-dispatch.service.js).
-deliveryPartnerSchema.index({ zoneId: 1, availabilityStatus: 1, status: 1 });
 // Dispatch also filters riders whose GPS is older than the staleness window.
 deliveryPartnerSchema.index({ availabilityStatus: 1, lastLocationAt: -1 });
+// Zone-filtered dispatch: online riders in a given zone. Sparse-friendly in
+// practice because dispatch always constrains availabilityStatus first.
+deliveryPartnerSchema.index({ availabilityStatus: 1, activeZoneId: 1 });
 
 // FCM token reassignment looks a device token up across every owner collection.
 // Multikey indexes turn those scans into point lookups.

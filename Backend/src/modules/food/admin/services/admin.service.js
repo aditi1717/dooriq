@@ -2161,6 +2161,7 @@ export async function upsertReferralSettings(body = {}) {
         if (body.referredRewardDelivery !== undefined) $set.referredRewardDelivery = Math.max(0, Number(body.referredRewardDelivery) || 0);
         if (body.referralLimitUser !== undefined) $set.referralLimitUser = Math.max(0, Number(body.referralLimitUser) || 0);
         if (body.referralLimitDelivery !== undefined) $set.referralLimitDelivery = Math.max(0, Number(body.referralLimitDelivery) || 0);
+        if (body.deliveryQualifyingDeliveries !== undefined) $set.deliveryQualifyingDeliveries = Math.max(0, Math.floor(Number(body.deliveryQualifyingDeliveries) || 0));
         if (body.userAppStoreUrl !== undefined) $set.userAppStoreUrl = String(body.userAppStoreUrl || '').trim();
         if (body.userPlayStoreUrl !== undefined) $set.userPlayStoreUrl = String(body.userPlayStoreUrl || '').trim();
         if (body.deliveryAppStoreUrl !== undefined) $set.deliveryAppStoreUrl = String(body.deliveryAppStoreUrl || '').trim();
@@ -2179,6 +2180,10 @@ export async function upsertReferralSettings(body = {}) {
         referredRewardDelivery: Math.max(0, Number(body.referredRewardDelivery) || 0),
         referralLimitUser: Math.max(0, Number(body.referralLimitUser) || 0),
         referralLimitDelivery: Math.max(0, Number(body.referralLimitDelivery) || 0),
+        // Fall through to the schema default (20) when the admin has not set one.
+        ...(body.deliveryQualifyingDeliveries !== undefined
+            ? { deliveryQualifyingDeliveries: Math.max(0, Math.floor(Number(body.deliveryQualifyingDeliveries) || 0)) }
+            : {}),
         userAppStoreUrl: String(body.userAppStoreUrl || '').trim(),
         userPlayStoreUrl: String(body.userPlayStoreUrl || '').trim(),
         deliveryAppStoreUrl: String(body.deliveryAppStoreUrl || '').trim(),
@@ -3309,7 +3314,7 @@ export async function approveRestaurantAddon(addonId) {
             await notifyOwnersSafely(
                 [{ ownerType: 'RESTAURANT', ownerId: updated.restaurantId }],
                 {
-                    title: 'Addon Approved! âœ…',
+                    title: 'Addon Approved! ✅',
                     body: `Your addon "${updated.published?.name || 'New Addon'}" has been approved and is now live.`,
                     image: 'https://i.ibb.co/5GzXz7r/Dooriq-Brand-Image.png',
                     data: {
@@ -3352,7 +3357,7 @@ export async function rejectRestaurantAddon(addonId, reason) {
             await notifyOwnersSafely(
                 [{ ownerType: 'RESTAURANT', ownerId: updated.restaurantId }],
                 {
-                    title: 'Addon Rejected âŒ',
+                    title: 'Addon Rejected ❌',
                     body: `Your addon request for "${updated.draft?.name || 'New Addon'}" was rejected. Reason: ${rejectionReason}`,
                     image: 'https://i.ibb.co/5GzXz7r/Dooriq-Brand-Image.png',
                     data: {
@@ -3833,7 +3838,7 @@ export async function rejectRestaurant(id, reason) {
             await notifyOwnersSafely(
                 [{ ownerType: 'RESTAURANT', ownerId: updated._id }],
                 {
-                    title: 'Update on Registration ðŸ“‹',
+                    title: 'Update on Registration 📋',
                     body: `Your restaurant registration for "${updated.restaurantName}" has been rejected. Reason: ${reason || 'Incomplete documents'}.`,
                     image: 'https://i.ibb.co/5GzXz7r/Dooriq-Brand-Image.png',
                     data: {
@@ -3980,7 +3985,7 @@ export async function createAdminOffer(body) {
             await notifyOwnersSafely(
                 selectedRestaurantIds.map((ownerId) => ({ ownerType: 'RESTAURANT', ownerId })),
                 {
-                    title: 'New Campaign Invitation! ðŸ“¢',
+                    title: 'New Campaign Invitation! 📢',
                     body: `You have been invited to join a new campaign: "${doc.couponCode}". Check it out now!`,
                     image: 'https://i.ibb.co/5GzXz7r/Dooriq-Brand-Image.png',
                     data: {
@@ -4960,7 +4965,7 @@ export async function creditEarningAddonHistory(historyId, notes) {
         await notifyOwnerSafely(
             { ownerType: 'DELIVERY_PARTNER', ownerId: doc.deliveryPartnerId },
             {
-                title: 'Incentive Credited! ðŸŽ¯',
+                title: 'Incentive Credited! 🎯',
                 body: `Your incentive for "${doc.offerId?.title || 'Earning Addon'}" has been approved and moved to your pocket.`,
                 image: 'https://i.ibb.co/5GzXz7r/Dooriq-Brand-Image.png',
                 data: {
@@ -4992,7 +4997,7 @@ export async function cancelEarningAddonHistory(historyId, reason) {
         await notifyOwnerSafely(
             { ownerType: 'DELIVERY_PARTNER', ownerId: doc.deliveryPartnerId },
             {
-                title: 'Incentive Update ðŸ“‹',
+                title: 'Incentive Update 📋',
                 body: `Your incentive request for "${doc.offerId?.title || 'Earning Addon'}" was not approved. Reason: ${doc.cancelReason || 'Ineligible'}`,
                 image: 'https://i.ibb.co/5GzXz7r/Dooriq-Brand-Image.png',
                 data: {
@@ -5243,48 +5248,33 @@ export async function approveDeliveryPartner(id) {
                 const isApprovedOrUser = isUserReferrer || (referrer && referrer.status === 'approved');
 
                 if (referrer && isApprovedOrUser && reward > 0 && (limit === 0 || Number(referrer.referralCount || 0) < limit)) {
-                    const log = await FoodReferralLog.create({
+                    // Approval records the referral; it does not pay it.
+                    //
+                    // "Rider Lao, Rs 500 Kamao" rewards bringing in a rider who
+                    // actually works, so the referrer's bonus is settled once
+                    // this rider has completed the configured number of
+                    // deliveries - see settleDeliveryReferralOnDelivery, called
+                    // from the delivery-completion path. Paying at approval
+                    // made the reward claimable for a signup plus documents.
+                    await FoodReferralLog.create({
                         referrerId: referrer._id,
                         refereeId: partner._id,
                         role: 'DELIVERY_PARTNER',
                         rewardAmount: reward,
-                        status: 'credited'
+                        referredRewardAmount: Math.max(0, Number(settingsDoc?.referredRewardDelivery) || 0),
+                        status: 'pending'
                     });
 
+                    // The joining bonus is a different promise: it is for
+                    // joining and completing KYC, which has just happened, so it
+                    // is paid now.
                     const referredReward = Math.max(0, Number(settingsDoc?.referredRewardDelivery) || 0);
-                    const bonusPromises = [];
-
-                    if (isUserReferrer) {
-                        const { FoodUser } = await import('../../../../core/users/user.model.js');
-                        const { creditReferralReward } = await import('../../user/services/userWallet.service.js');
-                        bonusPromises.push(
-                            FoodUser.updateOne({ _id: referrer._id }, { $inc: { referralCount: 1 } }),
-                            creditReferralReward(referrer._id, reward, {
-                                role: 'USER',
-                                refereeId: String(partner._id),
-                                referralLogId: String(log._id)
-                            })
-                        );
-                    } else {
-                        bonusPromises.push(
-                            FoodDeliveryPartner.updateOne({ _id: referrer._id }, { $inc: { referralCount: 1 } }),
-                            addDeliveryPartnerBonus(
-                                { deliveryPartnerId: String(referrer._id), amount: reward, reference: 'Referral bonus' },
-                                null
-                            )
-                        );
-                    }
-
                     if (referredReward > 0) {
-                        bonusPromises.push(
-                            addDeliveryPartnerBonus(
-                                { deliveryPartnerId: String(partner._id), amount: referredReward, reference: 'Referral signup bonus' },
-                                null
-                            )
+                        await addDeliveryPartnerBonus(
+                            { deliveryPartnerId: String(partner._id), amount: referredReward, reference: 'Joining bonus' },
+                            null
                         );
                     }
-
-                    await Promise.all(bonusPromises);
                 } else {
                     await FoodReferralLog.create({
                         referrerId: new mongoose.Types.ObjectId(referrerId),
@@ -5326,7 +5316,7 @@ export async function rejectDeliveryPartner(id, reason) {
             await notifyOwnerSafely(
                 { ownerType: 'DELIVERY_PARTNER', ownerId: updated._id },
                 {
-                    title: 'Onboarding Update ðŸ“‹',
+                    title: 'Onboarding Update 📋',
                     body: `Your application to join as a delivery partner was rejected. Reason: ${reason || 'Incomplete documents'}.`,
                     image: 'https://i.ibb.co/5GzXz7r/Dooriq-Brand-Image.png',
                     data: {

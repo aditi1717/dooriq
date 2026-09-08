@@ -156,3 +156,91 @@ export const getAdminRestaurantSubscriptionHistory = async (query = {}) => {
 
   return { items, page, limit, total };
 };
+
+const IST = "Asia/Kolkata";
+const monthKeyFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: IST,
+  year: "numeric",
+  month: "2-digit",
+});
+const monthLabelFormatter = new Intl.DateTimeFormat("en-IN", {
+  timeZone: IST,
+  year: "numeric",
+  month: "long",
+});
+
+const PAYMENT_EVENTS = new Set(["subscription_payment", "subscription_auto_deduct"]);
+
+/**
+ * Rolls subscription history events up into one invoice per billing month, in
+ * the shape the restaurant app's subscription-invoices list expects:
+ * `{ _id, billingMonthLabel, planName, totalAmount, paidAmount,
+ *    outstandingAmount, status }`, newest month first.
+ */
+export const buildSubscriptionInvoices = (items = []) => {
+  const buckets = new Map();
+
+  for (const item of items) {
+    const createdAt = item?.createdAt ? new Date(item.createdAt) : null;
+    if (!createdAt || Number.isNaN(createdAt.getTime())) continue;
+
+    const key = monthKeyFormatter.format(createdAt);
+    if (!buckets.has(key)) {
+      buckets.set(key, {
+        _id: key,
+        billingMonthLabel: monthLabelFormatter.format(createdAt),
+        planName: "",
+        totalAmount: 0,
+        paidAmount: 0,
+        outstandingAmount: 0,
+        latestAt: 0,
+      });
+    }
+    const bucket = buckets.get(key);
+    const amount = Math.max(0, toNum(item?.amount, 0));
+
+    if (item?.eventType === "subscription_renewal_due_added") {
+      bucket.totalAmount += amount;
+    } else if (PAYMENT_EVENTS.has(item?.eventType)) {
+      bucket.paidAmount += amount;
+    }
+
+    // The closing balance of the month's most recent event is the real
+    // outstanding figure — more faithful than re-deriving it from sums.
+    const at = createdAt.getTime();
+    if (at >= bucket.latestAt) {
+      bucket.latestAt = at;
+      bucket.outstandingAmount = Math.max(0, toNum(item?.dueAfter, 0));
+      if (item?.plan) bucket.planName = String(item.plan);
+    }
+  }
+
+  const invoices = [...buckets.values()]
+    .sort((a, b) => (a._id < b._id ? 1 : -1))
+    .map(({ latestAt, ...invoice }) => {
+      // Months with only payments (and legacy imported state) log no charge
+      // event, so bill = what was paid plus what is still owed.
+      const totalAmount =
+        invoice.totalAmount > 0
+          ? invoice.totalAmount
+          : invoice.paidAmount + invoice.outstandingAmount;
+
+      let status = "pending";
+      if (invoice.outstandingAmount <= 0) status = "settled";
+      else if (invoice.paidAmount > 0) status = "partially_settled";
+
+      return { ...invoice, totalAmount, status };
+    });
+
+  return { invoices };
+};
+
+export const getRestaurantSubscriptionInvoices = async (restaurantId) => {
+  // ponytail: last 200 events (~ a few years of monthly billing) is plenty for
+  // the app's flat list; paginate here if invoices ever need infinite scroll.
+  const { items } = await getRestaurantSubscriptionHistory(restaurantId, {
+    page: 1,
+    limit: 200,
+  });
+  return buildSubscriptionInvoices(items);
+};

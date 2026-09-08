@@ -17,6 +17,7 @@ import { config } from '../../../../config/env.js';
 import { logger } from '../../../../utils/logger.js';
 import { createTtlCache } from '../../../../utils/cache.js';
 import { FoodGeocodeCache } from '../models/geocodeCache.model.js';
+import { getGoogleMapsApiKey } from '../../admin/services/integrationSettings.service.js';
 
 /** ~11 m of precision. Finer than this buys nothing and destroys the hit rate. */
 const COORD_PRECISION = 4;
@@ -80,9 +81,9 @@ function normalizeGoogleResult(result) {
 }
 
 async function fetchFromGoogle(lat, lng) {
-    const apiKey = config.googleMapsApiKey;
+    const apiKey = await getGoogleMapsApiKey();
     if (!apiKey) {
-        logger.warn('Reverse geocode skipped: GOOGLE_MAPS_API_KEY not configured.');
+        logger.warn('Reverse geocode skipped: no Google Maps key set in the admin panel or GOOGLE_MAPS_API_KEY.');
         return null;
     }
 

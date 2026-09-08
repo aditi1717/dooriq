@@ -7,6 +7,7 @@ import { FoodRestaurant } from "../../modules/food/restaurant/models/restaurant.
 import { FoodDeliveryPartner } from "../../modules/food/delivery/models/deliveryPartner.model.js";
 import { FoodOrder } from "../../modules/food/orders/models/order.model.js";
 import { FoodReferralSettings } from "../../modules/food/admin/models/referralSettings.model.js";
+import { countSettledReferrals } from "../referrals/referral.service.js";
 import { FoodReferralLog } from "../../modules/food/admin/models/referralLog.model.js";
 import { createOrUpdateOtp, verifyOtp } from "../otp/otp.service.js";
 import { signAccessToken, signRefreshToken } from "./token.util.js";
@@ -883,49 +884,39 @@ export async function processReferralForUser(userDoc, refCode) {
   }
 
   const reward = Math.max(0, Number(settingsDoc.referralRewardUser) || 0);
+  const referredReward = Math.max(0, Number(settingsDoc.referredRewardUser) || 0);
   const limit = Math.max(0, Number(settingsDoc.referralLimitUser) || 0);
 
-  if (limit > 0 && Number(referrer.referralCount || 0) >= limit) {
+  // The limit counts referrals that actually paid out, not registrations.
+  // Someone may refer any number of people; only the first `limit` of them to
+  // complete an order earn a reward. Checking registrations instead let a
+  // referrer's quota be consumed by signups that never ordered.
+  const settledCount = await countSettledReferrals(referrerId, "USER");
+  if (limit > 0 && settledCount >= limit) {
     throw new ValidationError("This referral code has reached its usage limit");
   }
 
-  if (reward > 0 && (limit === 0 || Number(referrer.referralCount || 0) < limit)) {
+  if (reward > 0 || referredReward > 0) {
     userDoc.referredBy = referrerId;
     await userDoc.save();
 
-    const log = await FoodReferralLog.create({
+    // Recorded, not paid. Settlement happens in
+    // `settleUserReferralOnDelivery` when this user completes an order.
+    // Crediting here made the reward claimable by anyone willing to register
+    // throwaway accounts against their own code.
+    //
+    // Both amounts are snapshotted so a later change to the admin settings
+    // cannot alter what this referral already promised.
+    await FoodReferralLog.create({
       referrerId,
       refereeId: userDoc._id,
       role: "USER",
       rewardAmount: reward,
-      status: "credited",
+      referredRewardAmount: referredReward,
+      status: "pending",
     });
 
-    const referredReward = Math.max(0, Number(settingsDoc.referredRewardUser) || 0);
-    const creditPromises = [
-      FoodUser.updateOne(
-        { _id: referrerId },
-        { $inc: { referralCount: 1 } }
-      ),
-      creditReferralReward(referrerId, reward, {
-        role: "USER",
-        refereeId: String(userDoc._id),
-        referralLogId: String(log._id),
-      }),
-    ];
-
-    if (referredReward > 0) {
-      creditPromises.push(
-        creditReferralReward(userDoc._id, referredReward, {
-          role: "USER",
-          refereeId: String(userDoc._id),
-          referralLogId: String(log._id),
-        })
-      );
-    }
-
-    await Promise.all(creditPromises);
-    return { success: true, reward };
+    return { success: true, pending: true, reward, referredReward };
   } else {
     await FoodReferralLog.create({
       referrerId,

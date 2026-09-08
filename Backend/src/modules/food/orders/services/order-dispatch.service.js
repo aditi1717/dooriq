@@ -139,14 +139,15 @@ async function enrichPayloadWithTripRoadDistance(order, payload) {
 
 async function listNearbyOnlineDeliveryPartners(
   restaurantId,
-  { maxKm = 15, limit = 25, order = null, config = null } = {},
+  options = {},
 ) {
+  const { maxKm = 15, limit = 25, order = null, config = null } = options;
   const staleGpsMs = Number(config?.staleGpsMinutes ?? 10) * 60 * 1000;
   const includeStaleGpsRiders = config?.includeStaleGpsRiders !== false;
   const unboundedFallbackEnabled = config?.unboundedFallbackEnabled !== false;
   const rId = (restaurantId?._id || restaurantId).toString();
   const restaurant = await FoodRestaurant.findById(rId)
-    .select("location")
+    .select("location zoneId")
     .lean();
 
   const allowedStatuses = process.env.NODE_ENV === 'production' ? ['approved'] : ['approved', 'pending'];
@@ -156,16 +157,30 @@ async function listNearbyOnlineDeliveryPartners(
     availabilityStatus: "online",
   };
 
-  // Zone-restricted dispatch: an order carries the zoneId it was placed under
-  // (order.service.js, derived from the restaurant's zone). Only offer it to
-  // partners who registered for that same zone — radius alone previously let
-  // a rider a few km away in a neighbouring zone receive orders that were
-  // never meant for their coverage area. Orders/partners with no zoneId yet
-  // (pre-migration data) fall back to the old radius-only behaviour rather
-  // than matching nobody.
-  const orderZoneId = order?.zoneId;
-  if (orderZoneId) {
-    basePartnerFilter.zoneId = orderZoneId;
+  // Zone preference.
+  //
+  // Matched against the *restaurant's* zone, not the order's: the rider is
+  // being sent to a pickup, the radius below is already measured from the
+  // restaurant, and restaurants carry a zone far more consistently than orders
+  // do.
+  //
+  // Riders with no zone selected stay eligible. That is what makes this safe to
+  // deploy before the app ships - otherwise every existing rider, none of whom
+  // has a zone, would stop receiving orders.
+  //
+  // The caller drops this on the final widening stage, so an order in a zone
+  // nobody picked still gets delivered rather than sitting unassigned.
+  const zoneFilterActive =
+    config?.zoneFilterEnabled === true &&
+    options.applyZoneFilter !== false &&
+    Boolean(restaurant?.zoneId);
+
+  if (zoneFilterActive) {
+    basePartnerFilter.$or = [
+      { activeZoneId: restaurant.zoneId },
+      { activeZoneId: null },
+      { activeZoneId: { $exists: false } },
+    ];
   }
   const partnerFields = "_id status lastLat lastLng lastLocationAt name";
 
@@ -232,25 +247,7 @@ async function listNearbyOnlineDeliveryPartners(
     return found;
   };
 
-  let allOnline = await fetchOnlinePartners(basePartnerFilter);
-
-  // Zone rollout safety net: zoneId is a new field, and not every existing
-  // partner has one yet (no GPS fix to derive it from, or never opened the
-  // app's "Change Zone" screen). Rather than leaving the order completely
-  // unfulfilled while the fleet gradually sets a zone, fall back to the old
-  // radius-only candidate pool when zone-matching finds nobody at all.
-  if (orderZoneId && allOnline.length === 0) {
-    const { zoneId: _zoneFilter, ...unscopedFilter } = basePartnerFilter;
-    allOnline = await fetchOnlinePartners(unscopedFilter);
-    if (allOnline.length > 0) {
-      dispatchLog('ORDER_ZONE_MATCH_EMPTY_FALLBACK', {
-        restaurantId: rId,
-        orderZoneId: String(orderZoneId),
-        fallbackCandidateCount: allOnline.length,
-        reason: 'no_online_partner_in_order_zone',
-      }, 'warn');
-    }
-  }
+  const allOnline = await fetchOnlinePartners(basePartnerFilter);
 
   const onlineIds = allOnline.map((p) => p._id).filter(Boolean);
   if (onlineIds.length === 0) {
@@ -540,7 +537,19 @@ export async function tryAutoAssign(orderId, options = {}) {
       return order;
     }
 
-    const searchOptions = { maxKm, limit: config.riderFanoutLimit, order, config };
+    // Once the search has widened to its last stage, stop preferring the
+    // restaurant's zone. A zone nobody selected would otherwise leave the order
+    // permanently unassigned, and an order that cannot find a rider is worse
+    // than one taken by a rider from the next zone over.
+    const isFinalStage = stage.isFinalStage === true || maxKm >= Number(config.maxRadiusKm || 0);
+
+    const searchOptions = {
+      maxKm,
+      limit: config.riderFanoutLimit,
+      order,
+      config,
+      applyZoneFilter: !isFinalStage,
+    };
     const { partners, staleGpsCount = 0, usedUnboundedFallback = false } =
       await listNearbyOnlineDeliveryPartners(order.restaurantId, searchOptions);
 
@@ -716,6 +725,22 @@ export async function tryAutoAssign(orderId, options = {}) {
               pickupLat: payload.restaurantLocation?.lat != null ? String(payload.restaurantLocation.lat) : '',
               pickupLng: payload.restaurantLocation?.lng != null ? String(payload.restaurantLocation.lng) : '',
               acceptTimeoutSeconds: String(config.offerCountdownSeconds || ''),
+
+              // Aliases for the delivery app's notification builder, which
+              // reads pickupAddress / dropAddress / price / distance. It has
+              // never received those keys, so every rider offer rendered as
+              // "From: Restaurant / To: Customer / Earnings: Rs | Dist: km" —
+              // the placeholder defaults — which is what riders reported as a
+              // blank notification.
+              //
+              // Sent in addition to the canonical names rather than instead of
+              // them, so app builds old and new both work and this needs no
+              // coordinated release. Remove once every installed client reads
+              // the canonical keys.
+              pickupAddress: payload.restaurantAddress || '',
+              dropAddress: payload.customerAddress || '',
+              price: payload.riderEarning != null ? String(payload.riderEarning) : '',
+              distance: payload.tripDistanceKm != null ? String(payload.tripDistanceKm) : '',
             },
           }
         );

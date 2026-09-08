@@ -13,12 +13,9 @@ const aadharRegex = /^[0-9]{12}$/;
 // 2 letters (state) + 8 to 16 alphanumeric characters
 const drivingLicenseRegex = /^[A-Z]{2}[0-9A-Z]{8,16}$/;
 
-const objectIdRegex = /^[0-9a-fA-F]{24}$/;
-
 const deliveryRegisterSchema = z.object({
     name: z.string().min(1, 'Name is required'),
     phone: phoneSchema,
-    zoneId: z.string().regex(objectIdRegex, 'Please select your delivery zone'),
     email: z.string().email().optional().or(z.literal('')),
     countryCode: z.string().optional(),
     address: z.string().optional(),
@@ -33,6 +30,10 @@ const deliveryRegisterSchema = z.object({
         .optional()
         .or(z.literal('')),
     ref: z.string().trim().max(64).optional().or(z.literal('')),
+    // The zone the rider will work, chosen on the registration form. Optional so
+    // older app builds keep registering; the id itself is validated against the
+    // active zones in the service.
+    zoneId: z.string().trim().optional().or(z.literal('')).nullable(),
     panNumber: z
         .string()
         .regex(panRegex, 'Invalid PAN format')

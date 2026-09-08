@@ -1,4 +1,4 @@
-import { config } from '../../../../config/env.js';
+import { getGoogleMapsApiKey } from '../../admin/services/integrationSettings.service.js';
 import { logger } from '../../../../utils/logger.js';
 import { createTtlCache } from '../../../../utils/cache.js';
 
@@ -35,7 +35,10 @@ export async function fetchDrivingRoute(origin, destination) {
         distanceKm: null,
     };
 
-    const apiKey = config.googleMapsApiKey;
+    // Resolved per call: an admin can change the key in the panel and it takes
+    // effect without a redeploy. Cached in the service, so this is not a
+    // database round trip on the pricing path.
+    const apiKey = await getGoogleMapsApiKey();
     if (!apiKey) {
         logger.warn('Google Maps API key missing. Driving route fetch skipped.');
         return empty;
@@ -59,7 +62,7 @@ export async function fetchDrivingRoute(origin, destination) {
 }
 
 async function requestDrivingRoute(origin, destination, empty) {
-    const apiKey = config.googleMapsApiKey;
+    const apiKey = await getGoogleMapsApiKey();
     try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);

@@ -232,7 +232,7 @@ export async function updateOrderAcceptanceSettings(req, res, next) {
 export async function updateBusinessSettings(req, res, next) {
     try {
         const data = req.body.data ? JSON.parse(req.body.data) : {};
-        const { companyName, email, phoneCountryCode, phoneNumber, address, state, pincode, region, restaurantTdsPercentage, deliveryBoyTdsPercentage, launchCountdown, defaultServingRadiusKm, paymentMethods } = data;
+        const { companyName, email, phoneCountryCode, phoneNumber, address, state, pincode, region, restaurantTdsPercentage, deliveryBoyTdsPercentage, launchCountdown, defaultServingRadiusKm, walletUsagePercentPerOrder, paymentMethods } = data;
 
         // Validation
         if (!companyName || companyName.trim().length < 2 || companyName.trim().length > 50) {
@@ -274,6 +274,13 @@ export async function updateBusinessSettings(req, res, next) {
             }
         }
 
+        if (walletUsagePercentPerOrder !== undefined) {
+            const pct = Number(walletUsagePercentPerOrder);
+            if (isNaN(pct) || pct < 0 || pct > 100) {
+                return res.status(400).json({ success: false, message: 'Wallet usage limit must be a percentage between 0 and 100' });
+            }
+        }
+
         let settings = await FoodBusinessSettings.findOne();
         if (!settings) {
             settings = new FoodBusinessSettings();
@@ -296,6 +303,7 @@ export async function updateBusinessSettings(req, res, next) {
         if (paymentMethods !== undefined) settings.paymentMethods = normalizePaymentMethods(paymentMethods);
         if (launchCountdown !== undefined) settings.launchCountdown = launchCountdown;
         if (defaultServingRadiusKm !== undefined) settings.defaultServingRadiusKm = Number(defaultServingRadiusKm);
+        if (walletUsagePercentPerOrder !== undefined) settings.walletUsagePercentPerOrder = Number(walletUsagePercentPerOrder);
 
         // Handle file uploads
         if (req.files) {
