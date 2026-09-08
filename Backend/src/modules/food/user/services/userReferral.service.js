@@ -86,17 +86,28 @@ export const getUserReferralDetails = async (userId) => {
     const pendingCount = invitedFriends.filter((entry) => entry.status === 'pending').length;
     const rejectedCount = invitedFriends.filter((entry) => entry.status === 'rejected').length;
 
+    const referralCode = String(user?.referralCode || '').trim();
+    const rewardAmount = Math.max(0, Number(settingsDoc?.referralRewardUser) || 0);
+    const publicAppUrl = String(process.env.PUBLIC_APP_URL || 'https://dooriq.in').replace(/\/+$/, '');
+    const referralLink = referralCode ? `${publicAppUrl}/invite?ref=${referralCode}` : '';
+    const shareText = referralCode
+        ? `Join me on Dooriq and get ₹${rewardAmount} off your first order! Use my code ${referralCode} or sign up here: ${referralLink}`
+        : '';
+
     return {
         stats: {
             referralCount: Number(user?.referralCount) || 0,
             totalReferralEarnings: Number(wallet?.referralEarnings) || 0,
-            rewardAmount: Math.max(0, Number(settingsDoc?.referralRewardUser) || 0),
+            rewardAmount,
             referralLimit: Math.max(0, Number(settingsDoc?.referralLimitUser) || 0),
             totalInvited,
             creditedCount,
             pendingCount,
             rejectedCount
         },
+        referralCode,
+        referralLink,
+        shareText,
         invitedFriends
     };
 };

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { FoodDeliveryPartner } from '../models/deliveryPartner.model.js';
+import { FoodZone } from '../../admin/models/zone.model.js';
 import { DeliverySupportTicket } from '../models/supportTicket.model.js';
 import { DeliveryBonusTransaction } from '../../admin/models/deliveryBonusTransaction.model.js';
 import { FoodEarningAddon } from '../../admin/models/earningAddon.model.js';
@@ -15,13 +16,28 @@ import { logger } from '../../../../utils/logger.js';
 const isDevelopmentEnvironment = () =>
     String(process.env.NODE_ENV || '').trim().toLowerCase() === 'development';
 
+// Shared by registration and the profile "change zone" flow — never trust a
+// client-supplied zoneId without confirming it's a real, currently-active zone.
+const resolveActiveZoneId = async (zoneId) => {
+    if (!mongoose.Types.ObjectId.isValid(String(zoneId || ''))) {
+        throw new ValidationError('Invalid delivery zone');
+    }
+    const zone = await FoodZone.findOne({ _id: zoneId, isActive: true }).select('_id').lean();
+    if (!zone) {
+        throw new ValidationError('Selected delivery zone is not available');
+    }
+    return zone._id;
+};
+
 export const registerDeliveryPartner = async (payload, files) => {
-    const { 
-        name, phone, email, countryCode, address, city, state, 
+    const {
+        name, phone, email, countryCode, address, city, state,
         vehicleType, vehicleName, vehicleNumber, drivingLicenseNumber, panNumber, aadharNumber,
-        fcmToken, platform 
+        zoneId, fcmToken, platform
     } = payload;
     const refRaw = typeof payload?.ref === 'string' ? String(payload.ref).trim() : '';
+
+    const resolvedZoneId = await resolveActiveZoneId(zoneId);
 
     const existing = await FoodDeliveryPartner.findOne({ phone });
     if (existing) {
@@ -116,6 +132,7 @@ export const registerDeliveryPartner = async (payload, files) => {
         drivingLicenseNumber,
         panNumber,
         aadharNumber,
+        zoneId: resolvedZoneId,
         status: 'pending',
         ...images
     });
@@ -287,6 +304,10 @@ export const updateDeliveryPartnerDetails = async (userId, payload) => {
 
     if (payload?.profilePhoto !== undefined) {
         partner.profilePhoto = payload.profilePhoto ? String(payload.profilePhoto).trim() : '';
+    }
+
+    if (payload?.zoneId !== undefined) {
+        partner.zoneId = await resolveActiveZoneId(payload.zoneId);
     }
 
     await partner.save();

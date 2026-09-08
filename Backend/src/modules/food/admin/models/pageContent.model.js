@@ -5,9 +5,33 @@ const featureSchema = new mongoose.Schema(
         icon: { type: String, default: 'Heart' },
         title: { type: String, default: '' },
         description: { type: String, default: '' },
+        content: { type: String, default: '' }, // optional long-form body (e.g. FAQ answer)
         color: { type: String, default: '' },
         bgColor: { type: String, default: '' },
-        order: { type: Number, default: 0 }
+        order: { type: Number, default: 0 },
+        enabled: { type: Boolean, default: true }
+    },
+    { _id: false }
+);
+
+const supportContactSchema = new mongoose.Schema(
+    {
+        phone: { type: String, default: '' },
+        email: { type: String, default: '' },
+        chatAvailability: { type: String, default: '' }
+    },
+    { _id: false }
+);
+
+const supportPageSchema = new mongoose.Schema(
+    {
+        heroTitle: { type: String, default: '' },
+        heroSubtitle: { type: String, default: '' },
+        quickHelp: { type: [featureSchema], default: [] },
+        contact: { type: supportContactSchema, default: () => ({}) },
+        supportInfo: { type: [featureSchema], default: [] },
+        footerTitle: { type: String, default: '' },
+        footerSubtitle: { type: String, default: '' }
     },
     { _id: false }
 );
@@ -50,6 +74,7 @@ const pageContentSchema = new mongoose.Schema(
         },
         legal: { type: legalPageSchema, default: undefined },
         about: { type: aboutPageSchema, default: undefined },
+        support: { type: supportPageSchema, default: undefined },
         updatedBy: { type: mongoose.Schema.Types.ObjectId, default: null },
         updatedByRole: { type: String, default: 'ADMIN' }
     },

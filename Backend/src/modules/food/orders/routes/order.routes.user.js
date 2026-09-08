@@ -10,7 +10,8 @@ import {
     cancelOrderController,
     submitOrderRatingsController,
     getOrderDropOtpUserController,
-    updateOrderInstructionsController
+    updateOrderInstructionsController,
+    getOrderRouteUserController
 } from '../controllers/order.controller.js';
 
 const router = express.Router();
@@ -21,6 +22,7 @@ router.post('/verify-payment', verifyPaymentController);
 router.get('/', listOrdersUserController);
 router.get('/:orderId/payments', getOrderPaymentsUserController);
 router.get('/:orderId/drop-otp', getOrderDropOtpUserController);
+router.get('/:orderId/route', getOrderRouteUserController);
 router.patch('/:orderId/abandon-payment', abandonPendingPaymentController);
 router.get('/:orderId', getOrderByIdUserController);
 router.patch('/:orderId/cancel', cancelOrderController);

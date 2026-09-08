@@ -155,6 +155,18 @@ async function listNearbyOnlineDeliveryPartners(
     status: { $in: allowedStatuses },
     availabilityStatus: "online",
   };
+
+  // Zone-restricted dispatch: an order carries the zoneId it was placed under
+  // (order.service.js, derived from the restaurant's zone). Only offer it to
+  // partners who registered for that same zone — radius alone previously let
+  // a rider a few km away in a neighbouring zone receive orders that were
+  // never meant for their coverage area. Orders/partners with no zoneId yet
+  // (pre-migration data) fall back to the old radius-only behaviour rather
+  // than matching nobody.
+  const orderZoneId = order?.zoneId;
+  if (orderZoneId) {
+    basePartnerFilter.zoneId = orderZoneId;
+  }
   const partnerFields = "_id status lastLat lastLng lastLocationAt name";
 
   // The eligibility passes below (busy trip, cash limit) drop candidates, so the
@@ -177,44 +189,67 @@ async function listNearbyOnlineDeliveryPartners(
    * applied in the database. `$near` also returns results already sorted by
    * distance, which is the order the scoring pass below wants anyway.
    */
-  let allOnline;
-  if (hasRestaurantGeo) {
-    allOnline = await FoodDeliveryPartner.find({
-      ...basePartnerFilter,
-      lastLocation: {
-        $near: {
-          $geometry: {
-            type: "Point",
-            coordinates: [restaurantCoords[0], restaurantCoords[1]],
+  const fetchOnlinePartners = async (filter) => {
+    let found;
+    if (hasRestaurantGeo) {
+      found = await FoodDeliveryPartner.find({
+        ...filter,
+        lastLocation: {
+          $near: {
+            $geometry: {
+              type: "Point",
+              coordinates: [restaurantCoords[0], restaurantCoords[1]],
+            },
+            $maxDistance: maxKm * 1000,
           },
-          $maxDistance: maxKm * 1000,
         },
-      },
-    })
-      .select(partnerFields)
-      .limit(candidatePoolSize)
-      .lean();
-
-    // Riders that have never reported a position are invisible to `$near`. They
-    // only matter when policy says to include stale-GPS riders, and they always
-    // sort last, so they are fetched separately and capped the same way.
-    if (includeStaleGpsRiders) {
-      const withoutGeo = await FoodDeliveryPartner.find({
-        ...basePartnerFilter,
-        $or: [{ lastLocation: { $exists: false } }, { lastLocation: null }],
       })
         .select(partnerFields)
         .limit(candidatePoolSize)
         .lean();
-      allOnline = allOnline.concat(withoutGeo);
+
+      // Riders that have never reported a position are invisible to `$near`. They
+      // only matter when policy says to include stale-GPS riders, and they always
+      // sort last, so they are fetched separately and capped the same way.
+      if (includeStaleGpsRiders) {
+        const withoutGeo = await FoodDeliveryPartner.find({
+          ...filter,
+          $or: [{ lastLocation: { $exists: false } }, { lastLocation: null }],
+        })
+          .select(partnerFields)
+          .limit(candidatePoolSize)
+          .lean();
+        found = found.concat(withoutGeo);
+      }
+    } else {
+      // No restaurant geo means no radius can be applied at all; the fallback
+      // policy further down decides what to do, but the read stays capped.
+      found = await FoodDeliveryPartner.find(filter)
+        .select(partnerFields)
+        .limit(candidatePoolSize)
+        .lean();
     }
-  } else {
-    // No restaurant geo means no radius can be applied at all; the fallback
-    // policy further down decides what to do, but the read stays capped.
-    allOnline = await FoodDeliveryPartner.find(basePartnerFilter)
-      .select(partnerFields)
-      .limit(candidatePoolSize)
-      .lean();
+    return found;
+  };
+
+  let allOnline = await fetchOnlinePartners(basePartnerFilter);
+
+  // Zone rollout safety net: zoneId is a new field, and not every existing
+  // partner has one yet (no GPS fix to derive it from, or never opened the
+  // app's "Change Zone" screen). Rather than leaving the order completely
+  // unfulfilled while the fleet gradually sets a zone, fall back to the old
+  // radius-only candidate pool when zone-matching finds nobody at all.
+  if (orderZoneId && allOnline.length === 0) {
+    const { zoneId: _zoneFilter, ...unscopedFilter } = basePartnerFilter;
+    allOnline = await fetchOnlinePartners(unscopedFilter);
+    if (allOnline.length > 0) {
+      dispatchLog('ORDER_ZONE_MATCH_EMPTY_FALLBACK', {
+        restaurantId: rId,
+        orderZoneId: String(orderZoneId),
+        fallbackCandidateCount: allOnline.length,
+        reason: 'no_online_partner_in_order_zone',
+      }, 'warn');
+    }
   }
 
   const onlineIds = allOnline.map((p) => p._id).filter(Boolean);

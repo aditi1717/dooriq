@@ -46,6 +46,11 @@ const deliveryPartnerSchema = new mongoose.Schema(
             trim: true,
             uppercase: true
         },
+        zoneId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'FoodZone',
+            index: true
+        },
         panNumber: {
             type: String
         },
@@ -131,6 +136,8 @@ deliveryPartnerSchema.index({ lastLocation: '2dsphere' });
 // order placed. Without this compound index that is a full collection scan over
 // every delivery partner ever registered, on the critical path of each order.
 deliveryPartnerSchema.index({ availabilityStatus: 1, status: 1 });
+// Dispatch also narrows candidates to the order's zone (see order-dispatch.service.js).
+deliveryPartnerSchema.index({ zoneId: 1, availabilityStatus: 1, status: 1 });
 // Dispatch also filters riders whose GPS is older than the staleness window.
 deliveryPartnerSchema.index({ availabilityStatus: 1, lastLocationAt: -1 });
 

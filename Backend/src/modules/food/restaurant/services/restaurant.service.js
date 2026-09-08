@@ -587,7 +587,7 @@ const zoneToPolygon = (zoneDoc) => {
     return { type: 'Polygon', coordinates: [ring] };
 };
 
-const isPointInZonePolygon = (lat, lng, polygon = []) => {
+export const isPointInZonePolygon = (lat, lng, polygon = []) => {
     if (!Array.isArray(polygon) || polygon.length < 3) return false;
     let inside = false;
     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -1771,6 +1771,16 @@ export const listApprovedRestaurants = async (query = {}) => {
     // to run in the query.
     if (query.pureVeg === 'true') {
         filter.pureVegRestaurant = true;
+    }
+
+    // Zone-scoped listing: restrict to restaurants whose stored zoneId (assigned
+    // via point-in-polygon at profile-save time, see updateRestaurantProfile)
+    // matches the caller's detected zone. Without this, a client passing zoneId
+    // (from GET /food/zones/detect) had it silently ignored and fell through to
+    // the radius-only geo filter below, which can surface restaurants outside
+    // the user's actual service zone. No zoneId provided → unscoped, unchanged.
+    if (query.zoneId && mongoose.Types.ObjectId.isValid(String(query.zoneId))) {
+        filter.zoneId = new mongoose.Types.ObjectId(String(query.zoneId));
     }
 
     if (query.city && String(query.city).trim()) {

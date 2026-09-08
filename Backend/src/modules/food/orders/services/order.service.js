@@ -27,7 +27,7 @@ import {
 } from '../helpers/razorpay.helper.js';
 import { getIO, rooms } from '../../../../config/socket.js';
 import { addOrderJob } from '../../../../queues/producers/order.producer.js';
-import { fetchPolyline } from '../utils/googleMaps.js';
+import { fetchPolyline, fetchDrivingRoute } from '../utils/googleMaps.js';
 import { getFirebaseDB } from '../../../../config/firebase.js';
 import * as foodTransactionService from './foodTransaction.service.js';
 import * as userWalletService from '../../user/services/userWallet.service.js';
@@ -1247,6 +1247,65 @@ export async function getOrderById(
   }
 
   return sanitizeOrderForExternal(order);
+}
+
+/**
+ * Route for the live-tracking map: rider's current position to wherever they're
+ * headed next (restaurant before pickup, customer after).
+ *
+ * `origin` is optional — the delivery app passes its own live GPS via query
+ * params (freshest possible), while the user/restaurant apps have no GPS of
+ * their own and fall back to the rider's last reported position on FoodDeliveryPartner.
+ */
+export async function getOrderRoute(orderId, { userId, deliveryPartnerId, origin } = {}) {
+  const identity = buildOrderIdentityFilter(orderId);
+  if (!identity) throw new ValidationError("Order id required");
+
+  const order = await FoodOrder.findOne(identity)
+    .populate("restaurantId", "location")
+    .select("userId dispatch deliveryAddress deliveryState orderStatus")
+    .lean();
+  if (!order) throw new NotFoundError("Order not found");
+
+  const orderUserId = order.userId?.toString();
+  const orderPartnerId = order.dispatch?.deliveryPartnerId?.toString();
+
+  if (userId && orderUserId !== userId.toString())
+    throw new ForbiddenError("Not your order");
+  if (deliveryPartnerId && orderPartnerId !== deliveryPartnerId.toString())
+    throw new ForbiddenError("Not assigned to you");
+
+  const phase = order.deliveryState?.currentPhase;
+  const pickedUp = ["en_route_to_delivery", "at_drop", "delivered", "completed"].includes(phase);
+  const target = pickedUp ? "customer" : "restaurant";
+
+  const restCoords = order.restaurantId?.location?.coordinates;
+  const userCoords = order.deliveryAddress?.location?.coordinates;
+  const destCoords = target === "restaurant" ? restCoords : userCoords;
+  const empty = { polyline: "", distanceKm: null, durationMins: null, target, origin: origin || null, destination: null };
+  if (!destCoords?.[0]) return empty;
+  const destination = { lat: destCoords[1], lng: destCoords[0] };
+
+  let riderOrigin = origin;
+  if (!riderOrigin && orderPartnerId) {
+    const partner = await FoodDeliveryPartner.findById(orderPartnerId)
+      .select("lastLat lastLng")
+      .lean();
+    if (partner?.lastLat != null && partner?.lastLng != null) {
+      riderOrigin = { lat: partner.lastLat, lng: partner.lastLng };
+    }
+  }
+  if (!riderOrigin) return { ...empty, destination };
+
+  const { polyline, distanceKm, durationSeconds } = await fetchDrivingRoute(riderOrigin, destination);
+  return {
+    polyline,
+    distanceKm,
+    durationMins: durationSeconds != null ? Math.round(durationSeconds / 60) : null,
+    target,
+    origin: riderOrigin,
+    destination,
+  };
 }
 
 export async function getDropOtpUser(orderId, userId) {
