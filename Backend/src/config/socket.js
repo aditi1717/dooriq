@@ -115,7 +115,63 @@ export const initSocket = async (server) => {
         cors: {
             origin: config.socketCorsOrigin,
             methods: ['GET', 'POST']
-        }
+        },
+
+        // --- tuning for a few thousand concurrent clients ---------------
+        //
+        // Defaults are fine for hundreds of sockets and expensive for
+        // thousands. Every value below is overridable so a deployment can be
+        // retuned without a code change.
+
+        // Compression costs CPU on every frame and buys almost nothing on the
+        // small JSON payloads this app sends (location pings, order status).
+        // At a few thousand riders pinging location it is pure overhead, and
+        // it holds a zlib context per socket — hundreds of MB of it.
+        perMessageDeflate: false,
+
+        // Riders are on mobile data in moving vehicles. The default 20s
+        // ping timeout disconnects them during ordinary signal dips, and each
+        // reconnect costs a JWT verify plus a fresh handshake. A longer
+        // timeout with a slightly longer interval trades a little detection
+        // latency for far fewer reconnect storms.
+        pingTimeout: Number(process.env.SOCKET_PING_TIMEOUT_MS || 60000),
+        pingInterval: Number(process.env.SOCKET_PING_INTERVAL_MS || 25000),
+
+        // Nothing legitimate sent over this socket is large. The 1MB default
+        // lets a single client force a 1MB allocation per frame.
+        maxHttpBufferSize: Number(process.env.SOCKET_MAX_BUFFER_BYTES || 128 * 1024),
+
+        // Give a slow handshake room but not unlimited room.
+        connectTimeout: Number(process.env.SOCKET_CONNECT_TIMEOUT_MS || 20000),
+
+        // Polling stays enabled, deliberately.
+        //
+        // Websocket-only would halve the handshake cost and remove the need
+        // for sticky sessions, but we cannot have it yet: the restaurant web
+        // client (useRestaurantNotifications.js) connects with
+        // transports: ['polling'] and no websocket fallback at all, and the
+        // user Flutter app is polling-first. Turning polling off here would
+        // disconnect both populations outright.
+        //
+        // The consequence to respect: a polling client's requests must all
+        // land on the same process, so THIS SERVER MUST STAY AT ONE INSTANCE
+        // until either nginx does sticky sessions (ip_hash on the upstream)
+        // or every client is moved to websocket-first. Once that is true,
+        // set SOCKET_ALLOW_POLLING=false and scale out.
+        transports:
+            process.env.SOCKET_ALLOW_POLLING === 'false'
+                ? ['websocket']
+                : ['polling', 'websocket'],
+
+        // A dropped connection that comes back within this window resumes its
+        // rooms and missed packets instead of re-running auth and re-joining.
+        // This is the single biggest win for riders on flaky mobile data.
+        connectionStateRecovery: {
+            maxDisconnectionDuration: Number(
+                process.env.SOCKET_STATE_RECOVERY_MS || 2 * 60 * 1000,
+            ),
+            skipMiddlewares: false,
+        },
     });
 
     // Socket auth middleware (Bearer token).
