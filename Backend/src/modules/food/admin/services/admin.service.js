@@ -54,6 +54,7 @@ import {
     normalizeFoodVariantsInput,
     serializeFoodVariants
 } from './foodVariant.service.js';
+import { buildSearchRegex } from '../../../../utils/searchRegex.js';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -724,9 +725,12 @@ export async function getTransactionReport(query = {}) {
         match.createdAt = { $gte: new Date(fromDate), $lte: new Date(toDate) };
     }
 
-    if (search) {
-        const searchRegex = new RegExp(String(search).trim(), "i");
-        match.orderId = searchRegex;
+    // Escaped and length-capped. Raw input here let a term like "(a+)+$"
+    // backtrack catastrophically, and regex evaluation is synchronous, so
+    // that stalls every other request on this worker.
+    const orderIdSearch = buildSearchRegex(search);
+    if (orderIdSearch) {
+        match.orderId = orderIdSearch;
     }
 
     if (zone || restaurant) {
@@ -2270,9 +2274,8 @@ export async function getContactMessages(query = {}) {
         filter.rating = parseInt(query.rating);
     }
 
-    if (query.search && String(query.search).trim()) {
-        const term = String(query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const searchRegex = new RegExp(term, 'i');
+    const searchRegex = buildSearchRegex(query.search);
+    if (searchRegex) {
         
         const [users, restaurants, partners] = await Promise.all([
             FoodUser.find({
@@ -2428,9 +2431,8 @@ export async function getRestaurantReviews(query = {}) {
         'ratings.restaurant.rating': { $exists: true, $ne: null }
     };
 
-    if (query.search && String(query.search).trim()) {
-        const term = String(query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const searchRegex = new RegExp(term, 'i');
+    const searchRegex = buildSearchRegex(query.search);
+    if (searchRegex) {
         
         const restaurants = await FoodRestaurant.find({
             $or: [{ restaurantName: searchRegex }]
@@ -4691,8 +4693,8 @@ export async function getDeliveryEarnings(query = {}) {
     }
 
     const search = String(query.search || '').trim();
-    if (search) {
-        const regex = new RegExp(search, 'i');
+    const regex = buildSearchRegex(search);
+    if (regex) {
 
         const [partners, restaurants] = await Promise.all([
             FoodDeliveryPartner.find({
@@ -5131,9 +5133,8 @@ export async function getDeliverymanReviews(query = {}) {
         'ratings.deliveryPartner.rating': { $exists: true, $ne: null }
     };
 
-    if (query.search && String(query.search).trim()) {
-        const term = String(query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const searchRegex = new RegExp(term, 'i');
+    const searchRegex = buildSearchRegex(query.search);
+    if (searchRegex) {
         
         // Find delivery partners matching search
         const partners = await FoodDeliveryPartner.find({
@@ -5619,11 +5620,9 @@ export async function getDeliveryWallets(query = {}) {
     const skip = (page - 1) * limit;
 
     const filter = { status: 'approved' };
-    if (query.search) {
-        filter.$or = [
-            { name: new RegExp(query.search, 'i') },
-            { phone: new RegExp(query.search, 'i') }
-        ];
+    const partnerSearch = buildSearchRegex(query.search);
+    if (partnerSearch) {
+        filter.$or = [{ name: partnerSearch }, { phone: partnerSearch }];
     }
 
     const [partners, total] = await Promise.all([
