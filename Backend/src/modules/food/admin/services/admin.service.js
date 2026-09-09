@@ -2678,7 +2678,7 @@ export async function getPendingRestaurants() {
     return restaurants.map((r, i) => ({
         ...r,
         sl: i + 1,
-        zone: r.zoneId?.zoneName || r.zoneId?.name || null,
+        zone: r.zoneId?.name || r.zoneId?.zoneName || null,
     }));
 }
 

@@ -36,6 +36,22 @@ const isPointInZonePolygon = (lat, lng, polygon = []) => {
     return inside;
 };
 
+/**
+ * The name to show a rider for a zone.
+ *
+ * Zones carry two name fields. `name` is required by the schema and is what
+ * the admin panel's own zone list renders; `zoneName` is optional and, on
+ * zones that predate the current form, holds a generic placeholder ("Zone 1",
+ * "Zone 2") while `name` holds the real label ("Vijay Nagar Core").
+ *
+ * Preferring `zoneName` therefore showed riders a placeholder while the admin
+ * who created the zone saw something else entirely. `name` wins, matching both
+ * the admin UI and the create/update path, which treats `name` as canonical
+ * and only copies it into `zoneName` as a mirror.
+ */
+const zoneDisplayName = (zone) =>
+    (zone?.name || '').trim() || (zone?.zoneName || '').trim() || 'Unnamed zone';
+
 /** Rough centre of a polygon, for ordering the list by distance. */
 const polygonCentre = (coordinates = []) => {
     const pts = coordinates.filter(
@@ -82,7 +98,7 @@ export const listSelectableZones = async (position = {}) => {
         const centre = polygonCentre(z.coordinates);
         return {
             id: String(z._id),
-            name: z.zoneName || z.name || 'Unnamed zone',
+            name: zoneDisplayName(z),
             containsMe: hasPosition ? isPointInZonePolygon(lat, lng, z.coordinates) : false,
             distanceKm: me && centre ? Number(distanceKm(me, centre).toFixed(2)) : null,
         };
@@ -130,7 +146,7 @@ export const getActiveZoneForPartner = async (deliveryPartnerId) => {
         zone: zone
             ? {
                 id: String(zone._id),
-                name: zone.zoneName || zone.name || 'Unnamed zone',
+                name: zoneDisplayName(zone),
                 // An admin can deactivate a zone while a rider is working in it.
                 // The app should prompt for a new choice rather than silently
                 // leaving them attached to something dispatch will not match.
