@@ -2,7 +2,9 @@ import mongoose from 'mongoose';
 
 const referralLogSchema = new mongoose.Schema(
     {
-        referrerId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
+        // No field-level index: { referrerId, role, createdAt } below starts
+        // with this field, so the planner already covers referrerId lookups.
+        referrerId: { type: mongoose.Schema.Types.ObjectId, required: true },
         refereeId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
         role: {
             type: String,

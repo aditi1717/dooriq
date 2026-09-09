@@ -434,7 +434,7 @@ restaurantSchema.pre("validate", function normalizeDerivedFields(next) {
 });
 
 restaurantSchema.index({ ownerPhone: 1 });
-restaurantSchema.index({ restaurantName: 1 });
+// { restaurantName } alone is a prefix of { restaurantName, ownerPhone }.
 restaurantSchema.index({ restaurantNameNormalized: 1 });
 restaurantSchema.index({ city: 1 });
 restaurantSchema.index({ "location.city": 1 });

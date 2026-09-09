@@ -5,8 +5,9 @@ const notificationSchema = new mongoose.Schema(
         ownerType: {
             type: String,
             enum: ['USER', 'RESTAURANT', 'DELIVERY_PARTNER'],
-            required: true,
-            index: true
+            required: true
+            // No field-level index: ownerType is the leading key of both
+            // compound indexes below, which already serve it.
         },
         ownerId: {
             type: mongoose.Schema.Types.ObjectId,
