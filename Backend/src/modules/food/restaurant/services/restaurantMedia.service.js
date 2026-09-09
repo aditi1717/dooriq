@@ -1,5 +1,5 @@
 import { FoodRestaurant } from '../models/restaurant.model.js';
-import { uploadImageBuffer } from '../../../../services/cloudinary.service.js';
+import { uploadImageBuffer, uploadImageBuffers } from '../../../../services/cloudinary.service.js';
 import { deleteImageFile } from '../../../../services/imageStorage.service.js';
 import { ValidationError, NotFoundError } from '../../../../core/auth/errors.js';
 
@@ -79,8 +79,9 @@ export const addRestaurantGalleryImages = async (restaurantId, files = []) => {
         );
     }
 
-    const uploaded = await Promise.all(
-        validFiles.map((file) => uploadImageBuffer(file.buffer, 'food/restaurants/gallery'))
+    const uploaded = await uploadImageBuffers(
+        validFiles.map((file) => file.buffer),
+        'food/restaurants/gallery',
     );
     const galleryImages = [...existing, ...uploaded.filter(Boolean)];
 

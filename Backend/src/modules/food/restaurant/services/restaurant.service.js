@@ -1,5 +1,5 @@
 import { FoodRestaurant } from '../models/restaurant.model.js';
-import { uploadImageBuffer } from '../../../../services/cloudinary.service.js';
+import { uploadImageBuffer, uploadImageBuffers } from '../../../../services/cloudinary.service.js';
 import { ValidationError, NotFoundError } from '../../../../core/auth/errors.js';
 import mongoose from 'mongoose';
 import { FoodZone } from '../../admin/models/zone.model.js';
@@ -736,9 +736,10 @@ export const registerRestaurant = async (payload, files) => {
     }
 
     if (files?.menuImages?.length) {
-        uploadTasks.push(Promise.all(
-            files.menuImages.map((file) => uploadImageBuffer(file.buffer, 'food/restaurants/menu'))
-        ).then(urls => { menuImages = [...menuImages, ...urls]; }));
+        uploadTasks.push(
+            uploadImageBuffers(files.menuImages.map((file) => file.buffer), 'food/restaurants/menu')
+                .then(urls => { menuImages = [...menuImages, ...urls]; }),
+        );
     }
 
     // Wait for all uploads to complete in parallel
@@ -1632,8 +1633,9 @@ export const uploadRestaurantCoverImages = async (restaurantId, files = []) => {
         .lean();
     if (!currentRestaurant) throw new ValidationError('Restaurant not found');
 
-    const uploadedUrls = await Promise.all(
-        validFiles.slice(0, 20).map((file) => uploadImageBuffer(file.buffer, 'food/restaurants/cover'))
+    const uploadedUrls = await uploadImageBuffers(
+        validFiles.slice(0, 20).map((file) => file.buffer),
+        'food/restaurants/cover',
     );
     const existingCoverImages = Array.isArray(currentRestaurant.coverImages)
         ? currentRestaurant.coverImages.map((image) => toUrl(image)).filter(Boolean)
@@ -1692,8 +1694,9 @@ export const uploadRestaurantMenuImages = async (restaurantId, files = []) => {
         .lean();
     if (!currentRestaurant) throw new ValidationError('Restaurant not found');
 
-    const uploadedUrls = await Promise.all(
-        validFiles.slice(0, 20).map((file) => uploadImageBuffer(file.buffer, 'food/restaurants/menu'))
+    const uploadedUrls = await uploadImageBuffers(
+        validFiles.slice(0, 20).map((file) => file.buffer),
+        'food/restaurants/menu',
     );
     const existingMenuImages = Array.isArray(currentRestaurant.menuImages)
         ? currentRestaurant.menuImages.map((image) => toUrl(image)).filter(Boolean)
