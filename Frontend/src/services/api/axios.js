@@ -52,6 +52,7 @@ const ADMIN_PERMISSION_PATH_MAP = [
   { prefix: "/food/admin/safety-emergency-reports", section: "support_management" },
   { prefix: "/food/admin/feature-settings", section: "system_settings" },
   { prefix: "/food/admin/business-settings", section: "system_settings" },
+  { prefix: "/food/admin/maintenance", section: "system_settings" },
   { prefix: "/food/admin/power-scanning", section: "system_settings" },
   { prefix: "/food/admin/notifications", section: "system_settings" },
   { prefix: "/food/admin/pages-social-media", section: "pages_social_media" },
@@ -362,6 +363,17 @@ apiClient.interceptors.response.use(
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("apiNetworkError"));
       }
+    }
+    // Maintenance mode. The backend answers 503 with { maintenance: true } and
+    // the admin's own message; announce it so the app can show the maintenance
+    // screen instead of every in-flight call failing separately.
+    if (err?.response?.status === 503 && err?.response?.data?.maintenance) {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("apiMaintenance", { detail: err.response.data })
+        );
+      }
+      return Promise.reject(err);
     }
     const original = err?.config;
     if (err?.response?.status === 429) {
