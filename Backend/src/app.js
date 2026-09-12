@@ -9,6 +9,7 @@ import errorHandler from './middleware/errorHandler.js';
 import { responseTimeLogger } from './middleware/responseTimeLogger.js';
 import { defaultPrivateCache } from './middleware/httpCache.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
+import { maintenanceGuard } from './middleware/maintenanceGuard.js';
 import { healthCheck } from './config/health.js';
 import { config } from './config/env.js';
 import { getUploadStorageDir } from './services/imageStorage.service.js';
@@ -85,6 +86,10 @@ app.use('/api', responseTimeLogger);
 app.use('/api', defaultPrivateCache);
 
 // API Routes
+// Before the routes, after the caching/logging middleware: a request refused
+// for maintenance should still be logged and carry a request id.
+app.use('/api', maintenanceGuard);
+
 app.use('/api', routes);
 
 // Error Handling

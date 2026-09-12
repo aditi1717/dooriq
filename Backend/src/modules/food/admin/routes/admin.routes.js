@@ -4,6 +4,10 @@ import * as adminController from '../controllers/admin.controller.js';
 import * as foodApprovalController from '../controllers/foodApproval.controller.js';
 import * as addonsApprovalController from '../controllers/addonsApproval.controller.js';
 import * as businessSettingsController from '../controllers/businessSettings.controller.js';
+import {
+    getMaintenanceSettingsController,
+    updateMaintenanceSettingsController,
+} from '../controllers/maintenance.controller.js';
 import * as integrationSettingsController from '../controllers/integrationSettings.controller.js';
 import * as coinSettingsController from '../controllers/coinSettings.controller.js';
 import * as payLaterSettingsController from '../controllers/payLaterSettings.controller.js';
@@ -74,7 +78,7 @@ const resolveSectionFromRequest = (path = '', method = '') => {
     if (path.startsWith('/withdrawals')) return 'transaction_management';
     if (path.startsWith('/feedback-experiences')) return 'report_management';
     if (path.startsWith('/reports')) return 'report_management';
-    if (path.startsWith('/integrations') || path.startsWith('/feature-settings') || path.startsWith('/business-settings') || path.startsWith('/power-scanning') || path.startsWith('/notifications') || path.startsWith('/coin-settings') || path.startsWith('/coin-requests') || path.startsWith('/dispatch-settings')) return 'system_settings';
+    if (path.startsWith('/integrations') || path.startsWith('/feature-settings') || path.startsWith('/business-settings') || path.startsWith('/power-scanning') || path.startsWith('/notifications') || path.startsWith('/coin-settings') || path.startsWith('/coin-requests') || path.startsWith('/dispatch-settings') || path.startsWith('/maintenance')) return 'system_settings';
     if (path.startsWith('/pages-social-media')) return 'pages_social_media';
     if (path.startsWith('/sidebar-badges') || path.startsWith('/dashboard-stats')) return 'dashboard';
     return null;
@@ -118,6 +122,7 @@ router.use('/reports', requireAdminPermission('report_management', 'view'));
 router.use('/dispatch-settings', requireAdminPermission('system_settings', 'view'));
 router.use('/feature-settings', requireAdminPermission('system_settings', 'view'));
 router.use('/business-settings', requireAdminPermission('system_settings', 'view'));
+router.use('/maintenance', requireAdminPermission('system_settings', 'view'));
 router.use('/integrations', requireAdminPermission('system_settings', 'view'));
 router.use('/power-scanning', requireAdminPermission('system_settings', 'view'));
 router.use('/coin-settings', requireAdminPermission('system_settings', 'view'));
@@ -301,6 +306,11 @@ router.patch('/business-settings', upload.fields([
     { name: 'deliveryLogo', maxCount: 1 },
     { name: 'deliveryFavicon', maxCount: 1 }
 ]), businessSettingsController.updateBusinessSettings);
+// ----- Maintenance Mode -----
+// Under the system_settings permission, same as the rest of this group.
+router.get('/maintenance', getMaintenanceSettingsController);
+router.patch('/maintenance', updateMaintenanceSettingsController);
+
 router.get('/power-scanning', businessSettingsController.getPowerScanningSettings);
 router.patch('/power-scanning', businessSettingsController.updatePowerScanningSettings);
 

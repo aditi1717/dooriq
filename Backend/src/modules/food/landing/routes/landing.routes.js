@@ -68,6 +68,7 @@ import {
 } from '../controllers/top10GourmetAdmin.controller.js';
 import { getPublicPageController } from '../../admin/controllers/pageContent.controller.js';
 import { getPublicReferralSettingsController } from '../controllers/publicReferralSettings.controller.js';
+import { getPublicMaintenanceStatusController } from '../../admin/controllers/maintenance.controller.js';
 import { CACHE_PRESETS } from '../../../../middleware/httpCache.js';
 
 const router = express.Router();
@@ -76,6 +77,10 @@ const router = express.Router();
 router.get('/pages/:key', getPublicPageController);
 // Public referral settings (no auth required).
 router.get('/referral-settings', getPublicReferralSettingsController);
+// Maintenance status, so each app can show the maintenance screen with the
+// admin's message instead of inferring an outage from a failed request.
+// No cache preset: a stale 'we are up' here is exactly the wrong answer.
+router.get('/maintenance', getPublicMaintenanceStatusController);
 
 // Admin hero banner management
 router.get('/hero-banners', listHeroBannersController);

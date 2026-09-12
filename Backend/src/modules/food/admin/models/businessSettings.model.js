@@ -91,6 +91,41 @@ const businessSettingsSchema = new mongoose.Schema(
             timerText: { type: String, default: '' },
             timerDescription: { type: String, default: '' },
             showLaunchPageOnly: { type: Boolean, default: false }
+        },
+
+        /**
+         * Maintenance mode.
+         *
+         * `isEnabled` is the master switch. The window is optional and is what
+         * makes this schedulable rather than a bare toggle:
+         *
+         *   isEnabled, no window          -> down now, until switched off
+         *   isEnabled + startsAt          -> down from then on
+         *   isEnabled + startsAt + endsAt -> down only inside that window,
+         *                                    and comes back up on its own
+         *   isEnabled + endsAt only       -> down now, back up at endsAt
+         *
+         * Storing the window rather than flipping a boolean on a timer means
+         * nothing has to still be running at the end of the window for the
+         * site to come back, and every worker reaches the same verdict from
+         * the same document.
+         */
+        maintenance: {
+            isEnabled: { type: Boolean, default: false },
+            /** Shown on the maintenance screen. Falls back to generic copy. */
+            message: {
+                type: String,
+                default: '',
+                trim: true,
+                maxlength: 500
+            },
+            /** Null means "from now". */
+            startsAt: { type: Date, default: null },
+            /** Null means "until an admin turns it off". */
+            endsAt: { type: Date, default: null },
+            /** Audit trail, so it is clear who took the site down. */
+            updatedBy: { type: mongoose.Schema.Types.ObjectId, default: null },
+            updatedAt: { type: Date, default: null }
         }
     },
     { timestamps: true }
