@@ -339,6 +339,14 @@ export const adminAPI = {
     apiClient.patch(`/food/admin/feature-settings/${String(key)}`, body ?? {}, {
       contextModule: "admin",
     }),
+  getMaintenanceSettings: () =>
+    apiClient.get("/food/admin/maintenance", {
+      contextModule: "admin",
+    }),
+  updateMaintenanceSettings: (body) =>
+    apiClient.patch("/food/admin/maintenance", body ?? {}, {
+      contextModule: "admin",
+    }),
   getCoinSettings: () =>
     apiClient.get("/food/admin/coin-settings", {
       contextModule: "admin",
