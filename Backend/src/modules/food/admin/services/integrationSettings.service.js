@@ -126,5 +126,34 @@ export const setGoogleMapsApiKey = async (apiKey, adminId = null, field = 'apiKe
     return getGoogleMapsKeyStatus();
 };
 
+/**
+ * Use the stored server key as the browser key too.
+ *
+ * Why this exists: the Integrations screen has two fields, and the natural
+ * thing to do is paste one key into the first one, press Test (which passes,
+ * because Test exercises the server key), and Save. Every map in the admin
+ * panel and the apps then stays broken, because browsers only ever read the
+ * *browser* key — and nothing on screen says so.
+ *
+ * This is deliberately an explicit action rather than a silent fallback in the
+ * public endpoint. The server key is meant to be IP-restricted and never sent
+ * to a browser; quietly serving it whenever the browser slot is empty would
+ * erase that boundary for every deployment, including the ones set up
+ * correctly. Here an admin chooses it, knowing the key will be public.
+ *
+ * The key is copied server-side, so it never has to travel through a request
+ * or be retyped.
+ */
+export const useServerKeyForBrowser = async (adminId = null) => {
+    const doc = await FoodIntegrationSettings.findOne().select('googleMaps').lean();
+    const serverKey = String(doc?.googleMaps?.apiKey || config.googleMapsApiKey || '').trim();
+    if (!serverKey) {
+        const err = new Error('No server key is saved yet. Save a Google Maps key first.');
+        err.statusCode = 400;
+        throw err;
+    }
+    return setGoogleMapsApiKey(serverKey, adminId, 'browserKey');
+};
+
 /** Exposed so a caller can force a re-read after an external change. */
 export const invalidateIntegrationCache = () => integrationCache.delete(CACHE_KEY);

@@ -115,6 +115,25 @@ export default function IntegrationSettings() {
     }
   };
 
+  const [copyingKey, setCopyingKey] = useState(false);
+  const useServerKeyForBrowser = async () => {
+    setCopyingKey(true);
+    try {
+      const res = await adminAPI.useServerKeyForBrowserMaps();
+      setStatus(res?.data?.data ?? res?.data ?? null);
+      toast.success("Maps will now load with your saved key. Reload any open map pages.");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Could not copy the key.");
+    } finally {
+      setCopyingKey(false);
+    }
+  };
+
+  // The trap this closes: a key saved only in the server slot passes Test
+  // (Test exercises the server key) but every map stays blank, because
+  // browsers read only the browser key. Nothing used to say so.
+  const mapsWillFail = Boolean(status?.configured) && !status?.browserConfigured;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24 text-gray-500">
@@ -138,6 +157,33 @@ export default function IntegrationSettings() {
           within a minute, without a redeploy.
         </p>
       </header>
+
+      {mapsWillFail && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
+          <p className="text-sm font-semibold text-red-900">
+            Maps will not load in the admin panel or the apps.
+          </p>
+          <p className="mt-1 text-sm text-red-800">
+            A server key is saved, but no browser key is. Browsers only use the browser key, so zone
+            setup, outlet location and live tracking fall back to an outdated key baked into the
+            build. Test passes regardless, because Test checks the server key.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={useServerKeyForBrowser}
+              disabled={copyingKey}
+              className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {copyingKey ? "Applying…" : "Use my saved key for maps too"}
+            </button>
+            <span className="text-xs text-red-700">
+              Fine for a key with no IP restriction. If your server key is IP-restricted, add a separate
+              referrer-restricted browser key below instead.
+            </span>
+          </div>
+        </div>
+      )}
 
       <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

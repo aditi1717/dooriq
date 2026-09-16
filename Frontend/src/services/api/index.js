@@ -883,6 +883,14 @@ export const adminAPI = {
   updateGoogleMapsIntegration: (apiKey, field = "apiKey") =>
     apiClient.put("/food/admin/integrations/google-maps", { apiKey, field }, { contextModule: "admin" }),
 
+  /** Copy the saved server key into the browser slot, server-side. */
+  useServerKeyForBrowserMaps: () =>
+    apiClient.post(
+      "/food/admin/integrations/google-maps/use-server-key-for-browser",
+      {},
+      { contextModule: "admin" },
+    ),
+
   /** Verify a key against Google before saving it. Omit to test the live one. */
   testGoogleMapsIntegration: (apiKey) =>
     apiClient.post(

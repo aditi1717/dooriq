@@ -6,6 +6,7 @@ import {
     getGoogleMapsApiKey,
     getGoogleMapsBrowserKey,
     maskSecret,
+    useServerKeyForBrowser,
 } from '../services/integrationSettings.service.js';
 
 /**
@@ -131,6 +132,23 @@ export async function testGoogleMapsKey(req, res, next) {
     }
 }
 
+
+/**
+ * POST /api/v1/food/admin/integrations/google-maps/use-server-key-for-browser
+ *
+ * Copies the saved server key into the browser slot, server-side. See
+ * useServerKeyForBrowser for why this is an explicit action and not an
+ * automatic fallback.
+ */
+export async function useServerKeyForBrowserController(req, res, next) {
+    try {
+        const status = await useServerKeyForBrowser(req.user?.userId || null);
+        return sendResponse(res, 200, 'Browser key set from the server key', status);
+    } catch (error) {
+        if (error?.statusCode === 400) return next(new ValidationError(error.message));
+        next(error);
+    }
+}
 
 /**
  * GET /api/v1/food/public/maps-config

@@ -330,6 +330,11 @@ router.post(
     requireAdminPermission('system_settings', 'edit'),
     integrationSettingsController.testGoogleMapsKey,
 );
+router.post(
+    '/integrations/google-maps/use-server-key-for-browser',
+    requireAdminPermission('system_settings', 'edit'),
+    integrationSettingsController.useServerKeyForBrowserController,
+);
 
 // ----- Coin Settings -----
 router.get('/coin-settings', coinSettingsController.getCoinSettings);
