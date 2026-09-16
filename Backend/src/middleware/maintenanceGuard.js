@@ -30,6 +30,12 @@ const EXEMPT_PREFIXES = [
     '/v1/food/auth', // admin (and everyone's) login
     '/v1/auth',
     '/v1/food/maintenance', // the status endpoint the maintenance screen reads
+    // The Maps browser key. The admin panel's maps (zone setup, outlet location,
+    // live tracking) fetch it with a plain unauthenticated fetch, so without
+    // this they broke the moment maintenance went on — admins kept a panel
+    // with no maps. The value is a browser key that is public by nature (it
+    // ships inside every page that loads Maps), so exempting it leaks nothing.
+    '/v1/food/public/maps-config',
     '/v1/payments/webhook', // provider callbacks must not be dropped
     '/health',
 ];
