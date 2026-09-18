@@ -514,30 +514,30 @@ export default function LandingPage() {
               {[
                 { 
                   tag: "🔥 BESTSELLER", 
-                  title: "Midnight Wagyu Burger", 
+                  title: "Midnight Crunch Veg Burger", 
                   num: "01",
                   time: "15-20 min", 
-                  desc: "Double-patty dry-aged Wagyu beef, aged cheddar melt, caramelized onion jam, and truffle aioli on toasted brioche.",
+                  desc: "A golden, crumb-crusted veggie patty of potato, carrot and peas, topped with melted cheddar, crisp lettuce, tomato and smoky chipotle mayo on a toasted brioche bun.",
                   color: "#2563EB",
-                  ingredients: ["🧀 Cheddar", "🧅 Onion Jam", "🍞 Brioche", "🍄 Truffle"]
+                  ingredients: ["🥔 Veg Patty", "🧀 Cheddar", "🥬 Lettuce", "🌶️ Chipotle Mayo"]
                 },
                 { 
                   tag: "⚡ CHEF'S SPECIAL", 
-                  title: "Spicy Tonkotsu Ramen", 
+                  title: "Tandoori Paneer Tikka Masala", 
                   num: "02",
                   time: "20-30 min", 
-                  desc: "Rich 12-hour pork bone broth, hand-pulled noodles, spicy tare, pork chashu, and soy-cured soft egg.",
+                  desc: "Charred paneer tikka simmered in a rich tomato-cashew makhani gravy, finished with fresh cream and coriander, served with buttery garlic naan.",
                   color: "#EB590E",
-                  ingredients: ["🥚 Cured Egg", "🥩 Chashu", "🧅 Scallions", "🌶️ Chili Tare"]
+                  ingredients: ["🧀 Paneer", "🍅 Makhani Gravy", "🌿 Coriander", "🫓 Garlic Naan"]
                 },
                 { 
                   tag: "👑 LATE NIGHT EXCLUSIVE", 
-                  title: "Signature Loaded Fries", 
+                  title: "Creamy Mushroom Veg Pasta", 
                   num: "03",
                   time: "10-15 min", 
-                  desc: "Triple-cooked crispy potatoes smothered in cheddar melt, wood-smoked bacon, and white truffle oil.",
+                  desc: "Fettuccine tossed in a silky white sauce with sautéed mushrooms, zucchini, spinach and blistered cherry tomatoes, finished with fresh basil.",
                   color: "#EAB308",
-                  ingredients: ["🍟 Crispy Fries", "🥓 Smoked Bacon", "🌿 Chives", "🧀 Cheddar"]
+                  ingredients: ["🍄 Mushroom", "🥒 Zucchini", "🍅 Cherry Tomato", "🌿 Basil"]
                 }
               ].map((item, index) => {
                 const isActive = activeCraving === index;
@@ -711,7 +711,7 @@ export default function LandingPage() {
             >
               <img
                 src="/assets/images/chef_prep.png"
-                alt="Chef preparing premium steak"
+                alt="Chef plating a roasted cauliflower dish"
                 className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:scale-105 group-hover:opacity-90 transition-all duration-1000 ease-out"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
