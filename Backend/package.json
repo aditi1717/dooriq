@@ -5,11 +5,11 @@
   "description": "Dooriq Product Backend",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node api.js && node server.js",
     "start:api": "node server.js",
     "start:socket": "node socket-server.js",
     "pm2:start": "pm2 start ecosystem.config.cjs",
-    "dev": "nodemon server.js",
+    "dev": "node api.js && nodemon server.js",
     "seed:admin": "node create_admin.cjs",
     "worker:otp": "node src/queues/workers/otp.worker.js",
     "worker:notification": "node src/queues/workers/notification.worker.js",
